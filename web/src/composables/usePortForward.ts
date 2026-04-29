@@ -41,7 +41,7 @@ export function usePortForward() {
   }
 
   async function unregisterPort(port: number) {
-    await apiDelete(`/api/proxy/ports/${port}`)
+    await apiDelete(`/api/proxy/ports?port=${port}`)
     if (isAppMode.value) {
       ;(window as any).AndroidNative?.removeForwardedPort(port)
     }

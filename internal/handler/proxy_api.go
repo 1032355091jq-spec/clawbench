@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
-	"strings"
 
 	"clawbench/internal/model"
 	"clawbench/internal/service"
@@ -19,15 +18,16 @@ func ServeProxyPorts(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"ports": ports})
 }
 
-// ServeProxyPortRegister handles POST (register) and DELETE (unregister) for proxy ports.
-// POST /api/proxy/ports       — register a new port
-// DELETE /api/proxy/ports/5173 — unregister a port
-func ServeProxyPortRegister(w http.ResponseWriter, r *http.Request) {
+// ServeProxyPortAction handles GET (list), POST (register) and DELETE (unregister)
+// for proxy ports. DELETE uses query parameter: /api/proxy/ports?port=5173
+func ServeProxyPortAction(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
+	case http.MethodGet:
+		ServeProxyPorts(w, r)
 	case http.MethodPost:
 		registerPort(w, r)
 	case http.MethodDelete:
-		unregisterPort(w, r)
+		unregisterPortByQuery(w, r)
 	default:
 		model.WriteErrorf(w, http.StatusMethodNotAllowed, "Method not allowed")
 	}
@@ -55,13 +55,11 @@ func registerPort(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
 
-func unregisterPort(w http.ResponseWriter, r *http.Request) {
-	// Parse port from URL path: /api/proxy/ports/5173
-	path := strings.TrimPrefix(r.URL.Path, "/api/proxy/ports/")
-	path = strings.TrimSuffix(path, "/")
-	port, err := strconv.Atoi(path)
+func unregisterPortByQuery(w http.ResponseWriter, r *http.Request) {
+	portStr := r.URL.Query().Get("port")
+	port, err := strconv.Atoi(portStr)
 	if err != nil || port <= 0 || port > 65535 {
-		model.WriteErrorf(w, http.StatusBadRequest, "Invalid port number in URL")
+		model.WriteErrorf(w, http.StatusBadRequest, "Invalid port number in query")
 		return
 	}
 

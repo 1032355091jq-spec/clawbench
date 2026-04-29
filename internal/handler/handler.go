@@ -149,8 +149,7 @@ func RegisterRoutes(mux *http.ServeMux) {
 	register("/api/tts/generate", middleware.Auth(TTSGenerate))
 
 	// Port forwarding proxy
-	register("/api/proxy/ports", middleware.Auth(ServeProxyPorts))
-	register("/api/proxy/ports/", middleware.Auth(ServeProxyPortRegister))
+	register("/api/proxy/ports", middleware.Auth(ServeProxyPortAction))
 	register("/api/proxy/detect", middleware.Auth(ServeProxyDetect))
 	register("/api/proxy/forward/", middleware.Auth(ServeProxyForward))
 	register("/api/proxy/ws/", middleware.Auth(ServeProxyWebSocket))
