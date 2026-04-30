@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"clawbench/internal/model"
+	"clawbench/internal/service"
 	"clawbench/internal/speech"
 )
 
@@ -43,13 +44,13 @@ type ttsGenerateRequest struct {
 
 // ttsSSEEvent is an SSE event sent during TTS generation.
 type ttsSSEEvent struct {
-	Type            string `json:"type"`            // "phase" or "result"
-	Phase           string `json:"phase,omitempty"` // "summarizing", "synthesizing"
-	AudioPath       string `json:"audioPath,omitempty"`
-	Summary         string `json:"summary,omitempty"`
-	SummarizeFailed bool   `json:"summarizeFailed,omitempty"`
-	SynthesizeFailed bool  `json:"synthesizeFailed,omitempty"`
-	SynthesizeError string `json:"synthesizeError,omitempty"`
+	Type             string `json:"type"`                       // "phase" or "result"
+	Phase            string `json:"phase,omitempty"`             // "summarizing", "synthesizing"
+	AudioPath        string `json:"audioPath,omitempty"`
+	Summary          string `json:"summary,omitempty"`
+	SummarizeFailed  bool   `json:"summarizeFailed,omitempty"`
+	SynthesizeFailed bool   `json:"synthesizeFailed,omitempty"`
+	SynthesizeError  string `json:"synthesizeError,omitempty"`
 }
 
 // ttsWriteSSE writes a single SSE event and flushes.
@@ -113,47 +114,60 @@ func TTSGenerate(w http.ResponseWriter, r *http.Request) {
 			slog.String("cache_key", cacheKey),
 			slog.String("path", relAudioPath),
 		)
-		summaryPath := absAudioPath + ".summary.txt"
-		cachedSummary, _ := os.ReadFile(summaryPath)
+		// Try DB first, fall back to file cache
+		summary, summarizeFailed, _ := service.GetTTSSummary(cacheKey)
+		if summary == "" {
+			cachedSummary, _ := os.ReadFile(absAudioPath + ".summary.txt")
+			summary = string(cachedSummary)
+		}
 		ttsWriteSSE(w, ttsSSEEvent{
-			Type:       "result",
-			AudioPath:  relAudioPath,
-			Summary:    string(cachedSummary),
+			Type:            "result",
+			AudioPath:       relAudioPath,
+			Summary:         summary,
+			SummarizeFailed: summarizeFailed,
 		})
 		return
 	}
 
-	// Phase 1: Summarize
-	ttsWriteSSE(w, ttsSSEEvent{Type: "phase", Phase: "summarizing"})
-
-	summarizeCtx, summarizeCancel := context.WithTimeout(r.Context(), ttsSummarizeTimeout)
-	defer summarizeCancel()
-
-	summary, err := speechProvider.Summarize(summarizeCtx, req.Text)
-	summarizeFailed := false
-	if err != nil {
-		slog.Warn("tts summarize failed, using original text",
-			slog.String("error", err.Error()),
+	// Check DB for cached summary (previous summarize succeeded but synthesize failed)
+	var summary string
+	var summarizeFailed bool
+	cachedSummary, cachedFailed, found := service.GetTTSSummary(cacheKey)
+	if found && cachedSummary != "" {
+		slog.Info("tts summary cache hit, skipping summarization",
+			slog.String("cache_key", cacheKey),
 		)
-		summary = req.Text
-		summarizeFailed = true
-	}
+		summary = cachedSummary
+		summarizeFailed = cachedFailed
+	} else {
+		// Phase 1: Summarize
+		ttsWriteSSE(w, ttsSSEEvent{Type: "phase", Phase: "summarizing"})
 
-	// Strip any markdown from the summary before synthesis and display
-	summary = speech.StripMarkdown(summary)
+		summarizeCtx, summarizeCancel := context.WithTimeout(r.Context(), ttsSummarizeTimeout)
+		defer summarizeCancel()
 
-	slog.Info("tts summarize completed",
-		slog.String("cache_key", cacheKey),
-		slog.Int("original_len", len([]rune(req.Text))),
-		slog.Int("summary_len", len([]rune(summary))),
-	)
+		var err error
+		summary, err = speechProvider.Summarize(summarizeCtx, req.Text)
+		if err != nil {
+			slog.Warn("tts summarize failed, using original text",
+				slog.String("error", err.Error()),
+			)
+			summary = req.Text
+			summarizeFailed = true
+		}
 
-	// Cache the summary alongside the audio for future cache hits
-	summaryPath := absAudioPath + ".summary.txt"
-	if err := os.MkdirAll(filepath.Dir(summaryPath), 0755); err == nil {
-		if writeErr := os.WriteFile(summaryPath, []byte(summary), 0644); writeErr != nil {
-			slog.Warn("tts failed to cache summary",
-				slog.String("error", writeErr.Error()),
+		summary = speech.StripMarkdown(summary)
+
+		slog.Info("tts summarize completed",
+			slog.String("cache_key", cacheKey),
+			slog.Int("original_len", len([]rune(req.Text))),
+			slog.Int("summary_len", len([]rune(summary))),
+		)
+
+		// Save summary to database (independent of audio generation result)
+		if err := service.SaveTTSSummary(cacheKey, summary, summarizeFailed); err != nil {
+			slog.Warn("tts failed to cache summary to DB",
+				slog.String("error", err.Error()),
 			)
 		}
 	}

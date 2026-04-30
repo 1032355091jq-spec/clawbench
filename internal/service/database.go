@@ -118,6 +118,13 @@ func InitDB() error {
 		CREATE INDEX IF NOT EXISTS idx_sessions_project_backend ON chat_sessions(project_path, backend);
 		CREATE INDEX IF NOT EXISTS idx_raw_responses_session ON ai_raw_responses(session_id, created_at DESC);
 		CREATE INDEX IF NOT EXISTS idx_raw_responses_message ON ai_raw_responses(message_id);
+
+		CREATE TABLE IF NOT EXISTS tts_summaries (
+			cache_key TEXT PRIMARY KEY,
+			summary TEXT NOT NULL,
+			summarize_failed INTEGER DEFAULT 0,
+			created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+		);
 	`)
 	if err != nil {
 		return fmt.Errorf("failed to create tables: %w", err)
@@ -186,4 +193,28 @@ func InitDB() error {
 	}
 
 	return nil
+}
+
+// GetTTSSummary looks up a cached TTS summary by cache key.
+// Returns (summary, summarizeFailed, found).
+func GetTTSSummary(cacheKey string) (string, bool, bool) {
+	var summary string
+	var summarizeFailed bool
+	err := DB.QueryRow(
+		"SELECT summary, summarize_failed FROM tts_summaries WHERE cache_key = ?",
+		cacheKey,
+	).Scan(&summary, &summarizeFailed)
+	if err != nil {
+		return "", false, false
+	}
+	return summary, summarizeFailed, true
+}
+
+// SaveTTSSummary persists a TTS summary to the database.
+func SaveTTSSummary(cacheKey, summary string, summarizeFailed bool) error {
+	_, err := DB.Exec(
+		"INSERT OR REPLACE INTO tts_summaries (cache_key, summary, summarize_failed, created_at) VALUES (?, ?, ?, CURRENT_TIMESTAMP)",
+		cacheKey, summary, summarizeFailed,
+	)
+	return err
 }

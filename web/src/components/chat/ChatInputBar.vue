@@ -15,7 +15,7 @@
           </svg>
           <span class="chat-action-label">新建</span>
         </button>
-        <button class="chat-action-btn chat-action-btn-danger" :class="{ disabled: !currentSessionId }" @click="handleDelete" :title="currentSessionId ? '删除当前会话' : '无会话可删除'">
+        <button class="chat-action-btn chat-action-btn-delete" :class="{ disabled: !currentSessionId }" @click="handleDelete" :title="currentSessionId ? '删除当前会话' : '无会话可删除'">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
             <polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
           </svg>
@@ -404,18 +404,18 @@ defineExpose({
   background: color-mix(in srgb, var(--accent-color, #0066cc) 10%, transparent);
 }
 
-.chat-action-btn-danger:not(.disabled) {
-  color: var(--danger-color, #dc3545);
+.chat-action-btn-delete:not(.disabled) {
+  color: var(--text-muted, #999);
 }
 
 @media (hover: hover) {
-  .chat-action-btn-danger:not(.disabled):hover {
-    color: #fff;
-    background: var(--danger-color, #dc3545);
+  .chat-action-btn-delete:not(.disabled):hover {
+    color: var(--danger-color, #dc3545);
+    background: color-mix(in srgb, var(--danger-color, #dc3545) 10%, transparent);
   }
 }
 
-.chat-action-btn-danger.disabled {
+.chat-action-btn-delete.disabled {
   opacity: 0.4;
   cursor: not-allowed;
 }

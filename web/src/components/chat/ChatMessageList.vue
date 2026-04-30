@@ -42,7 +42,7 @@
 
     <ChatMessageItem
       v-for="(msg, i) in messages"
-      :key="`${msg.createdAt || ''}-${i}`"
+      :key="currentSessionId ? `${currentSessionId}-${i}` : `${msg.createdAt || ''}-${i}`"
       :msg="msg"
       :index="i"
       :expandedTools="expandedTools"
@@ -71,6 +71,7 @@ const props = defineProps({
   blockProposals: Object,
   agents: Array,
   currentAgent: Object,
+  currentSessionId: String,
   renderedContents: Array,
   hasMore: Boolean,
   loadingMore: Boolean,

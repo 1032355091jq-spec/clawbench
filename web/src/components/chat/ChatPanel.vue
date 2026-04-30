@@ -26,6 +26,7 @@
       :blockProposals="render.blockProposals"
       :agents="session.agents.value"
       :currentAgent="currentAgent"
+      :currentSessionId="session.currentSessionId.value"
       :renderedContents="render.renderedContents.value"
       :hasMore="session.hasMore.value"
       :loadingMore="session.loadingMore.value"

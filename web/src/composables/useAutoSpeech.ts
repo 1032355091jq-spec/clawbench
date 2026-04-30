@@ -86,7 +86,7 @@ export function useAutoSpeech() {
     playingText.value = text
 
     try {
-      // POST to backend TTS endpoint
+      // POST to backend TTS endpoint (SSE streaming)
       const resp = await fetch('/api/tts/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -94,28 +94,68 @@ export function useAutoSpeech() {
         signal: controller.signal,
       })
 
-      let data: any
-      try {
-        data = await resp.json()
-      } catch {
-        throw new Error(`语音服务响应异常 (HTTP ${resp.status})`)
+      if (!resp.ok) {
+        let errorMsg = `语音生成失败 (HTTP ${resp.status})`
+        try {
+          const errData = await resp.json()
+          if (errData.error) errorMsg = errData.error
+        } catch { /* ignore parse error */ }
+        throw new Error(errorMsg)
       }
-      if (!resp.ok) throw new Error(data.error || `语音生成失败 (HTTP ${resp.status})`)
 
-      if (!data.audioPath) throw new Error('语音服务未返回音频文件')
+      // Parse SSE stream to get the final result
+      const reader = resp.body?.getReader()
+      if (!reader) throw new Error('无法读取响应流')
+
+      const decoder = new TextDecoder()
+      let resultData = null
+      let sseBuffer = ''
+
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+
+        sseBuffer += decoder.decode(value, { stream: true })
+
+        // Process complete SSE messages (delimited by \n\n)
+        while (sseBuffer.includes('\n\n')) {
+          const idx = sseBuffer.indexOf('\n\n')
+          const block = sseBuffer.slice(0, idx)
+          sseBuffer = sseBuffer.slice(idx + 2)
+
+          for (const line of block.split('\n')) {
+            if (!line.startsWith('data: ')) continue
+            try {
+              const event = JSON.parse(line.slice(6))
+              if (event.type === 'result') {
+                resultData = event
+              }
+            } catch { /* ignore malformed SSE lines */ }
+          }
+        }
+      }
+
+      if (!resultData) throw new Error('语音服务未返回结果')
+
+      // Handle synthesize failure
+      if (resultData.synthesizeFailed) {
+        throw new Error(resultData.synthesizeError || '语音合成失败，请稍后重试')
+      }
+
+      if (!resultData.audioPath) throw new Error('语音服务未返回音频文件')
 
       // Warn if summarization failed (fell back to full text)
-      if (data.summarizeFailed) {
+      if (resultData.summarizeFailed) {
         toast.show('摘要生成失败，将朗读原文', { icon: '🔊', type: 'info', duration: 3000 })
       }
 
       // Store the AI-generated summary for display in TtsPopover
-      if (data.summary) {
-        playingSummary.value = data.summary
+      if (resultData.summary) {
+        playingSummary.value = resultData.summary
       }
 
       // Play audio via HTML5 Audio element
-      const audioUrl = `/api/local-file/${encodeURIComponent(data.audioPath)}`
+      const audioUrl = `/api/local-file/${encodeURIComponent(resultData.audioPath)}`
       const audio = new Audio(audioUrl)
       currentAudio.value = audio
 

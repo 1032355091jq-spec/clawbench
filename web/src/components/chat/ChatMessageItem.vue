@@ -152,7 +152,7 @@
             <svg class="speak-spinner" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
               <path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zM12 6v6l4 2"/>
             </svg>
-            <span>总结中</span>
+            <span>生成中</span>
           </template>
           <!-- Playing state -->
           <template v-else-if="autoSpeech.isPlayingAudio(msgText)">
