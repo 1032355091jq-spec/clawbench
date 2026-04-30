@@ -37,7 +37,6 @@
         <div
           class="content-area"
           id="contentArea"
-          :style="contentSwipeStyle"
         >
           <WelcomeView v-if="!currentFile" />
           <FileViewer
@@ -117,45 +116,66 @@
       />
 
       <!-- Bottom dock -->
-      <div
-        v-if="isAuthenticated"
-        class="bottom-dock"
-        @touchstart="swipeHandlers.handleTouchStart"
-        @touchmove="swipeHandlers.handleTouchMove"
-        @touchend="swipeHandlers.handleTouchEnd"
-      >
-        <button class="dock-btn" :class="{ active: chatOpen }" @click.stop="openDrawer('chat')" title="会话">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
-          </svg>
-          <span v-if="store.state.chatUnread" class="dock-badge"></span>
-        </button>
-        <button class="dock-btn" :class="{ active: fileManagerOpen }" @click.stop="openDrawer('fileManager')" title="文件管理器">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
-          </svg>
-        </button>
-        <button class="dock-btn" :class="{ active: projectHistoryOpen || fileHistoryOpen }" @click.stop="toggleHistoryDrawer" title="历史">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <line x1="6" y1="3" x2="6" y2="15"/>
-            <circle cx="18" cy="6" r="3"/>
-            <circle cx="6" cy="18" r="3"/>
-            <path d="M15 6a9 9 0 0 0-9 9V3"/>
-          </svg>
-        </button>
-        <button v-if="isAppMode" class="dock-btn" :class="{ active: proxyOpen }" @click.stop="openDrawer('proxy')" title="端口转发">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M12 2L2 7l10 5 10-5-10-5z"/>
-            <path d="M2 17l10 5 10-5"/>
-            <path d="M2 12l10 5 10-5"/>
-          </svg>
-        </button>
-        <button class="dock-btn" @click.stop="handleRefresh" title="刷新">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <polyline points="23,4 23,10 17,10"/>
-            <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
-          </svg>
-        </button>
+      <div v-if="isAuthenticated" class="bottom-dock-wrapper">
+        <div class="bottom-dock">
+          <button
+            class="dock-nav-btn"
+            :class="{ disabled: !canGoBack }"
+            @click.stop="handleGoBack"
+            title="上一个文件"
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <polyline points="15 18 9 12 15 6"/>
+            </svg>
+          </button>
+
+          <div class="dock-center">
+            <button class="dock-btn" :class="{ active: chatOpen }" @click.stop="openDrawer('chat')" title="会话">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+              </svg>
+              <span v-if="store.state.chatUnread" class="dock-badge"></span>
+            </button>
+            <button class="dock-btn" :class="{ active: fileManagerOpen }" @click.stop="openDrawer('fileManager')" title="文件管理器">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
+              </svg>
+            </button>
+            <button class="dock-btn" :class="{ active: projectHistoryOpen || fileHistoryOpen }" @click.stop="toggleHistoryDrawer" title="历史">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <line x1="6" y1="3" x2="6" y2="15"/>
+                <circle cx="18" cy="6" r="3"/>
+                <circle cx="6" cy="18" r="3"/>
+                <path d="M15 6a9 9 0 0 0-9 9V3"/>
+              </svg>
+            </button>
+            <button v-if="isAppMode" class="dock-btn" :class="{ active: proxyOpen }" @click.stop="openDrawer('proxy')" title="端口转发">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M12 2L2 7l10 5 10-5-10-5z"/>
+                <path d="M2 17l10 5 10-5"/>
+                <path d="M2 12l10 5 10-5"/>
+              </svg>
+            </button>
+            <button class="dock-btn" @click.stop="handleRefresh" title="刷新">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polyline points="23,4 23,10 17,10"/>
+                <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
+              </svg>
+            </button>
+          </div>
+
+          <button
+            class="dock-nav-btn"
+            :class="{ disabled: !canGoForward }"
+            @click.stop="handleGoForward"
+            title="下一个文件"
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <polyline points="9 18 15 12 9 6"/>
+            </svg>
+          </button>
+        </div>
+        <div class="dock-safe-area"></div>
       </div>
     </div>
 
@@ -182,7 +202,6 @@ import ToastNotification from './components/common/ToastNotification.vue'
 import ProxyPanel from './components/proxy/ProxyPanel.vue'
 import PortForwardBrowser from './components/proxy/PortForwardBrowser.vue'
 import { useToast } from './composables/useToast.ts'
-import { useSwipeNavigation } from './composables/useSwipeNavigation.ts'
 import { useAppMode } from './composables/useAppMode.ts'
 import { usePortForward, setOpenPortBrowser } from './composables/usePortForward.ts'
 import { store } from './stores/app.ts'
@@ -412,23 +431,6 @@ function applyTheme(t) {
 provide('theme', theme)
 provide('applyTheme', applyTheme)
 
-// Swipe navigation for bottom dock
-const swipeHandlers = useSwipeNavigation(
-  () => store.navigateToPrevFile(),
-  () => store.navigateToNextFile(),
-  50
-)
-
-const contentSwipeStyle = computed(() => {
-  const offset = swipeHandlers.swipeOffset.value
-  if (offset === 0 && !swipeHandlers.settling.value) return {}
-  const transition = swipeHandlers.settling.value ? 'transform 0.25s ease-out' : 'none'
-  return {
-    transform: `translateX(${offset}px)`,
-    transition,
-  }
-})
-
 function handleOpenFileManager() {
     openDrawer('fileManager')
 }
@@ -533,18 +535,67 @@ onUnmounted(() => {
 </script>
 
 <style scoped>
-.bottom-dock {
+.bottom-dock-wrapper {
     flex-shrink: 0;
+    -webkit-tap-highlight-color: transparent;
+    user-select: none;
+}
+
+.bottom-dock {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 6px 8px;
+    background: var(--bg-primary);
+    border-top: 1px solid color-mix(in srgb, var(--border-color) 40%, transparent);
+    border-bottom: 1px solid color-mix(in srgb, var(--border-color) 40%, transparent);
+}
+
+.dock-safe-area {
+    height: env(safe-area-inset-bottom, 0px);
+}
+
+.dock-center {
     display: flex;
     align-items: center;
     justify-content: center;
     gap: 16px;
-    padding: 6px 16px;
-    padding-bottom: calc(6px + env(safe-area-inset-bottom, 0));
-    background: var(--bg-primary);
-    border-top: 1px solid var(--border-color);
-    -webkit-tap-highlight-color: transparent;
-    user-select: none;
+}
+
+.dock-nav-btn {
+    width: 28px;
+    height: 28px;
+    border: none;
+    border-radius: 6px;
+    background: transparent;
+    color: var(--text-tertiary);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.15s, color 0.15s;
+    flex-shrink: 0;
+}
+
+.dock-nav-btn:hover:not(.disabled) {
+    background: var(--bg-tertiary);
+    color: var(--text-secondary);
+}
+
+.dock-nav-btn:active:not(.disabled) {
+    background: var(--bg-secondary);
+    color: var(--text-primary);
+}
+
+.dock-nav-btn.disabled {
+    opacity: 0.2;
+    cursor: default;
+    pointer-events: none;
+}
+
+.dock-nav-btn svg {
+    width: 14px;
+    height: 14px;
 }
 
 .dock-btn {
