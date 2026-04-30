@@ -37,6 +37,7 @@ type Config struct {
 		Format         string  `yaml:"format"`          // Audio output format (default: "mp3")
 	} `yaml:"tts"`
 	Proxy ProxyConfig `yaml:"proxy"` // Port forwarding configuration
+	SSH   SSHConfig   `yaml:"ssh"`   // SSH tunnel server configuration
 }
 
 // Global application state

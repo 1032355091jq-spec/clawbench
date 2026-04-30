@@ -17,6 +17,7 @@ import (
 	"clawbench/internal/model"
 	"clawbench/internal/platform"
 	"clawbench/internal/service"
+	"clawbench/internal/ssh"
 	"clawbench/internal/speech"
 )
 
@@ -319,6 +320,18 @@ func main() {
 	proxyService := service.NewProxyRegistry(cfg.Proxy, port)
 	service.ProxyService = proxyService
 	defer proxyService.Stop()
+
+	// Initialize SSH tunnel server
+	if cfg.SSH.Enabled {
+		sshServer := ssh.NewServer(cfg.SSH, port, cfg.Password, proxyService)
+		handler.SetSSHServer(sshServer)
+		go func() {
+			if err := sshServer.ListenAndServe(); err != nil {
+				slog.Error("SSH server failed", slog.String("err", err.Error()))
+			}
+		}()
+		defer sshServer.Close()
+	}
 
 	mux := http.NewServeMux()
 	handler.RegisterRoutes(mux)

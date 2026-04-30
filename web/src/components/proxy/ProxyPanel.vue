@@ -90,6 +90,31 @@
           <span v-if="detectedPortsNotRegistered.length === 0" class="detect-all-registered">全部已注册</span>
         </div>
       </div>
+
+      <!-- SSH tunnel info (desktop only: shows command for manual tunnel setup) -->
+      <div v-if="sshInfo && sshInfo.enabled && !isAppMode" class="proxy-ssh-section">
+        <div class="proxy-ssh-divider"></div>
+        <div class="proxy-ssh-header">
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
+            <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+            <path d="M7 11V7a5 5 0 0110 0v4"/>
+          </svg>
+          <span>SSH 隧道</span>
+        </div>
+        <div class="proxy-ssh-meta">
+          <span class="ssh-label">{{ sshInfo.username }}@{{ sshInfo.host }}:{{ sshInfo.port }}</span>
+          <button class="ssh-copy-btn" @click="copySSHCommand" title="复制 SSH 命令">
+            <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2">
+              <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
+              <path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/>
+            </svg>
+            {{ sshCopied ? '已复制' : '复制命令' }}
+          </button>
+        </div>
+        <div v-if="sshInfo.fingerprint" class="ssh-fingerprint">
+          {{ sshInfo.fingerprint }}
+        </div>
+      </div>
     </div>
   </BottomSheet>
 </template>
@@ -111,7 +136,9 @@ const newProtocol = ref('http')
 const detecting = ref(false)
 const portInputRef = ref(null)
 
-const { ports, detectedPorts, loading, loadPorts, registerPort, unregisterPort, detectPorts, openPort } = usePortForward()
+const { ports, detectedPorts, loading, isAppMode, sshInfo, loadPorts, registerPort, unregisterPort, detectPorts, loadSSHInfo, openPort } = usePortForward()
+
+const sshCopied = ref(false)
 
 const isValidPort = computed(() => {
   const p = parseInt(newPort.value)
@@ -148,9 +175,19 @@ async function handleDetect() {
   }
 }
 
+async function copySSHCommand() {
+  if (!sshInfo.value?.command) return
+  try {
+    await navigator.clipboard.writeText(sshInfo.value.command)
+    sshCopied.value = true
+    setTimeout(() => { sshCopied.value = false }, 2000)
+  } catch {}
+}
+
 watch(() => props.open, async (val) => {
   if (val) {
     await loadPorts()
+    await loadSSHInfo()
   }
 })
 </script>
@@ -395,5 +432,65 @@ watch(() => props.open, async (val) => {
     opacity: 1;
     transform: scale(1) translateY(0);
   }
+}
+
+/* SSH tunnel section */
+.proxy-ssh-section {
+  margin-top: 4px;
+}
+
+.proxy-ssh-divider {
+  height: 1px;
+  background: var(--border-color, #e5e5e5);
+  margin: 8px 0;
+}
+
+.proxy-ssh-header {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary, #666);
+  margin-bottom: 4px;
+}
+
+.proxy-ssh-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.ssh-label {
+  font-family: monospace;
+  font-size: 11px;
+  color: var(--text-secondary, #666);
+}
+
+.ssh-copy-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 2px 6px;
+  border: 1px solid var(--border-color, #e5e5e5);
+  border-radius: 4px;
+  background: none;
+  color: var(--text-secondary, #666);
+  font-size: 10px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.ssh-copy-btn:hover {
+  border-color: var(--accent-color, #0066cc);
+  color: var(--accent-color, #0066cc);
+}
+
+.ssh-fingerprint {
+  font-family: monospace;
+  font-size: 9px;
+  color: var(--text-muted, #999);
+  margin-top: 2px;
+  word-break: break-all;
 }
 </style>

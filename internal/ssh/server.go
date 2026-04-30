@@ -1,0 +1,328 @@
+package ssh
+
+import (
+	"crypto/ecdsa"
+	"crypto/elliptic"
+	"crypto/rand"
+	"crypto/x509"
+	"encoding/pem"
+	"fmt"
+	"io"
+	"log/slog"
+	"net"
+	"os"
+	"sync"
+
+	gossh "golang.org/x/crypto/ssh"
+
+	"clawbench/internal/model"
+	"clawbench/internal/service"
+)
+
+// Server is an SSH server that supports local port forwarding (direct-tcpip channels).
+// It allows authenticated clients to create `-L` tunnels to forward local ports
+// to services running on the server (127.0.0.1).
+type Server struct {
+	mu          sync.Mutex
+	listener    net.Listener
+	hostKey     gossh.Signer
+	password    string
+	portReg     *service.ProxyRegistry
+	done        chan struct{}
+	fingerprint string
+	addr        string
+	cfg         model.SSHConfig
+}
+
+// NewServer creates a new SSH tunnel server.
+// mainPort is the ClawBench HTTP port, used to auto-determine the SSH port.
+func NewServer(cfg model.SSHConfig, mainPort int, password string, portReg *service.ProxyRegistry) *Server {
+	sshPort := cfg.Port
+	if sshPort == 0 {
+		sshPort = mainPort + 1
+	}
+
+	return &Server{
+		password: password,
+		portReg:  portReg,
+		done:     make(chan struct{}),
+		addr:     fmt.Sprintf("0.0.0.0:%d", sshPort),
+		cfg:      cfg,
+	}
+}
+
+// ListenAndServe starts the SSH server.
+func (s *Server) ListenAndServe() error {
+	// Initialize host key (idempotent if already called)
+	if err := s.InitHostKey(); err != nil {
+		return err
+	}
+
+	// Configure SSH server
+	config := &gossh.ServerConfig{
+		PasswordCallback: func(c gossh.ConnMetadata, pass []byte) (*gossh.Permissions, error) {
+			if c.User() == "clawbench" && string(pass) == s.password {
+				return nil, nil
+			}
+			return nil, fmt.Errorf("ssh: authentication failed for user %q", c.User())
+		},
+	}
+	config.AddHostKey(s.hostKey)
+
+	// Start TCP listener
+	listener, err := net.Listen("tcp", s.addr)
+	if err != nil {
+		return fmt.Errorf("ssh: failed to listen on %s: %w", s.addr, err)
+	}
+	s.listener = listener
+
+	slog.Info("SSH tunnel server started",
+		slog.String("addr", s.addr),
+		slog.String("fingerprint", s.fingerprint),
+	)
+
+	for {
+		conn, err := listener.Accept()
+		if err != nil {
+			select {
+			case <-s.done:
+				return nil // graceful shutdown
+			default:
+				slog.Error("ssh: accept error", slog.String("err", err.Error()))
+				continue
+			}
+		}
+
+		go s.handleConn(conn, config)
+	}
+}
+
+// Close shuts down the SSH server.
+func (s *Server) Close() {
+	close(s.done)
+	if s.listener != nil {
+		s.listener.Close()
+	}
+	slog.Info("SSH tunnel server stopped")
+}
+
+// Fingerprint returns the SSH host key fingerprint.
+// Returns empty string if the server has not been started yet.
+func (s *Server) Fingerprint() string {
+	return s.fingerprint
+}
+
+// InitHostKey generates or loads the host key and computes the fingerprint.
+// This is called automatically by ListenAndServe, but can be called explicitly
+// to populate Fingerprint() without starting the TCP listener.
+func (s *Server) InitHostKey() error {
+	signer, err := s.loadOrGenerateHostKey()
+	if err != nil {
+		return fmt.Errorf("ssh: failed to setup host key: %w", err)
+	}
+	s.hostKey = signer
+	s.fingerprint = gossh.FingerprintSHA256(signer.PublicKey())
+	return nil
+}
+
+// Addr returns the SSH server listen address.
+func (s *Server) Addr() string {
+	return s.addr
+}
+
+// Port returns the SSH server port number.
+func (s *Server) Port() int {
+	_, portStr, _ := net.SplitHostPort(s.addr)
+	port := 0
+	fmt.Sscanf(portStr, "%d", &port)
+	return port
+}
+
+// handleConn handles a single SSH connection.
+func (s *Server) handleConn(conn net.Conn, config *gossh.ServerConfig) {
+	defer conn.Close()
+
+	sshConn, chans, reqs, err := gossh.NewServerConn(conn, config)
+	if err != nil {
+		slog.Debug("ssh: handshake failed", slog.String("err", err.Error()))
+		return
+	}
+	defer sshConn.Close()
+
+	slog.Info("ssh: client connected",
+		slog.String("remote", sshConn.RemoteAddr().String()),
+		slog.String("user", sshConn.User()),
+	)
+
+	// Discard global requests (keep-alive, etc.)
+	go gossh.DiscardRequests(reqs)
+
+	// Handle channels
+	for newChannel := range chans {
+		if newChannel.ChannelType() != "direct-tcpip" {
+			slog.Debug("ssh: rejecting unknown channel type", slog.String("type", newChannel.ChannelType()))
+			newChannel.Reject(gossh.UnknownChannelType, fmt.Sprintf("unknown channel type: %s", newChannel.ChannelType()))
+			continue
+		}
+
+		go s.handleDirectTCPIP(newChannel)
+	}
+
+	slog.Info("ssh: client disconnected", slog.String("remote", sshConn.RemoteAddr().String()))
+}
+
+// handleDirectTCPIP handles a direct-tcpip channel request (SSH -L port forwarding).
+func (s *Server) handleDirectTCPIP(newChannel gossh.NewChannel) {
+	// Parse the channel data per RFC 4254 Section 7.2
+	type directTCPIPData struct {
+		HostToConnect     string
+		PortToConnect     uint32
+		OriginatorAddress string
+		OriginatorPort    uint32
+	}
+
+	var d directTCPIPData
+	if err := gossh.Unmarshal(newChannel.ExtraData(), &d); err != nil {
+		slog.Debug("ssh: failed to parse direct-tcpip data", slog.String("err", err.Error()))
+		newChannel.Reject(gossh.Prohibited, "failed to parse channel data")
+		return
+	}
+
+	targetPort := int(d.PortToConnect)
+
+	// Validate the target port
+	if s.portReg == nil || !s.portReg.IsPortAllowed(targetPort) {
+		slog.Debug("ssh: port not allowed", slog.Int("port", targetPort))
+		newChannel.Reject(gossh.Prohibited, fmt.Sprintf("port %d is not allowed", targetPort))
+		return
+	}
+	if !s.portReg.IsPortRegistered(targetPort) {
+		slog.Debug("ssh: port not registered", slog.Int("port", targetPort))
+		newChannel.Reject(gossh.Prohibited, fmt.Sprintf("port %d is not registered", targetPort))
+		return
+	}
+
+	// Accept the channel
+	channel, requests, err := newChannel.Accept()
+	if err != nil {
+		slog.Debug("ssh: could not accept channel", slog.String("err", err.Error()))
+		return
+	}
+	defer channel.Close()
+
+	// Discard channel-specific requests
+	go gossh.DiscardRequests(requests)
+
+	// Connect to the local service
+	targetAddr := fmt.Sprintf("127.0.0.1:%d", targetPort)
+	backend, err := net.Dial("tcp", targetAddr)
+	if err != nil {
+		slog.Debug("ssh: backend unreachable", slog.String("target", targetAddr), slog.String("err", err.Error()))
+		return
+	}
+	defer backend.Close()
+
+	slog.Debug("ssh: forwarding connection",
+		slog.Int("port", targetPort),
+		slog.String("originator", fmt.Sprintf("%s:%d", d.OriginatorAddress, d.OriginatorPort)),
+	)
+
+	// Bidirectional relay
+	var wg sync.WaitGroup
+	wg.Add(2)
+
+	go func() {
+		defer wg.Done()
+		io.Copy(channel, backend)
+		// Signal the SSH channel that we're done writing
+		if ch, ok := channel.(interface{ CloseWrite() error }); ok {
+			ch.CloseWrite()
+		}
+	}()
+
+	go func() {
+		defer wg.Done()
+		io.Copy(backend, channel)
+		if tcpConn, ok := backend.(*net.TCPConn); ok {
+			tcpConn.CloseWrite()
+		}
+	}()
+
+	wg.Wait()
+}
+
+// loadOrGenerateHostKey loads the host key from file or generates a new one.
+func (s *Server) loadOrGenerateHostKey() (gossh.Signer, error) {
+	if s.cfg.HostKey != "" {
+		return s.loadHostKey(s.cfg.HostKey)
+	}
+	return s.generateHostKey()
+}
+
+// loadHostKey loads an existing host key from a file, or generates and saves one if it doesn't exist.
+func (s *Server) loadHostKey(path string) (gossh.Signer, error) {
+	data, err := os.ReadFile(path)
+	if err == nil {
+		signer, err := gossh.ParsePrivateKey(data)
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse host key from %s: %w", path, err)
+		}
+		slog.Info("ssh: loaded host key from file", slog.String("path", path))
+		return signer, nil
+	}
+
+	// File doesn't exist, generate and save
+	if !os.IsNotExist(err) {
+		return nil, fmt.Errorf("failed to read host key file %s: %w", path, err)
+	}
+
+	return s.generateAndSaveHostKey(path)
+}
+
+// generateAndSaveHostKey generates a new ECDSA host key and saves it to the specified path.
+func (s *Server) generateAndSaveHostKey(path string) (gossh.Signer, error) {
+	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate ECDSA key: %w", err)
+	}
+
+	keyBytes, err := x509.MarshalECPrivateKey(key)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal ECDSA key: %w", err)
+	}
+
+	pemData := pem.EncodeToMemory(&pem.Block{
+		Type:  "EC PRIVATE KEY",
+		Bytes: keyBytes,
+	})
+
+	if err := os.WriteFile(path, pemData, 0600); err != nil {
+		// Can't save, fall back to ephemeral key
+		slog.Warn("ssh: could not save host key, using ephemeral key", slog.String("path", path), slog.String("err", err.Error()))
+		return s.generateHostKey()
+	}
+
+	signer, err := gossh.NewSignerFromKey(key)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create signer from generated key: %w", err)
+	}
+
+	slog.Info("ssh: generated and saved new host key", slog.String("path", path))
+	return signer, nil
+}
+
+// generateHostKey generates an ephemeral ECDSA host key (not persisted).
+func (s *Server) generateHostKey() (gossh.Signer, error) {
+	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate ECDSA key: %w", err)
+	}
+
+	signer, err := gossh.NewSignerFromKey(key)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create signer from generated key: %w", err)
+	}
+
+	slog.Info("ssh: using ephemeral host key (will change on restart)")
+	return signer, nil
+}

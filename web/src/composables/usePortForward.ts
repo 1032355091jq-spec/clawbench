@@ -15,10 +15,20 @@ interface DetectedPort {
   protocol: string
 }
 
+export interface SSHInfo {
+  enabled: boolean
+  host: string
+  port: number
+  username: string
+  fingerprint: string
+  command: string
+}
+
 // Module-level shared state
 const ports = ref<ForwardedPort[]>([])
 const detectedPorts = ref<DetectedPort[]>([])
 const loading = ref(false)
+const sshInfo = ref<SSHInfo | null>(null)
 
 /**
  * Manages port forwarding state: list of forwarded ports, CRUD operations,
@@ -68,10 +78,20 @@ export function usePortForward() {
     }
   }
 
-  /** Open a forwarded port via ClawBench reverse proxy */
-  function openPort(port: number, _protocol?: string) {
-    const base = window.location.origin
-    window.open(`${base}/api/proxy/forward/${port}/`, '_blank')
+  /** Fetch SSH tunnel connection info from server */
+  async function loadSSHInfo() {
+    try {
+      const data = await apiGet<SSHInfo>('/api/ssh/info')
+      sshInfo.value = data
+    } catch {
+      sshInfo.value = null
+    }
+  }
+
+  /** Open a forwarded port via localhost (SSH tunnel must be active) */
+  function openPort(port: number, protocol?: string) {
+    const scheme = protocol === 'https' ? 'https' : 'http'
+    window.open(`${scheme}://localhost:${port}`, '_blank')
   }
 
   return {
@@ -79,11 +99,13 @@ export function usePortForward() {
     detectedPorts,
     loading,
     isAppMode,
+    sshInfo,
     loadPorts,
     registerPort,
     unregisterPort,
     detectPorts,
     syncToNative,
+    loadSSHInfo,
     openPort,
   }
 }

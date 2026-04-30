@@ -41,6 +41,10 @@ async function handleLogin() {
             body: JSON.stringify({ password: password.value })
         })
         if (res.ok) {
+            // Save password to Android native layer for SSH tunnel authentication
+            if (window.AndroidNative?.isNativeApp?.()) {
+                window.AndroidNative.setSSHPassword(password.value)
+            }
             emit('loginSuccess')
         } else if (res.status >= 500) {
             error.value = '服务器错误，请稍后重试。'

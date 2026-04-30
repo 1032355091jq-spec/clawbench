@@ -23,7 +23,6 @@ import android.webkit.SslErrorHandler;
 import android.webkit.WebChromeClient;
 import android.webkit.WebResourceError;
 import android.webkit.WebResourceRequest;
-import android.webkit.WebResourceResponse;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
@@ -33,11 +32,6 @@ import android.widget.Toast;
 
 import org.json.JSONArray;
 
-import java.io.InputStream;
-import java.net.HttpURLConnection;
-import java.net.URL;
-import java.util.HashMap;
-import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -48,7 +42,7 @@ import java.util.concurrent.ConcurrentHashMap;
  * - Server URL configuration dialog on first launch
  * - WebView with JS, DOM storage, and media autoplay enabled
  * - JavaScript interface for native bridge (keep-alive service control, port forwarding)
- * - Port forwarding via shouldInterceptRequest for transparent localhost proxying
+ * - Port forwarding via SSH tunnels (PortForwardService) — transparent localhost access
  * - Proper back navigation within WebView
  * - SSL error handling with user confirmation
  */
@@ -56,6 +50,7 @@ public class MainActivity extends Activity {
 
     private static final String PREFS_NAME = "clawbench_prefs";
     private static final String KEY_SERVER_URL = "server_url";
+    private static final String KEY_SSH_PASSWORD = "ssh_password";
     private static final String CHANNEL_ID = "clawbench_chat";
     private static final String TAG = "ClawBench";
 
@@ -64,7 +59,7 @@ public class MainActivity extends Activity {
     private SharedPreferences prefs;
 
     // Set of ports currently being forwarded (thread-safe for access from WebView background threads)
-    final Set<Integer> forwardedPorts = ConcurrentHashMap.newKeySet();
+    final Set<Integer> forwardedPorts = java.util.concurrent.ConcurrentHashMap.newKeySet();
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -72,6 +67,9 @@ public class MainActivity extends Activity {
 
         // Keep screen on while app is in foreground (AI may take time to respond)
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+
+        // Initialize trust-all SSL for self-signed HTTPS servers (used by PortForwardService)
+        PortForwardService.initTrustAllSSL();
 
         setContentView(R.layout.activity_main);
 
@@ -174,11 +172,16 @@ public class MainActivity extends Activity {
     private void showServerDialog() {
         View dialogView = getLayoutInflater().inflate(R.layout.dialog_server_url, null);
         EditText input = dialogView.findViewById(R.id.serverUrlInput);
+        EditText passwordInput = dialogView.findViewById(R.id.passwordInput);
 
         // Pre-fill with saved URL if exists
         String savedUrl = prefs.getString(KEY_SERVER_URL, "");
         input.setText(savedUrl);
         input.setSelection(input.getText().length());
+
+        // Pre-fill with saved password if exists
+        String savedPassword = prefs.getString(KEY_SSH_PASSWORD, "");
+        passwordInput.setText(savedPassword);
 
         new AlertDialog.Builder(this)
                 .setTitle(R.string.dialog_title)
@@ -200,6 +203,13 @@ public class MainActivity extends Activity {
                         url = url.substring(0, url.length() - 1);
                     }
                     prefs.edit().putString(KEY_SERVER_URL, url).apply();
+
+                    // Save password for SSH tunnel
+                    String pwd = passwordInput.getText().toString();
+                    if (!pwd.isEmpty()) {
+                        PortForwardService.setPassword(this, pwd);
+                    }
+
                     loadUrl(url);
                 })
                 .setNegativeButton(R.string.dialog_negative, null)
@@ -234,6 +244,7 @@ public class MainActivity extends Activity {
     @Override
     protected void onDestroy() {
         ChatKeepAliveService.stop(this);
+        PortForwardService.stop(this);
         super.onDestroy();
     }
 
@@ -261,25 +272,13 @@ public class MainActivity extends Activity {
         }
 
         @Override
-        public WebResourceResponse shouldInterceptRequest(WebView view, WebResourceRequest request) {
-            Uri url = request.getUrl();
-            String host = url.getHost();
-            String scheme = url.getScheme();
-
-            // Intercept http://localhost:{port} or http://127.0.0.1:{port} for registered forwarded ports
-            if (("localhost".equals(host) || "127.0.0.1".equals(host))
-                    && "http".equals(scheme)) {
-                int port = url.getPort();
-                if (port > 0 && forwardedPorts.contains(port)) {
-                    return proxyRequest(request, port);
-                }
-            }
-
-            return super.shouldInterceptRequest(view, request);
-        }
-
-        @Override
         public void onReceivedSslError(WebView view, SslErrorHandler handler, SslError error) {
+            String url = view.getUrl();
+            // Auto-accept SSL errors for localhost (SSH tunnel forwards — cert won't match localhost)
+            if (url != null && (url.startsWith("https://localhost:") || url.startsWith("https://127.0.0.1:"))) {
+                handler.proceed();
+                return;
+            }
             String serverUrl = prefs.getString(KEY_SERVER_URL, "");
             if (serverUrl.startsWith("https://")) {
                 new AlertDialog.Builder(MainActivity.this)
@@ -298,7 +297,6 @@ public class MainActivity extends Activity {
         public void onPageFinished(WebView view, String url) {
             super.onPageFinished(view, url);
             injectChatStateMonitor();
-            injectPortForwardInterception();
         }
 
         @Override
@@ -307,67 +305,6 @@ public class MainActivity extends Activity {
             if (request.isForMainFrame()) {
                 Toast.makeText(MainActivity.this, R.string.error_connection_failed, Toast.LENGTH_SHORT).show();
             }
-        }
-    }
-
-    // --- Port Forwarding: HTTP Proxy ---
-
-    /**
-     * Proxies a WebView request through the ClawBench server's /api/proxy/forward endpoint.
-     * Called from shouldInterceptRequest on a background thread.
-     */
-    private WebResourceResponse proxyRequest(WebResourceRequest originalRequest, int port) {
-        try {
-            String serverUrl = prefs.getString(KEY_SERVER_URL, "");
-            String path = originalRequest.getUrl().getPath();
-            String query = originalRequest.getUrl().getQuery();
-            String targetUrl = serverUrl + "/api/proxy/forward/" + port + path;
-            if (query != null && !query.isEmpty()) {
-                targetUrl += "?" + query;
-            }
-
-            URL url = new URL(targetUrl);
-            HttpURLConnection conn = (HttpURLConnection) url.openConnection();
-            conn.setRequestMethod(originalRequest.getMethod());
-            conn.setConnectTimeout(10000);
-            conn.setReadTimeout(30000);
-
-            // Copy request headers (exclude Host)
-            Map<String, String> headers = originalRequest.getRequestHeaders();
-            for (Map.Entry<String, String> entry : headers.entrySet()) {
-                if (!"Host".equalsIgnoreCase(entry.getKey())) {
-                    conn.setRequestProperty(entry.getKey(), entry.getValue());
-                }
-            }
-
-            // Add auth cookie from WebView
-            String cookie = CookieManager.getInstance().getCookie(serverUrl);
-            if (cookie != null) {
-                conn.setRequestProperty("Cookie", cookie);
-            }
-
-            int status = conn.getResponseCode();
-            String contentType = conn.getContentType();
-            String encoding = conn.getContentEncoding();
-            if (contentType == null) contentType = "application/octet-stream";
-            if (encoding == null) encoding = "utf-8";
-
-            InputStream body = (status >= 400) ? conn.getErrorStream() : conn.getInputStream();
-
-            // Build response headers map
-            Map<String, String> responseHeaders = new HashMap<>();
-            for (Map.Entry<String, java.util.List<String>> entry : conn.getHeaderFields().entrySet()) {
-                if (entry.getKey() != null && !entry.getValue().isEmpty()) {
-                    responseHeaders.put(entry.getKey(), entry.getValue().get(0));
-                }
-            }
-
-            String reasonPhrase = (status == 200) ? "OK" : "Error";
-            return new WebResourceResponse(contentType, encoding, status, reasonPhrase,
-                    responseHeaders, body);
-        } catch (Exception e) {
-            Log.e(TAG, "Proxy request failed for port " + port, e);
-            return null; // Fallback to default behavior
         }
     }
 
@@ -419,88 +356,6 @@ public class MainActivity extends Activity {
         webView.evaluateJavascript(js, null);
     }
 
-    /**
-     * Inject JavaScript for port forwarding: intercepts fetch(), XHR, and WebSocket
-     * calls to localhost:{port} and rewrites URLs to go through the server proxy.
-     *
-     * This is installed AFTER injectChatStateMonitor, so it wraps the already-patched fetch.
-     * shouldInterceptRequest handles GET subresource loads (scripts, CSS, images);
-     * this JS handles JS-initiated requests (fetch/XHR with POST bodies) and WebSocket.
-     */
-    private void injectPortForwardInterception() {
-        String js =
-            "(function() {" +
-            "  if (window.__clawbenchProxyInstalled) return;" +
-            "  window.__clawbenchProxyInstalled = true;" +
-            "" +
-            "  var serverUrl = '';" +
-            "  try { serverUrl = AndroidNative.getServerUrl(); } catch(e) {}" +
-            "  if (!serverUrl) return;" +
-            "" +
-            "  // Intercept fetch() for localhost URLs (handles POST bodies)" +
-            "  var currentFetch = window.fetch;" +
-            "  window.fetch = function(input, init) {" +
-            "    try {" +
-            "      var url = (typeof input === 'string') ? input : (input && input.url ? input.url : '');" +
-            "      if (url) {" +
-            "        var parsed = new URL(url, location.origin);" +
-            "        if ((parsed.hostname === 'localhost' || parsed.hostname === '127.0.0.1') && parsed.protocol === 'http:') {" +
-            "          var port = parsed.port || '80';" +
-            "          var proxyUrl = serverUrl + '/api/proxy/forward/' + port + parsed.pathname + parsed.search;" +
-            "          if (typeof input === 'string') {" +
-            "            input = proxyUrl;" +
-            "          } else if (input instanceof Request) {" +
-            "            input = new Request(proxyUrl, input);" +
-            "          }" +
-            "          return currentFetch.call(this, input, init);" +
-            "        }" +
-            "      }" +
-            "    } catch(e) {}" +
-            "    return currentFetch.apply(this, arguments);" +
-            "  };" +
-            "" +
-            "  // Intercept XMLHttpRequest.open() for localhost URLs" +
-            "  var origOpen = XMLHttpRequest.prototype.open;" +
-            "  XMLHttpRequest.prototype.open = function(method, url) {" +
-            "    try {" +
-            "      if (typeof url === 'string') {" +
-            "        var parsed = new URL(url, location.origin);" +
-            "        if ((parsed.hostname === 'localhost' || parsed.hostname === '127.0.0.1') && parsed.protocol === 'http:') {" +
-            "          var port = parsed.port || '80';" +
-            "          var proxyUrl = serverUrl + '/api/proxy/forward/' + port + parsed.pathname + parsed.search;" +
-            "          return origOpen.apply(this, [method, proxyUrl].concat(Array.prototype.slice.call(arguments, 2)));" +
-            "        }" +
-            "      }" +
-            "    } catch(e) {}" +
-            "    return origOpen.apply(this, arguments);" +
-            "  };" +
-            "" +
-            "  // Intercept WebSocket constructor for localhost URLs" +
-            "  var OrigWebSocket = window.WebSocket;" +
-            "  window.WebSocket = function(url, protocols) {" +
-            "    try {" +
-            "      if (typeof url === 'string') {" +
-            "        var parsed = new URL(url, location.origin);" +
-            "        if ((parsed.hostname === 'localhost' || parsed.hostname === '127.0.0.1')" +
-            "            && (parsed.protocol === 'ws:' || parsed.protocol === 'wss:')) {" +
-            "          var port = parsed.port || '80';" +
-            "          var wsPath = parsed.pathname + parsed.search;" +
-            "          var newUrl = serverUrl.replace(/^http/, 'ws') + '/api/proxy/ws/' + port + wsPath;" +
-            "          return new OrigWebSocket(newUrl, protocols);" +
-            "        }" +
-            "      }" +
-            "    } catch(e) {}" +
-            "    return new OrigWebSocket(url, protocols);" +
-            "  };" +
-            "  window.WebSocket.prototype = OrigWebSocket.prototype;" +
-            "  window.WebSocket.CONNECTING = OrigWebSocket.CONNECTING;" +
-            "  window.WebSocket.OPEN = OrigWebSocket.OPEN;" +
-            "  window.WebSocket.CLOSED = OrigWebSocket.CLOSED;" +
-            "})();";
-
-        webView.evaluateJavascript(js, null);
-    }
-
     // --- JavaScript Interface ---
 
     public static class WebAppInterface {
@@ -535,14 +390,28 @@ public class MainActivity extends Activity {
             return true;
         }
 
+        /**
+         * Add a port to be forwarded via SSH tunnel.
+         * The PortForwardService creates a local port forward: localhost:{port} → server:{port}
+         * WebView can then access http://localhost:{port} directly.
+         */
         @JavascriptInterface
         public void addForwardedPort(int port) {
-            activity.runOnUiThread(() -> activity.forwardedPorts.add(port));
+            activity.runOnUiThread(() -> {
+                activity.forwardedPorts.add(port);
+                PortForwardService.addForwardedPort(activity, port);
+            });
         }
 
+        /**
+         * Remove a port forward.
+         */
         @JavascriptInterface
         public void removeForwardedPort(int port) {
-            activity.runOnUiThread(() -> activity.forwardedPorts.remove(port));
+            activity.runOnUiThread(() -> {
+                activity.forwardedPorts.remove(port);
+                PortForwardService.removeForwardedPort(activity, port);
+            });
         }
 
         @JavascriptInterface
@@ -553,6 +422,15 @@ public class MainActivity extends Activity {
         @JavascriptInterface
         public String getServerUrl() {
             return activity.prefs.getString(KEY_SERVER_URL, "");
+        }
+
+        /**
+         * Save the SSH password. Called from WebView after successful login.
+         * The same password is used for both web auth and SSH auth.
+         */
+        @JavascriptInterface
+        public void setSSHPassword(String pwd) {
+            PortForwardService.setPassword(activity, pwd);
         }
     }
 }

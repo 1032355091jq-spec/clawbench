@@ -148,11 +148,12 @@ func RegisterRoutes(mux *http.ServeMux) {
 	register("/api/tasks/", middleware.Auth(ServeTaskByID))
 	register("/api/tts/generate", middleware.Auth(TTSGenerate))
 
-	// Port forwarding proxy
+	// Port forwarding (registration & detection only; actual forwarding uses SSH tunnels)
 	register("/api/proxy/ports", middleware.Auth(ServeProxyPortAction))
 	register("/api/proxy/detect", middleware.Auth(ServeProxyDetect))
-	register("/api/proxy/forward/", ServeProxyForward)
-	register("/api/proxy/ws/", ServeProxyWebSocket)
+
+	// SSH tunnel info (no auth required — port number and fingerprint are not sensitive)
+	register("/api/ssh/info", ServeSSHInfo)
 
 	if _, err := os.Stat("public"); err == nil {
 		mux.Handle("/assets/", http.StripPrefix("/assets/", http.FileServer(http.Dir("public"))))
