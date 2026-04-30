@@ -118,6 +118,9 @@ export function useChatSession(options: UseChatSessionOptions) {
   //                   false = only scroll if already near bottom (re-open panel, polling)
   async function loadHistory(forceScrollBottom = true) {
     expandedTools.value = {}
+    // Show the same overlay spinner as session switching so the user sees
+    // immediate feedback instead of a blank/stale message list.
+    switching.value = true
     try {
       // Load agents first so we can resolve agent names
       if (agents.value.length === 0) await loadAgents()
@@ -153,9 +156,11 @@ export function useChatSession(options: UseChatSessionOptions) {
         startMsgCountPolling()
         onScrollBottom(forceScrollBottom)
       }
+      switching.value = false
     } catch (err) {
       console.error('Failed to load chat history:', err)
       toast.show(err.message || '加载聊天记录失败', { icon: '⚠️', type: 'error' })
+      switching.value = false
     }
   }
 
