@@ -58,6 +58,8 @@
 
       <Lightbox />
 
+      <PortForwardBrowser v-if="isAppMode" ref="portForwardBrowserRef" />
+
       <ChatPanel
         :open="chatOpen"
         :current-file="currentFile"
@@ -178,10 +180,11 @@ import GitHistoryDrawer from './components/git/GitHistoryDrawer.vue'
 import SearchDrawer from './components/common/SearchDrawer.vue'
 import ToastNotification from './components/common/ToastNotification.vue'
 import ProxyPanel from './components/proxy/ProxyPanel.vue'
+import PortForwardBrowser from './components/proxy/PortForwardBrowser.vue'
 import { useToast } from './composables/useToast.ts'
 import { useSwipeNavigation } from './composables/useSwipeNavigation.ts'
 import { useAppMode } from './composables/useAppMode.ts'
-import { usePortForward } from './composables/usePortForward.ts'
+import { usePortForward, setOpenPortBrowser } from './composables/usePortForward.ts'
 import { store } from './stores/app.ts'
 import { initMermaid, reRenderMermaid, getFileType } from './utils/helpers.ts'
 import 'highlight.js/styles/github.css'
@@ -226,6 +229,12 @@ const sortDir = ref('asc')
 const { isAppMode } = useAppMode()
 const { syncToNative } = usePortForward()
 const proxyOpen = ref(false)
+const portForwardBrowserRef = ref(null)
+
+// Register port forward browser open callback
+setOpenPortBrowser((port, protocol) => {
+  portForwardBrowserRef.value?.open(port, protocol)
+})
 
 // 抽屉互斥：打开一个时关闭其他（瞬间关闭，无动画）
 const drawerStates = {

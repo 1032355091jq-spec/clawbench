@@ -30,6 +30,14 @@ const detectedPorts = ref<DetectedPort[]>([])
 const loading = ref(false)
 const sshInfo = ref<SSHInfo | null>(null)
 
+// Callback for opening port in the embedded browser (set by App.vue)
+let openPortBrowserFn: ((port: number, protocol?: string) => void) | null = null
+
+/** Register the browser open callback (called once by App.vue) */
+export function setOpenPortBrowser(fn: (port: number, protocol?: string) => void) {
+  openPortBrowserFn = fn
+}
+
 /**
  * Manages port forwarding state: list of forwarded ports, CRUD operations,
  * auto-detection, and registration with Android native layer.
@@ -88,10 +96,14 @@ export function usePortForward() {
     }
   }
 
-  /** Open a forwarded port via localhost (SSH tunnel must be active) */
-  function openPort(port: number, protocol?: string) {
-    const scheme = protocol === 'https' ? 'https' : 'http'
-    window.open(`${scheme}://localhost:${port}`, '_blank')
+  /** Open a forwarded port — in app mode uses embedded browser, otherwise window.open */
+  function openPort(targetPort: number, protocol?: string) {
+    if (openPortBrowserFn) {
+      openPortBrowserFn(targetPort, protocol)
+    } else {
+      const scheme = protocol === 'https' ? 'https' : 'http'
+      window.open(`${scheme}://localhost:${targetPort}`, '_blank')
+    }
   }
 
   return {
