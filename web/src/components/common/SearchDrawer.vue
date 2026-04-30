@@ -7,9 +7,7 @@
       </svg>
       <span class="bs-header-title">搜索文件</span>
       <div v-if="file?.path" class="bs-header-description">
-        <span class="bs-header-description-inner" :title="file.path">
-          {{ file.path }}
-        </span>
+        <HeaderMarquee :text="file.path">{{ file.path }}</HeaderMarquee>
       </div>
       <button class="bs-close" @click.stop="handleClose" title="关闭">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
@@ -48,6 +46,7 @@
 <script setup>
 import { ref, computed, watch, nextTick } from 'vue'
 import BottomSheet from './BottomSheet.vue'
+import HeaderMarquee from './HeaderMarquee.vue'
 import SearchInput from './SearchInput.vue'
 import { escapeHtml, getFileType } from '@/utils/helpers.ts'
 import { hljs } from '@/utils/globals.ts'

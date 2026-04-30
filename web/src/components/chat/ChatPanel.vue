@@ -6,9 +6,7 @@
       </svg>
       <span class="bs-header-title">{{ session.agentHeaderTitle.value }}</span>
       <div v-if="session.currentSessionTitle.value" class="bs-header-description">
-        <span class="bs-header-description-inner" :title="session.currentSessionTitle.value">
-          {{ session.currentSessionTitle.value }}
-        </span>
+        <HeaderMarquee :text="session.currentSessionTitle.value">{{ session.currentSessionTitle.value }}</HeaderMarquee>
       </div>
       <button class="bs-close" @click.stop="$emit('close')" title="关闭">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
@@ -110,6 +108,7 @@
 <script setup>
 import { ref, computed, watch, onUnmounted, onMounted, inject, provide, toRef, nextTick } from 'vue'
 import BottomSheet from '@/components/common/BottomSheet.vue'
+import HeaderMarquee from '@/components/common/HeaderMarquee.vue'
 import SessionDrawer from '@/components/session/SessionDrawer.vue'
 import TaskDrawer from '@/components/task/TaskDrawer.vue'
 import ChatMetadataModal from './ChatMetadataModal.vue'

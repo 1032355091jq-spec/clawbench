@@ -6,9 +6,7 @@
       </svg>
       <span class="bs-header-title">文件管理器</span>
       <div v-if="projectPath" class="bs-header-description">
-        <span class="bs-header-description-inner" :title="store.state.projectRoot">
-          {{ projectPath }}
-        </span>
+        <HeaderMarquee :text="projectPath">{{ projectPath }}</HeaderMarquee>
       </div>
       <button class="bs-close" @click.stop="$emit('close')" title="关闭">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
@@ -151,6 +149,7 @@
 <script setup>
 import { ref, computed, reactive, inject, nextTick, Teleport, watch } from 'vue'
 import BottomSheet from '@/components/common/BottomSheet.vue'
+import HeaderMarquee from '@/components/common/HeaderMarquee.vue'
 import { getFileType } from '@/utils/helpers.ts'
 import { store } from '@/stores/app.ts'
 import { useAppMode } from '@/composables/useAppMode.ts'

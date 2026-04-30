@@ -9,14 +9,10 @@
       </svg>
       <span class="bs-header-title">{{ mode === 'file' ? '文件历史' : '项目历史' }}</span>
       <div v-if="mode === 'project' && store.state.projectRoot" class="bs-header-description">
-        <span class="bs-header-description-inner" :title="store.state.projectRoot">
-          {{ store.state.projectRoot }}
-        </span>
+        <HeaderMarquee :text="store.state.projectRoot">{{ store.state.projectRoot }}</HeaderMarquee>
       </div>
       <div v-else-if="mode === 'file' && file?.path" class="bs-header-description">
-        <span class="bs-header-description-inner" :title="file.path">
-          {{ file.path }}
-        </span>
+        <HeaderMarquee :text="file.path">{{ file.path }}</HeaderMarquee>
       </div>
       <button class="bs-close" @click.stop="handleClose" title="关闭">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
@@ -154,6 +150,7 @@
 <script setup>
 import { ref, computed, watch } from 'vue'
 import BottomSheet from '@/components/common/BottomSheet.vue'
+import HeaderMarquee from '@/components/common/HeaderMarquee.vue'
 import GitCommitList from './GitCommitList.vue'
 import GitCommitMeta from './GitCommitMeta.vue'
 import GitDiffView from './GitDiffView.vue'

@@ -199,26 +199,9 @@ defineExpose({
   font-size: 12px;
   color: var(--text-muted, #999);
   white-space: nowrap;
-  overflow-x: auto;
-  overflow-y: hidden;
-  cursor: grab;
+  overflow: hidden;
   display: flex;
   align-items: center;
-  touch-action: pan-x;
-  scrollbar-width: none;
-  -ms-overflow-style: none;
-}
-
-.bs-header-description::-webkit-scrollbar {
-  display: none;
-}
-
-.bs-header-description:active {
-  cursor: grabbing;
-}
-
-.bs-header-description-inner {
-  padding-left: 8px;
 }
 
 .bs-close {
