@@ -3,7 +3,7 @@
     <div v-if="show" class="metadata-modal-overlay" @click="$emit('close')">
       <div class="metadata-modal" @click.stop>
         <div class="metadata-modal-header">
-          <h3>响应详情</h3>
+          <h3>消息详情</h3>
           <button class="metadata-close-btn" @click="$emit('close')">×</button>
         </div>
         <div class="metadata-content">

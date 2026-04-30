@@ -139,14 +139,14 @@
     </div>
 
     <!-- Bottom bar for assistant messages -->
-    <div v-if="msg.role === 'assistant' && msgText" class="chat-meta-bar">
+    <div v-if="msg.role === 'assistant' && !msg.streaming && (msgText || msg.blocks?.length)" class="chat-meta-bar">
       <span class="chat-meta-info">
         <span v-if="msg.backend">{{ msg.backend }}</span>
         <span v-if="msg.metadata?.model" class="chat-meta-sep">{{ msg.metadata.model }}</span>
         <span v-if="msg.createdAt" class="chat-meta-sep">{{ formatMessageTime(msg.createdAt) }}</span>
       </span>
       <div class="chat-meta-actions">
-        <button v-if="!msg.streaming" ref="speakBtnRef" class="chat-info-btn chat-speak-btn" :class="{ active: autoSpeech.isActive(msg.id), loading: autoSpeech.isGeneratingText(msg.id) }" @click.stop="handleSpeak">
+        <button v-if="msgText" ref="speakBtnRef" class="chat-info-btn chat-speak-btn" :class="{ active: autoSpeech.isActive(msg.id), loading: autoSpeech.isGeneratingText(msg.id) }" @click.stop="handleSpeak">
           <!-- Generating states: summarizing / synthesizing -->
           <template v-if="autoSpeech.isGeneratingText(msg.id)">
             <svg class="speak-spinner" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
@@ -171,7 +171,7 @@
             <span>朗读</span>
           </template>
         </button>
-        <button v-if="msg.metadata" class="chat-info-btn" @click="$emit('show-metadata', msg)" title="查看详情">
+        <button v-if="!msg.streaming" class="chat-info-btn" @click="$emit('show-metadata', msg)" title="查看详情">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
             <circle cx="12" cy="12" r="10"/>
             <line x1="12" y1="16" x2="12" y2="12"/>
