@@ -102,7 +102,7 @@
           <!-- Text block: streaming uses throttled render to avoid UI freeze -->
           <div v-else-if="block.type === 'text'" v-html="getBlockHtml(bi, block)"></div>
           <!-- Schedule proposal card (inline in message) -->
-          <div v-if="block.type === 'text' && blockProposals[`${msg.id}-${bi}`]"
+          <div v-else-if="block.type === 'text' && blockProposals[`${msg.id}-${bi}`]"
                class="schedule-proposal-card"
                :class="{ confirmed: blockProposals[`${msg.id}-${bi}`].confirmed, failed: !blockProposals[`${msg.id}-${bi}`].confirmed }">
             <div class="proposal-header"
@@ -1105,6 +1105,7 @@ onUnmounted(() => {
     color: white;
     align-self: flex-end;
     border-radius: 16px 16px 0 16px;
+    overflow: hidden;
 }
 
 .chat-message.assistant {

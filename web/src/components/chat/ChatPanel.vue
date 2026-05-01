@@ -243,17 +243,17 @@ provide('autoSpeech', autoSpeech)
 provide('layoutRefreshKey', layoutRefreshKey)
 
 // 子抽屉跟随聊天框关闭；面板打开时刷新渲染（修复 display:none 期间的过时布局状态）
-watch(() => props.open, (val) => {
+watch(() => props.open, async (val) => {
   if (!val) {
     session.sessionDrawerOpen.value = false
     session.taskDrawerOpen.value = false
   } else {
-    // When the panel becomes visible after being hidden (v-show display:none),
-    // overflow checks may have been skipped. Bump layoutRefreshKey so
-    // ChatMessageItem re-checks collapse state on the next frame.
+    // Re-open: load history (with overlay) and fix stale layout state from v-show display:none
+    await session.loadHistory(false, true)
+    // Bump layoutRefreshKey AFTER loadHistory so ChatMessageItem re-checks
+    // collapse state with the fresh messages and valid scrollHeight.
     nextTick(() => {
       layoutRefreshKey.value++
-      render.updateRenderedContents(true)
     })
   }
 })
@@ -409,13 +409,6 @@ onUnmounted(() => {
     session.stopMsgCountPolling()
     document.removeEventListener('visibilitychange', session.handleVisibilityChange)
     notification.closeAll()
-})
-
-watch(() => props.open, async (val) => {
-    if (val) {
-        // Re-open: show overlay for smooth transition, don't force scroll
-        await session.loadHistory(false, true)
-    }
 })
 </script>
 

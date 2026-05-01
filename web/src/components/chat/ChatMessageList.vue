@@ -42,7 +42,7 @@
 
     <ChatMessageItem
       v-for="(msg, i) in messages"
-      :key="currentSessionId ? `${currentSessionId}-${i}` : `${msg.createdAt || ''}-${i}`"
+      :key="msg.id || i"
       :msg="msg"
       :index="i"
       :expandedTools="expandedTools"
