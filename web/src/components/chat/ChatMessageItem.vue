@@ -1293,14 +1293,8 @@ onUnmounted(() => {
 :root[data-theme="dark"] .chat-tool-call[data-category="agent"]  { --tool-accent: #f472b6; }
 :root[data-theme="dark"] .chat-tool-call[data-category="skill"]  { --tool-accent: #22d3ee; }
 
-/* ── Edit tool diff view ── */
-.tool-detail .edit-diff-view {
-  white-space: normal;
-  font-size: 11px;
-  line-height: 1.5;
-}
-
-.tool-detail .edit-diff-header {
+/* ── Shared file header (used by Edit/Read/Write) ── */
+.tool-detail .tool-file-header {
   display: flex;
   align-items: center;
   gap: 6px;
@@ -1309,16 +1303,28 @@ onUnmounted(() => {
   border-bottom: 1px solid var(--border-color);
 }
 
-.tool-detail .edit-diff-file {
+.tool-detail .tool-file-path {
   font-family: 'SF Mono', 'Fira Code', Menlo, monospace;
   font-size: 11px;
   font-weight: 600;
   color: var(--accent-color);
   cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex: 1;
+  min-width: 0;
 }
 
-.tool-detail .edit-diff-file:hover {
+.tool-detail .tool-file-path:hover {
   text-decoration: underline;
+}
+
+/* ── Edit tool diff view ── */
+.tool-detail .edit-diff-view {
+  white-space: normal;
+  font-size: 11px;
+  line-height: 1.5;
 }
 
 .tool-detail .edit-diff-replace-all {
@@ -1337,16 +1343,19 @@ onUnmounted(() => {
   font-size: 11px;
   line-height: 1.5;
   overflow-x: auto;
+  min-width: max-content;
 }
 
 .tool-detail .edit-diff-del {
   background: rgba(239, 68, 68, 0.08);
   color: #dc2626;
+  white-space: pre;
 }
 
 .tool-detail .edit-diff-add {
   background: rgba(34, 197, 94, 0.08);
   color: #16a34a;
+  white-space: pre;
 }
 
 :root[data-theme="dark"] .tool-detail .edit-diff-del {
@@ -1362,6 +1371,70 @@ onUnmounted(() => {
 :root[data-theme="dark"] .tool-detail .edit-diff-replace-all {
   background: rgba(251, 191, 36, 0.15);
   color: #fbbf24;
+}
+
+/* ── Read tool file preview ── */
+.tool-detail .file-preview-view {
+  white-space: normal;
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.tool-detail .file-preview-body {
+  white-space: pre;
+  font-family: 'SF Mono', 'Fira Code', Menlo, Monaco, monospace;
+  font-size: 11px;
+  line-height: 1.5;
+  overflow-x: auto;
+  min-width: max-content;
+}
+
+.tool-detail .file-preview-line {
+  white-space: pre;
+  color: var(--text-primary);
+}
+
+.tool-detail .file-preview-meta {
+  white-space: normal;
+  color: var(--text-muted, #999);
+  font-style: italic;
+  padding: 4px 0;
+}
+
+/* ── Write tool file view ── */
+.tool-detail .file-write-view {
+  white-space: normal;
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.tool-detail .file-write-badge {
+  font-size: 9px;
+  padding: 1px 4px;
+  border-radius: 3px;
+  background: rgba(59, 130, 246, 0.12);
+  color: #2563eb;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+:root[data-theme="dark"] .tool-detail .file-write-badge {
+  background: rgba(96, 165, 250, 0.15);
+  color: #93c5fd;
+}
+
+.tool-detail .file-write-body {
+  white-space: pre;
+  font-family: 'SF Mono', 'Fira Code', Menlo, Monaco, monospace;
+  font-size: 11px;
+  line-height: 1.5;
+  overflow-x: auto;
+  min-width: max-content;
+}
+
+.tool-detail .file-write-line {
+  white-space: pre;
+  color: var(--text-primary);
 }
 
 /* ── Bash tool terminal view ── */

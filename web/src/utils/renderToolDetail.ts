@@ -27,11 +27,11 @@ function renderEditDiff(input: Record<string, any>): string {
   const lang = detectLang(filePath)
 
   // Build header
-  let header = '<div class="edit-diff-header">'
+  let header = '<div class="tool-file-header">'
   if (resolvedPath) {
-    header += `<span class="edit-diff-file chat-file-open-btn" data-file-path="${escapeHtml(resolvedPath)}" title="打开文件">${escapeHtml(displayPath)}</span>`
+    header += `<span class="tool-file-path chat-file-open-btn" data-file-path="${escapeHtml(resolvedPath)}" title="打开文件">${escapeHtml(displayPath)}</span>`
   } else {
-    header += `<span class="edit-diff-file">${escapeHtml(displayPath)}</span>`
+    header += `<span class="tool-file-path">${escapeHtml(displayPath)}</span>`
   }
   if (replaceAll) {
     header += '<span class="edit-diff-replace-all" title="Replace all occurrences">replaceAll</span>'
@@ -94,8 +94,85 @@ function renderBashTerminal(input: Record<string, any>): string {
 }
 
 /**
+ * Build a clickable file path header used by Read/Write/Edit views.
+ */
+function filePathHeader(input: Record<string, any>, extraBadge = ''): string {
+  const filePath = input.file_path || ''
+  const projectRoot = store.state.projectRoot || ''
+  const resolvedPath = resolveFilePath(filePath, projectRoot)
+  const displayPath = resolvedPath || filePath.replace(/^\.\//, '')
+
+  let html = '<div class="tool-file-header">'
+  if (resolvedPath) {
+    html += `<span class="tool-file-path chat-file-open-btn" data-file-path="${escapeHtml(resolvedPath)}" title="打开文件">${escapeHtml(displayPath)}</span>`
+  } else {
+    html += `<span class="tool-file-path">${escapeHtml(displayPath)}</span>`
+  }
+  if (extraBadge) html += extraBadge
+  html += '</div>'
+  return html
+}
+
+/**
+ * Render Read tool input as a file preview view.
+ * Shows clickable file path + syntax-highlighted content preview.
+ */
+function renderReadPreview(input: Record<string, any>): string {
+  const filePath = input.file_path || ''
+  const lang = detectLang(filePath)
+
+  let html = '<div class="file-preview-view">'
+  html += filePathHeader(input)
+
+  // Content preview body
+  html += '<div class="file-preview-body">'
+  const content = input.content || ''
+  if (content) {
+    const lines = content.split('\n')
+    for (const line of lines) {
+      html += `<div class="file-preview-line">${highlightLine(line, lang)}</div>`
+    }
+  } else {
+    // No content field — show offset/limit info if present
+    const parts: string[] = []
+    if (input.offset) parts.push(`从第 ${input.offset} 行`)
+    if (input.limit) parts.push(`读取 ${input.limit} 行`)
+    if (parts.length > 0) {
+      html += `<div class="file-preview-meta">${parts.join('，')}</div>`
+    }
+  }
+  html += '</div></div>'
+
+  return html
+}
+
+/**
+ * Render Write tool input as a file write view.
+ * Shows clickable file path + syntax-highlighted content to write.
+ */
+function renderWritePreview(input: Record<string, any>): string {
+  const filePath = input.file_path || ''
+  const lang = detectLang(filePath)
+
+  let html = '<div class="file-write-view">'
+  html += filePathHeader(input, '<span class="file-write-badge">写入</span>')
+
+  html += '<div class="file-write-body">'
+  const content = input.content || ''
+  if (content) {
+    const lines = content.split('\n')
+    for (const line of lines) {
+      html += `<div class="file-write-line">${highlightLine(line, lang)}</div>`
+    }
+  }
+  html += '</div></div>'
+
+  return html
+}
+
+/**
  * Format tool_use input for display in the expanded tool detail area.
- * Dispatches to specialized renderers for Edit and Bash tools,
+ * Dispatches to specialized renderers for Edit, Bash, Read, Write tools,
  * falls back to JSON rendering for all other tool types.
  */
 export function formatToolInput(input: any, toolName?: string): string {
@@ -103,6 +180,8 @@ export function formatToolInput(input: any, toolName?: string): string {
     const lower = toolName.toLowerCase()
     if (lower === 'edit') return renderEditDiff(input)
     if (lower === 'bash') return renderBashTerminal(input)
+    if (lower === 'read') return renderReadPreview(input)
+    if (lower === 'write') return renderWritePreview(input)
   }
 
   // Default: JSON rendering
