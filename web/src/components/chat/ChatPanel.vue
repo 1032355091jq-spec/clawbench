@@ -261,9 +261,13 @@ provide('chatSessionInfo', {
 // Sync session state to parent (App.vue) via chatSessionState prop
 // This avoids the provide/inject direction limitation (child→parent doesn't work)
 if (props.chatSessionState) {
-  // Sync reactive refs
+  // Only sync when session has been loaded (currentSessionId is non-empty).
+  // Before loadHistory runs, all session refs are empty — we must not
+  // overwrite App.vue's pre-fetched session info with empty values.
   watchEffect(() => {
-    props.chatSessionState.currentSessionId = session.currentSessionId.value
+    const sid = session.currentSessionId.value
+    if (!sid) return  // session not loaded yet, don't overwrite
+    props.chatSessionState.currentSessionId = sid
     props.chatSessionState.currentSessionTitle = session.currentSessionTitle.value
     props.chatSessionState.currentAgentId = session.currentAgentId.value
     props.chatSessionState.agentHeaderTitle = session.agentHeaderTitle.value
