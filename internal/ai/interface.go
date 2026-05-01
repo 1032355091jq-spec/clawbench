@@ -2,6 +2,7 @@ package ai
 
 import (
 	"context"
+	"strings"
 )
 
 // ChatRequest represents a request to the AI backend
@@ -45,6 +46,44 @@ type ToolCall struct {
 	ID     string // Tool call ID
 	Input  string // Tool input (JSON string, accumulated incrementally)
 	Done   bool   // Whether the tool call input is complete
+}
+
+// normalizeToolName maps backend-specific tool names to canonical names.
+// Different AI backends use different naming conventions:
+//   - Claude/Codebuddy: PascalCase (Read, Write, Edit, Bash)
+//   - OpenCode:         lowercase (read, write, edit, bash)
+//   - Gemini:           snake_case (read_file, write_file, edit_file)
+//   - Codex:            command_execution (maps to Bash)
+var toolNameAliases = map[string]string{
+	// Read variants
+	"read":      "Read",
+	"read_file": "Read",
+	// Write variants
+	"write":      "Write",
+	"write_file": "Write",
+	// Edit variants
+	"edit":      "Edit",
+	"edit_file": "Edit",
+	// Bash/Command variants
+	"bash":                "Bash",
+	"shell":               "Bash",
+	"command_execution":   "Bash",
+	"execute_command":     "Bash",
+	// Glob/Search variants
+	"glob":        "Glob",
+	"grep":        "Grep",
+	"search_files": "Grep",
+	"list_files":  "LS",
+	"ls":          "LS",
+}
+
+// NormalizeName returns the canonical tool name for the given raw name.
+// If no alias is found, the original name is returned unchanged.
+func (t *ToolCall) NormalizeName() {
+	lower := strings.ToLower(t.Name)
+	if canonical, ok := toolNameAliases[lower]; ok {
+		t.Name = canonical
+	}
 }
 
 // AIBackend defines the interface for AI backend implementations

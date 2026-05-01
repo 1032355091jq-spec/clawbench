@@ -1,4 +1,8 @@
-# Add project specific ProGuard rules here.
--keepclassmembers class com.clawbench.app.WebAppInterface {
+# Keep JavaScript interface methods (inner class of MainActivity)
+-keepclassmembers class com.clawbench.app.MainActivity$WebAppInterface {
     @android.webkit.JavascriptInterface <methods>;
 }
+
+# Keep JSch classes used for SSH tunneling
+-keep class com.jcraft.jsch.** { *; }
+-dontwarn com.jcraft.jsch.**

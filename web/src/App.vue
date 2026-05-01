@@ -468,6 +468,10 @@ onMounted(async () => {
                     })
                     if (loginRes.ok) {
                         isAuthenticated.value = true
+                        // Re-save password for SSH tunnel (in case SharedPreferences was cleared)
+                        if (window.AndroidNative?.setSSHPassword) {
+                            window.AndroidNative.setSSHPassword(savedPwd)
+                        }
                         // Continue with normal initialization below
                     } else {
                         // Auto-login failed (password changed), show login form

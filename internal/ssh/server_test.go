@@ -164,15 +164,51 @@ func TestSSHServerAuthFailure_WrongUser(t *testing.T) {
 
 // --- Port Forwarding Tests ---
 
-func TestSSHPortForward_UnregisteredPortRejected(t *testing.T) {
+func TestSSHPortForward_AllowedButUnregisteredPortWorks(t *testing.T) {
+	// SSH tunnels only check IsPortAllowed (port range), not IsPortRegistered.
+	// Registration is for the HTTP reverse-proxy (protocol metadata), not SSH tunnels.
 	portReg := newTestRegistry(t)
-	// Port 9999 is NOT registered
+	echoPort := startEchoServer(t)
+	// Deliberately do NOT register echoPort — it's in the allowed range (1024-65535)
+
 	srv := testServerHelper(t, "test-password", portReg)
 	client := testSSHClient(t, srv.addr, "clawbench", "test-password")
 
+	conn, err := client.Dial("tcp", fmt.Sprintf("127.0.0.1:%d", echoPort))
+	if err != nil {
+		t.Fatalf("expected port forwarding to work for allowed-but-unregistered port %d, got: %v", echoPort, err)
+	}
+	defer conn.Close()
+
+	testMsg := []byte("hello unregistered port")
+	_, err = conn.Write(testMsg)
+	if err != nil {
+		t.Fatalf("failed to write: %v", err)
+	}
+
+	buf := make([]byte, 1024)
+	conn.SetReadDeadline(time.Now().Add(5 * time.Second))
+	n, err := conn.Read(buf)
+	if err != nil {
+		t.Fatalf("failed to read: %v", err)
+	}
+	if string(buf[:n]) != string(testMsg) {
+		t.Errorf("echo mismatch: got %q, want %q", string(buf[:n]), string(testMsg))
+	}
+}
+
+func TestSSHPortForward_DisallowedPortRejectedByTunnel(t *testing.T) {
+	// Create a registry that only allows specific ports
+	r := service.NewProxyRegistry(model.ProxyConfig{Enabled: true, AllowedPorts: "3000-4000"}, 0)
+	defer r.Stop()
+
+	srv := testServerHelper(t, "test-password", r)
+	client := testSSHClient(t, srv.addr, "clawbench", "test-password")
+
+	// Port 9999 is outside the allowed range (3000-4000)
 	_, err := client.Dial("tcp", "127.0.0.1:9999")
 	if err == nil {
-		t.Error("expected port forwarding to be rejected for unregistered port")
+		t.Error("expected port forwarding to be rejected for port outside allowed range")
 	}
 }
 
