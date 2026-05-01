@@ -13,7 +13,8 @@
 port: 20000
 
 # 项目监控目录（AI 可访问的文件根路径）
-# Linux/macOS 示例：/home/your-username 或 /Users/your-username
+# Linux 示例：/home/your-username
+# macOS 示例：/Users/your-username
 # Windows 示例：C:\Users\your-username
 watch_dir: "/home/your-username"
 

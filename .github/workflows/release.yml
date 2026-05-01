@@ -33,8 +33,11 @@ jobs:
       - name: Build Windows binary
         run: CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -ldflags="-s -w" -o clawbench.exe ./cmd/server
 
-      - name: Build macOS binary
-        run: CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 go build -ldflags="-s -w" -o clawbench-darwin ./cmd/server
+      - name: Build macOS arm64 binary
+        run: CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 go build -ldflags="-s -w" -o clawbench-darwin-arm64 ./cmd/server
+
+      - name: Build macOS amd64 binary
+        run: CGO_ENABLED=0 GOOS=darwin GOARCH=amd64 go build -ldflags="-s -w" -o clawbench-darwin-amd64 ./cmd/server
 
       - name: Package Linux
         run: |
@@ -57,16 +60,27 @@ jobs:
           cp server.ps1 pkg-windows/clawbench/
           cd pkg-windows && zip -r clawbench-windows-amd64.zip clawbench/
 
-      - name: Package macOS
+      - name: Package macOS arm64
         run: |
-          mkdir -p pkg-mac/clawbench
-          cp clawbench-darwin pkg-mac/clawbench/clawbench
-          cp -r public pkg-mac/clawbench/public
-          cp config.example.yaml pkg-mac/clawbench/
-          cp -r agents pkg-mac/clawbench/agents
-          cp server.sh pkg-mac/clawbench/
-          chmod +x pkg-mac/clawbench/clawbench pkg-mac/clawbench/server.sh
-          cd pkg-mac && zip -r clawbench-darwin-arm64.zip clawbench/
+          mkdir -p pkg-mac-arm64/clawbench
+          cp clawbench-darwin-arm64 pkg-mac-arm64/clawbench/clawbench
+          cp -r public pkg-mac-arm64/clawbench/public
+          cp config.example.yaml pkg-mac-arm64/clawbench/
+          cp -r agents pkg-mac-arm64/clawbench/agents
+          cp server.sh pkg-mac-arm64/clawbench/
+          chmod +x pkg-mac-arm64/clawbench/clawbench pkg-mac-arm64/clawbench/server.sh
+          cd pkg-mac-arm64 && zip -r clawbench-darwin-arm64.zip clawbench/
+
+      - name: Package macOS amd64
+        run: |
+          mkdir -p pkg-mac-amd64/clawbench
+          cp clawbench-darwin-amd64 pkg-mac-amd64/clawbench/clawbench
+          cp -r public pkg-mac-amd64/clawbench/public
+          cp config.example.yaml pkg-mac-amd64/clawbench/
+          cp -r agents pkg-mac-amd64/clawbench/agents
+          cp server.sh pkg-mac-amd64/clawbench/
+          chmod +x pkg-mac-amd64/clawbench/clawbench pkg-mac-amd64/clawbench/server.sh
+          cd pkg-mac-amd64 && zip -r clawbench-darwin-amd64.zip clawbench/
 
       - uses: softprops/action-gh-release@v2
         with:
@@ -74,7 +88,8 @@ jobs:
           files: |
             pkg-linux/clawbench-linux-amd64.zip
             pkg-windows/clawbench-windows-amd64.zip
-            pkg-mac/clawbench-darwin-arm64.zip
+            pkg-mac-arm64/clawbench-darwin-arm64.zip
+            pkg-mac-amd64/clawbench-darwin-amd64.zip
 
   build-android:
     name: Build Android APK

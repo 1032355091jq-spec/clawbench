@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 )
 
@@ -102,18 +103,35 @@ func (p *PiperProvider) Synthesize(ctx context.Context, text string, outputPath 
 	cmd.Stderr = &stderr
 
 	// Piper needs shared libraries (libespeak-ng, libonnxruntime, libpiper_phonemize)
-	// in its own directory. Set LD_LIBRARY_PATH so the binary can find them.
+	// in its own directory. Set the platform-appropriate library path so the binary can find them.
 	if piperDir := filepath.Dir(piperPath); piperDir != "" {
 		// piperPath might be a symlink (e.g. .venv/bin/piper -> ../piper/piper)
-		// Resolve the symlink to find the actual directory with .so files
+		// Resolve the symlink to find the actual directory with shared libraries
 		if resolved, err := filepath.EvalSymlinks(piperPath); err == nil {
 			piperDir = filepath.Dir(resolved)
 		}
-		existing := os.Getenv("LD_LIBRARY_PATH")
-		if existing == "" {
-			cmd.Env = append(os.Environ(), "LD_LIBRARY_PATH="+piperDir)
-		} else {
-			cmd.Env = append(os.Environ(), "LD_LIBRARY_PATH="+piperDir+":"+existing)
+		// Use the correct library path variable for each platform:
+		//   Linux:  LD_LIBRARY_PATH  (.so files)
+		//   macOS:  DYLD_LIBRARY_PATH (.dylib files; note: SIP may restrict this for signed binaries)
+		//   Windows: PATH (.dll files)
+		switch runtime.GOOS {
+		case "darwin":
+			existing := os.Getenv("DYLD_LIBRARY_PATH")
+			if existing == "" {
+				cmd.Env = append(os.Environ(), "DYLD_LIBRARY_PATH="+piperDir)
+			} else {
+				cmd.Env = append(os.Environ(), "DYLD_LIBRARY_PATH="+piperDir+":"+existing)
+			}
+		case "windows":
+			existing := os.Getenv("PATH")
+			cmd.Env = append(os.Environ(), "PATH="+piperDir+";"+existing)
+		default: // linux and other unix-like systems
+			existing := os.Getenv("LD_LIBRARY_PATH")
+			if existing == "" {
+				cmd.Env = append(os.Environ(), "LD_LIBRARY_PATH="+piperDir)
+			} else {
+				cmd.Env = append(os.Environ(), "LD_LIBRARY_PATH="+piperDir+":"+existing)
+			}
 		}
 	}
 

@@ -22,6 +22,10 @@ for arg in "$@"; do
             TARGET_OS="darwin"
             TARGET_ARCH="arm64"
             ;;
+        --darwin-amd64)
+            TARGET_OS="darwin"
+            TARGET_ARCH="amd64"
+            ;;
         --target=*)
             TARGET="${arg#--target=}"
             TARGET_OS="${TARGET%%/*}"
@@ -77,7 +81,8 @@ echo ""
 echo "Run with: ./$NAME"
 echo ""
 echo "Cross-compile targets:"
-echo "  ./build.sh --windows    # Windows amd64"
-echo "  ./build.sh --linux      # Linux amd64"
-echo "  ./build.sh --darwin     # macOS arm64"
+echo "  ./build.sh --windows        # Windows amd64"
+echo "  ./build.sh --linux          # Linux amd64"
+echo "  ./build.sh --darwin         # macOS arm64 (Apple Silicon)"
+echo "  ./build.sh --darwin-amd64   # macOS amd64 (Intel)"
 echo "  ./build.sh --target=darwin/arm64"
