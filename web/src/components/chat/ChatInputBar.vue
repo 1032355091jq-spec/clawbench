@@ -3,7 +3,7 @@
     <!-- Top action bar (above input box) -->
     <div class="chat-top-actions">
       <div class="chat-action-group">
-        <button class="chat-action-btn" :class="{ 'has-unread': chatUnread }" @click="$emit('open-session-tab', 'sessions')" title="会话">
+        <button class="chat-action-btn" :class="{ 'has-unread': chatUnread, 'has-running': chatRunning && !chatUnread }" @click="$emit('open-session-tab', 'sessions')" title="会话">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
             <rect x="3" y="6" width="18" height="12" rx="2"/><line x1="12" y1="2" x2="12" y2="6"/><circle cx="9" cy="12" r="1" fill="currentColor"/><circle cx="15" cy="12" r="1" fill="currentColor"/><line x1="1" y1="10" x2="3" y2="10"/><line x1="1" y1="14" x2="3" y2="14"/><line x1="21" y1="10" x2="23" y2="10"/><line x1="21" y1="14" x2="23" y2="14"/>
           </svg>
@@ -185,6 +185,7 @@ const props = defineProps({
   autoSpeechEnabled: Boolean,
   currentSessionId: String,
   chatUnread: Boolean,
+  chatRunning: Boolean,
   quickSend: { type: Object, default: () => ({}) },
 })
 
@@ -421,8 +422,23 @@ defineExpose({
   padding: 1px;
 }
 
+.chat-action-group {
+    display: inline-flex;
+    background: var(--bg-tertiary, #f0f0f0);
+    border-radius: 999px;
+    overflow: hidden;
+}
+
 .chat-action-group .chat-action-btn {
-  border-radius: 5px;
+    border-radius: 0;
+}
+
+.chat-action-group .chat-action-btn:first-child {
+    border-radius: 999px 0 0 999px;
+}
+
+.chat-action-group .chat-action-btn:last-child {
+    border-radius: 0 999px 999px 0;
 }
 
 .chat-action-btn {
@@ -468,23 +484,46 @@ defineExpose({
   cursor: not-allowed;
 }
 
-/* Unread session indicator — glow pulse on the button */
+/* Unread session indicator — fast flash on the button */
 .chat-action-btn.has-unread {
-  position: relative;
-  color: var(--accent-color, #0066cc);
-  background: color-mix(in srgb, var(--accent-color, #0066cc) 8%, transparent);
-  animation: unread-glow 2.4s ease-in-out infinite;
+    position: relative;
+    color: var(--accent-color, #0066cc);
+    background: color-mix(in srgb, var(--accent-color, #0066cc) 8%, transparent);
+    animation: unread-flash 0.8s ease-in-out infinite;
 }
 
-@keyframes unread-glow {
-  0%, 100% {
+@keyframes unread-flash {
+    0%, 100% {
+        background: color-mix(in srgb, var(--accent-color, #0066cc) 8%, transparent);
+        box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent-color, #0066cc) 0%, transparent);
+    }
+    50% {
+        background: color-mix(in srgb, var(--accent-color, #0066cc) 24%, transparent);
+        box-shadow: 0 0 10px 2px color-mix(in srgb, var(--accent-color, #0066cc) 25%, transparent);
+    }
+}
+
+/* Running session indicator — horizontal sweep light */
+.chat-action-btn.has-running {
+    position: relative;
+    overflow: hidden;
+    color: var(--accent-color, #0066cc);
     background: color-mix(in srgb, var(--accent-color, #0066cc) 8%, transparent);
-    box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent-color, #0066cc) 0%, transparent);
-  }
-  50% {
-    background: color-mix(in srgb, var(--accent-color, #0066cc) 16%, transparent);
-    box-shadow: 0 0 8px 1px color-mix(in srgb, var(--accent-color, #0066cc) 25%, transparent);
-  }
+}
+.chat-action-btn.has-running::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 60%;
+    height: 100%;
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,0.35), transparent);
+    animation: sweep-light 2s ease-in-out infinite;
+}
+
+@keyframes sweep-light {
+    0% { left: -60%; }
+    100% { left: 100%; }
 }
 
 .chat-action-btn svg {

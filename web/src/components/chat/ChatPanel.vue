@@ -51,6 +51,7 @@
       :autoSpeechEnabled="autoSpeech.enabled.value"
       :currentSessionId="session.currentSessionId.value"
       :chatUnread="store.state.chatUnread"
+      :chatRunning="store.state.chatRunning"
       :quickSend="store.state.chatQuickSend"
       @send="sendMessage"
       @cancel="stream.cancelStream"

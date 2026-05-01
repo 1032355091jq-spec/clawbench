@@ -130,11 +130,10 @@
           </button>
 
           <div class="dock-center">
-            <button class="dock-btn" :class="{ active: chatOpen }" @click.stop="openDrawer('chat')" title="会话">
+            <button class="dock-btn" :class="{ active: chatOpen, 'has-unread': store.state.chatUnread && !chatOpen, 'has-running': store.state.chatRunning && !chatOpen && !store.state.chatUnread }" @click.stop="openDrawer('chat')" title="会话">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
               </svg>
-              <span v-if="store.state.chatUnread && !chatOpen" class="dock-badge"></span>
             </button>
             <button class="dock-btn" :class="{ active: fileManagerOpen }" @click.stop="openDrawer('fileManager')" title="文件管理器">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -647,26 +646,47 @@ onUnmounted(() => {
     pointer-events: none;
 }
 
-.dock-badge {
-    position: absolute;
-    top: 4px;
-    right: 4px;
-    width: 8px;
-    height: 8px;
-    background: var(--accent-color, #0066cc);
-    border-radius: 50%;
-    pointer-events: none;
-    animation: dock-badge-glow 2.4s ease-in-out infinite;
+/* Unread indicator — fast flash on dock button */
+.dock-btn.has-unread {
+    animation: dock-unread-flash 0.8s ease-in-out infinite;
 }
 
-@keyframes dock-badge-glow {
+@keyframes dock-unread-flash {
     0%, 100% {
-        box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent-color, #0066cc) 40%, transparent);
-        transform: scale(1);
+        box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent-color, #0066cc) 0%, transparent);
     }
     50% {
-        box-shadow: 0 0 6px 2px color-mix(in srgb, var(--accent-color, #0066cc) 30%, transparent);
-        transform: scale(1.1);
+        box-shadow: 0 0 8px 3px color-mix(in srgb, var(--accent-color, #0066cc) 40%, transparent);
     }
+}
+
+/* Running indicator — spinning border light on white glow */
+.dock-btn.has-running {
+    position: relative;
+    isolation: isolate;
+    overflow: hidden;
+    border-color: transparent;
+    box-shadow: 0 0 6px 2px rgba(255, 255, 255, 0.2);
+}
+.dock-btn.has-running::before {
+    content: '';
+    position: absolute;
+    inset: -2px;
+    border-radius: inherit;
+    background: conic-gradient(from 0deg, transparent 0%, rgba(255,255,255,0.6) 10%, var(--accent-color, #0066cc) 22%, rgba(255,255,255,0.4) 34%, transparent 50%);
+    animation: dock-spin-light 1.2s linear infinite;
+    z-index: -2;
+}
+.dock-btn.has-running::after {
+    content: '';
+    position: absolute;
+    inset: 1.5px;
+    border-radius: inherit;
+    background: var(--bg-tertiary);
+    z-index: -1;
+}
+
+@keyframes dock-spin-light {
+    to { transform: rotate(360deg); }
 }
 </style>

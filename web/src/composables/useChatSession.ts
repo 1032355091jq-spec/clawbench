@@ -361,6 +361,9 @@ export function useChatSession(options: UseChatSessionOptions) {
         const hasUnreadOther = sessions.some(s => s.unreadCount > 0 && s.id !== currentSessionId.value)
         store.state.chatUnread = hasUnreadOther
 
+        // Track running sessions for dock/chat button indicator
+        store.state.chatRunning = newRunning.size > 0
+
         // Check for completed sessions
         for (const sessionId of runningSessions.value) {
           if (!newRunning.has(sessionId)) {
