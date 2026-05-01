@@ -79,7 +79,7 @@
                 <line x1="12" y1="16" x2="12.01" y2="16"/>
               </svg>
             </div>
-            <pre v-if="expandedTools[`${index}-${bi}`]" class="tool-detail" @click.stop v-html="formatToolInput(block.input)"></pre>
+            <div v-if="expandedTools[`${index}-${bi}`]" class="tool-detail" @click.stop v-html="formatToolInput(block.input, block.name)"></div>
           </template>
           <!-- Error block -->
           <div v-else-if="block.type === 'error'" class="chat-error-card">
@@ -1292,4 +1292,113 @@ onUnmounted(() => {
 :root[data-theme="dark"] .chat-tool-call[data-category="task"]   { --tool-accent: #fbbf24; }
 :root[data-theme="dark"] .chat-tool-call[data-category="agent"]  { --tool-accent: #f472b6; }
 :root[data-theme="dark"] .chat-tool-call[data-category="skill"]  { --tool-accent: #22d3ee; }
+
+/* ── Edit tool diff view ── */
+.tool-detail .edit-diff-view {
+  white-space: normal;
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.tool-detail .edit-diff-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 4px;
+  padding-bottom: 4px;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.tool-detail .edit-diff-file {
+  font-family: 'SF Mono', 'Fira Code', Menlo, monospace;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--accent-color);
+  cursor: pointer;
+}
+
+.tool-detail .edit-diff-file:hover {
+  text-decoration: underline;
+}
+
+.tool-detail .edit-diff-replace-all {
+  font-size: 9px;
+  padding: 1px 4px;
+  border-radius: 3px;
+  background: rgba(245, 158, 11, 0.12);
+  color: #d97706;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.tool-detail .edit-diff-body {
+  white-space: pre;
+  font-family: 'SF Mono', 'Fira Code', Menlo, Monaco, monospace;
+  font-size: 11px;
+  line-height: 1.5;
+  overflow-x: auto;
+}
+
+.tool-detail .edit-diff-del {
+  background: rgba(239, 68, 68, 0.08);
+  color: #dc2626;
+}
+
+.tool-detail .edit-diff-add {
+  background: rgba(34, 197, 94, 0.08);
+  color: #16a34a;
+}
+
+:root[data-theme="dark"] .tool-detail .edit-diff-del {
+  background: rgba(248, 113, 113, 0.1);
+  color: #fca5a5;
+}
+
+:root[data-theme="dark"] .tool-detail .edit-diff-add {
+  background: rgba(74, 222, 128, 0.1);
+  color: #86efac;
+}
+
+:root[data-theme="dark"] .tool-detail .edit-diff-replace-all {
+  background: rgba(251, 191, 36, 0.15);
+  color: #fbbf24;
+}
+
+/* ── Bash tool terminal view ── */
+.tool-detail .bash-terminal-view {
+  white-space: normal;
+}
+
+.tool-detail .bash-terminal-desc {
+  font-size: 11px;
+  color: var(--text-secondary);
+  margin-bottom: 4px;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.tool-detail .bash-terminal-body {
+  font-family: 'SF Mono', 'Fira Code', Menlo, Monaco, monospace;
+  font-size: 11px;
+  line-height: 1.5;
+  background: var(--bg-tertiary);
+  border-radius: 4px;
+  padding: 6px 8px;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.tool-detail .bash-prompt {
+  color: #16a34a;
+  font-weight: 700;
+  margin-right: 4px;
+}
+
+:root[data-theme="dark"] .tool-detail .bash-prompt {
+  color: #4ade80;
+}
+
+.tool-detail .bash-command {
+  color: var(--text-primary);
+}
 </style>

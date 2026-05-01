@@ -1,7 +1,8 @@
 import { ref, reactive, nextTick, watch } from 'vue'
 import { escapeHtml } from '@/utils/html.ts'
 import { baseName, splitPath } from '@/utils/path.ts'
-import { marked, DOMPurify, hljs, mermaid } from '@/utils/globals.ts'
+import { marked, DOMPurify, mermaid } from '@/utils/globals.ts'
+import { formatToolInput } from '@/utils/renderToolDetail.ts'
 import { renderKatexInString, renderMermaidInElement } from '@/composables/useMarkdownRenderer.ts'
 import { useFilePathAnnotation } from '@/composables/useFilePathAnnotation.ts'
 import { useToast } from '@/composables/useToast.ts'
@@ -200,23 +201,6 @@ export function useChatRender(options) {
 
   function toggleToolDetail(key) {
     expandedTools.value[key] = !expandedTools.value[key]
-  }
-
-  function formatToolInput(input) {
-    if (!input || (typeof input === 'object' && Object.keys(input).length === 0)) {
-      // Show empty {} for tools with no parameters
-      try {
-        return hljs.highlight('{}', { language: 'json' }).value
-      } catch {
-        return '{}'
-      }
-    }
-    try {
-      const json = JSON.stringify(input, null, 2)
-      return hljs.highlight(json, { language: 'json' }).value
-    } catch {
-      return JSON.stringify(input, null, 2)
-    }
   }
 
   function toolCallSummary(block) {
