@@ -131,6 +131,9 @@ const messages = ref([])
 const inputDisabled = ref(true)
 const loading = ref(false)
 const currentSessionId = ref('')
+// Incremented when the panel reopens, so ChatMessageItem can re-check
+// overflow after being hidden (display:none gives scrollHeight=0).
+const layoutRefreshKey = ref(0)
 const currentAgent = computed(() => {
   const agentId = session.currentAgentId.value
   if (!agentId) return null
@@ -237,12 +240,21 @@ provide('chatRender', {
 provide('chatSession', { getAgentIcon: session.getAgentIcon, getAgentName: session.getAgentName })
 provide('chatUI', { closeSheet: () => bottomSheetRef.value?.close() })
 provide('autoSpeech', autoSpeech)
+provide('layoutRefreshKey', layoutRefreshKey)
 
-// 子抽屉跟随聊天框关闭
+// 子抽屉跟随聊天框关闭；面板打开时刷新渲染（修复 display:none 期间的过时布局状态）
 watch(() => props.open, (val) => {
   if (!val) {
     session.sessionDrawerOpen.value = false
     session.taskDrawerOpen.value = false
+  } else {
+    // When the panel becomes visible after being hidden (v-show display:none),
+    // overflow checks may have been skipped. Bump layoutRefreshKey so
+    // ChatMessageItem re-checks collapse state on the next frame.
+    nextTick(() => {
+      layoutRefreshKey.value++
+      render.updateRenderedContents(true)
+    })
   }
 })
 

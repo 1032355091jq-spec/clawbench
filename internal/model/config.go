@@ -26,7 +26,7 @@ type Config struct {
 		InitialMessages int      `yaml:"initial_messages"` // Number of messages to load initially (default: 20)
 		PageSize        int      `yaml:"page_size"`        // Number of messages per lazy-load batch (default: 20)
 		CollapsedHeight int      `yaml:"collapsed_height"` // Collapsed message height in pixels (default: 150)
-		QuickSend       []string `yaml:"quick_send"`       // Quick-send preset texts, shown when input is empty
+		QuickSend       map[string]string `yaml:"quick_send"` // Quick-send presets: key=display label (with emoji), value=actual message text
 	} `yaml:"chat"`
 	Session struct {
 		MaxCount int `yaml:"max_count"` // Maximum number of chat sessions per project (default: 10)
@@ -79,7 +79,7 @@ var (
 	ChatInitialMessages int // Default: 20
 	ChatPageSize        int // Default: 20
 	ChatCollapsedHeight int // Default: 150
-	ChatQuickSend       []string // Quick-send preset texts
+	ChatQuickSend       map[string]string // Quick-send presets: key=display label, value=actual message
 
 	// Session limits (set from config, with defaults)
 	SessionMaxCount int // Default: 10

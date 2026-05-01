@@ -162,8 +162,8 @@
       <Teleport to="body">
         <div v-if="showQuickMenu" class="quick-send-menu" :style="quickMenuStyle" @click.stop>
           <div class="quick-send-title">快捷发送</div>
-          <button v-for="text in quickSend" :key="text" class="quick-send-item" @click="handleQuickSend(text)">
-            {{ text }}
+          <button v-for="(value, key) in quickSend" :key="key" class="quick-send-item" @click="handleQuickSend(value)">
+            {{ key }}
           </button>
         </div>
       </Teleport>
@@ -185,7 +185,7 @@ const props = defineProps({
   autoSpeechEnabled: Boolean,
   currentSessionId: String,
   chatUnread: Boolean,
-  quickSend: { type: Array, default: () => [] },
+  quickSend: { type: Object, default: () => ({}) },
 })
 
 const emit = defineEmits([
@@ -341,7 +341,7 @@ function handleSendClick() {
     emit('send', inputText.value.trim())
   } else if (props.pendingFiles.length > 0 || props.attachedFiles.length > 0) {
     emit('send', '')
-  } else if (props.quickSend.length > 0) {
+  } else if (Object.keys(props.quickSend).length > 0) {
     toggleQuickMenu()
   }
 }

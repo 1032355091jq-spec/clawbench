@@ -211,6 +211,8 @@ export function useChatStream(options: UseChatStreamOptions) {
         backend: currentBackend.value
       })
       lastIndex = messages.value.length - 1
+      // Keep renderedContents in sync with messages array
+      onRenderNeeded()
     }
     onScrollBottom()
 

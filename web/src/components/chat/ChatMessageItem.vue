@@ -255,11 +255,23 @@ const props = defineProps({
 const emit = defineEmits(['toggle-tool', 'show-metadata', 'file-tag-click', 'expand'])
 
 const autoSpeech = inject('autoSpeech')
+const layoutRefreshKey = inject('layoutRefreshKey', ref(0))
 const thinkingExpanded = ref({})
 const wrapperRef = ref(null)
 const overflows = ref(false)
 const manuallyExpanded = ref(false)
 const speakBtnRef = ref(null)
+
+// Reset internal collapse state when the message identity changes
+// (e.g. loadHistory replaces the messages array, giving same-index
+// messages different ids). Without this, manuallyExpanded can survive
+// across message replacements, causing stale collapse state.
+watch(() => props.msg?.id, (newId, oldId) => {
+  if (oldId !== undefined && newId !== oldId) {
+    manuallyExpanded.value = false
+    overflows.value = false  // Will be recalculated by checkOverflow watchers
+  }
+})
 
 // Extract text content from message blocks for TTS
 const msgText = computed(() => {
@@ -279,14 +291,43 @@ function handleSpeak() {
 
 function checkOverflow() {
   if (!wrapperRef.value) return
+  // When the chat panel is hidden (display:none via v-show), scrollHeight
+  // returns 0 which makes overflows=false — causing stale collapse state.
+  // Skip the check in that case; the next visible-frame check will fix it.
+  if (!wrapperRef.value.offsetParent) return
   overflows.value = wrapperRef.value.scrollHeight > store.state.chatCollapsedHeight
 }
 
-// Check overflow after mount and when content changes
-onMounted(() => nextTick(checkOverflow))
-watch(() => props.renderedContent, () => nextTick(checkOverflow))
-watch(() => props.msg?.blocks?.length, () => nextTick(checkOverflow))
-watch(() => props.msg?.streaming, () => nextTick(checkOverflow))
+// Check overflow after mount and when content changes.
+// Use nextTick for content changes (need DOM update first), but do a
+// synchronous re-check immediately after nextTick resolves to catch
+// cases where Vue batches DOM updates across multiple ticks.
+onMounted(() => nextTick(() => {
+  checkOverflow()
+  // Re-check after one more frame to catch async rendering (Mermaid, KaTeX)
+  requestAnimationFrame(checkOverflow)
+}))
+watch(() => props.renderedContent, () => nextTick(() => {
+  checkOverflow()
+  requestAnimationFrame(checkOverflow)
+}))
+watch(() => props.msg?.blocks?.length, () => nextTick(() => {
+  checkOverflow()
+  requestAnimationFrame(checkOverflow)
+}))
+watch(() => props.msg?.streaming, () => nextTick(() => {
+  checkOverflow()
+  requestAnimationFrame(checkOverflow)
+}))
+
+// When the chat panel reopens after being hidden, layout measurements
+// (scrollHeight) are now valid again — re-check overflow.
+watch(layoutRefreshKey, () => {
+  nextTick(() => {
+    checkOverflow()
+    requestAnimationFrame(checkOverflow)
+  })
+})
 
 const collapsed = computed(() => {
   if (!props.shouldCollapse) return false
@@ -881,7 +922,6 @@ onUnmounted(() => {
 /* ── Collapse styles ── */
 .msg-content-wrapper {
   position: relative;
-  transition: max-height 0.3s ease;
 }
 
 .msg-content-wrapper.collapsed {
