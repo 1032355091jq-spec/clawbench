@@ -1,6 +1,6 @@
 <template>
   <Transition name="quote-bar">
-    <div v-if="visible && quoteData" class="quote-question-bar">
+    <div v-if="visible && quoteData" ref="barRef" class="quote-question-bar">
       <!-- Collapsed: preview + button -->
       <div v-if="!expanded" class="quote-bar-row">
         <div class="quote-bar-preview">
@@ -50,7 +50,7 @@
 </template>
 
 <script setup>
-import { ref, computed, watch, nextTick } from 'vue'
+import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue'
 
 const props = defineProps({
   visible: Boolean,
@@ -64,6 +64,7 @@ const emit = defineEmits(['send', 'close', 'pin', 'open-sessions'])
 const expanded = ref(false)
 const inputText = ref('')
 const inputRef = ref(null)
+const barRef = ref(null)
 
 const previewText = computed(() => {
   if (!props.quoteData) return ''
@@ -83,6 +84,25 @@ watch(() => props.visible, (val) => {
     expanded.value = false
     inputText.value = ''
   }
+})
+
+// Click outside to close
+function onPointerDown(e) {
+  if (!props.visible) return
+  if (!barRef.value) return
+  // Don't close if clicking inside the bar
+  if (barRef.value.contains(e.target)) return
+  // Don't close if clicking inside a BottomSheet or ModalDialog (SessionDrawer, agent selector)
+  if (e.target.closest('.bottom-sheet, .modal-dialog')) return
+  emit('close')
+}
+
+onMounted(() => {
+  document.addEventListener('pointerdown', onPointerDown, true)
+})
+
+onUnmounted(() => {
+  document.removeEventListener('pointerdown', onPointerDown, true)
 })
 
 async function expand() {
