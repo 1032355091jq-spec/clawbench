@@ -15,8 +15,7 @@
       <!-- Expanded: session info + input + send -->
       <div v-else class="quote-bar-expanded">
         <div class="qq-session" @click="openSessionDrawer">
-          <span class="qq-session-icon">{{ sessionIcon }}</span>
-          <span class="qq-session-name">{{ displaySessionName }}</span>
+          <span class="qq-session-label">{{ sessionLabel }}</span>
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12">
             <polyline points="6 9 12 15 18 9"/>
           </svg>
@@ -55,8 +54,7 @@ import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue'
 const props = defineProps({
   visible: Boolean,
   quoteData: Object,
-  sessionIcon: { type: String, default: '🤖' },
-  sessionTitle: { type: String, default: '' },
+  sessionLabel: { type: String, default: 'AI 对话' },
   currentSessionId: { type: String, default: '' },
 })
 const emit = defineEmits(['send', 'close', 'pin', 'open-sessions'])
@@ -73,10 +71,6 @@ const previewText = computed(() => {
 })
 
 const canSend = computed(() => inputText.value.trim().length > 0)
-
-const displaySessionName = computed(() => {
-  return props.sessionTitle || '新会话'
-})
 
 // Reset when bar hides
 watch(() => props.visible, (val) => {
@@ -218,11 +212,7 @@ function handleSend() {
   background: var(--bg-secondary);
 }
 
-.qq-session-icon {
-  font-size: 12px;
-}
-
-.qq-session-name {
+.qq-session-label {
   flex: 1;
   font-size: 12px;
   color: var(--text-secondary);

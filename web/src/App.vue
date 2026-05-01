@@ -118,8 +118,7 @@
       <QuoteQuestionBar
         :visible="quoteQuestion.visible.value"
         :quoteData="quoteQuestion.quoteData.value"
-        :sessionIcon="getAgentIcon(sessionIdentity.currentAgentId.value)"
-        :sessionTitle="sessionIdentity.currentSessionTitle.value"
+        :sessionLabel="sessionIdentity.agentHeaderTitle.value"
         :currentSessionId="sessionIdentity.currentSessionId.value"
         @send="quoteQuestion.sendMessage($event, sessionIdentity.currentSessionId.value)"
         @close="quoteQuestion.closeSheet()"
@@ -228,7 +227,6 @@ import PortForwardBrowser from './components/proxy/PortForwardBrowser.vue'
 import QuoteQuestionBar from './components/common/QuoteQuestionBar.vue'
 import { useQuoteQuestion } from './composables/useQuoteQuestion.ts'
 import { useSessionIdentity } from './composables/useSessionIdentity.ts'
-import { useAgents } from './composables/useAgents.ts'
 import { useToast } from './composables/useToast.ts'
 import { useAppMode } from './composables/useAppMode.ts'
 import { usePortForward, setOpenPortBrowser } from './composables/usePortForward.ts'
@@ -263,7 +261,6 @@ provide('toast', toast)
 
 // Session identity singleton — single source of truth for session state
 const sessionIdentity = useSessionIdentity()
-const { getAgentIcon } = useAgents()
 
 // TOC state
 const tocOpen = ref(false)
