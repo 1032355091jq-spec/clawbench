@@ -16,12 +16,22 @@ const sheetOpen = ref(false)
 let debounceTimer: ReturnType<typeof setTimeout> | null = null
 
 /**
+ * Helper: get the closest Element matching a selector from a node.
+ * The node may be a Text node, so we use parentElement first.
+ */
+function closestElement(node: Node | null, selector: string): HTMLElement | null {
+  if (!node) return null
+  const el = (node instanceof HTMLElement ? node : node.parentElement)
+  return el?.closest?.(selector) ?? null
+}
+
+/**
  * Get line numbers from a selection range inside a code preview.
  * Walks up from anchor/focus nodes to find .code-line[data-line] elements.
  */
 function getLineInfo(selection: Selection): { startLine: number; endLine: number } {
-  const anchor = (selection.anchorNode as HTMLElement)?.closest?.('.code-line')
-  const focus = (selection.focusNode as HTMLElement)?.closest?.('.code-line')
+  const anchor = closestElement(selection.anchorNode, '.code-line')
+  const focus = closestElement(selection.focusNode, '.code-line')
   if (!anchor || !focus) return { startLine: 0, endLine: 0 }
 
   const anchorLine = parseInt(anchor.getAttribute('data-line') || '0')
@@ -61,8 +71,7 @@ function onSelectionChange() {
     }
 
     // Check if selection is within a code or markdown preview area
-    const anchorNode = sel.anchorNode as HTMLElement
-    const container = anchorNode?.closest?.('.raw-content-pre, .markdown-body')
+    const container = closestElement(sel.anchorNode, '.raw-content-pre, .markdown-body')
     if (!container) {
       barVisible.value = false
       return

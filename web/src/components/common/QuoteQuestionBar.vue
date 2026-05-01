@@ -31,7 +31,7 @@ const previewText = computed(() => {
 <style scoped>
 .quote-question-bar {
   position: fixed;
-  bottom: calc(56px + env(safe-area-inset-bottom, 0px));
+  top: calc(48px + env(safe-area-inset-top, 0px));
   left: 8px;
   right: 8px;
   display: flex;
@@ -97,6 +97,6 @@ const previewText = computed(() => {
 .quote-bar-enter-from,
 .quote-bar-leave-to {
   opacity: 0;
-  transform: translateY(8px);
+  transform: translateY(-8px);
 }
 </style>
