@@ -128,6 +128,17 @@
         @open-sessions="handleQuoteOpenSessions"
       />
 
+      <!-- Session drawer for quote-question session switching -->
+      <SessionDrawer
+        :open="quoteSessionDrawerOpen"
+        :currentSessionId="chatSessionInfo?.currentSessionId?.value || ''"
+        :runningSessionIds="chatSessionInfo?.runningSessions?.value || new Set()"
+        @close="quoteSessionDrawerOpen = false"
+        @select="handleQuoteSessionSelect"
+        @create="handleQuoteSessionCreate"
+        @delete="handleQuoteSessionDelete"
+      />
+
       <!-- Bottom dock -->
       <div v-if="isAuthenticated" class="bottom-dock-wrapper">
         <div class="bottom-dock">
@@ -212,6 +223,7 @@ import FileDetailsDialog from './components/file/FileDetailsDialog.vue'
 import GitHistoryDrawer from './components/git/GitHistoryDrawer.vue'
 import SearchDrawer from './components/common/SearchDrawer.vue'
 import ToastNotification from './components/common/ToastNotification.vue'
+import SessionDrawer from './components/session/SessionDrawer.vue'
 import ProxyPanel from './components/proxy/ProxyPanel.vue'
 import PortForwardBrowser from './components/proxy/PortForwardBrowser.vue'
 import QuoteQuestionBar from './components/common/QuoteQuestionBar.vue'
@@ -267,13 +279,25 @@ const proxyOpen = ref(false)
 // Quote question feature
 const quoteQuestion = useQuoteQuestion()
 const chatSessionInfo = inject('chatSessionInfo', null)
+const quoteSessionDrawerOpen = ref(false)
 
-// Open chat panel + session drawer when user clicks session info in QuoteQuestionBar
+// Open session drawer directly when user clicks session info in QuoteQuestionBar
 function handleQuoteOpenSessions() {
-  if (!chatOpen.value) {
-    chatOpen.value = true
-  }
-  chatSessionInfo?.openSessionTab?.('sessions')
+  quoteSessionDrawerOpen.value = true
+}
+
+function handleQuoteSessionSelect(sessionId) {
+  chatSessionInfo?.switchSession?.(sessionId)
+  quoteSessionDrawerOpen.value = false
+}
+
+function handleQuoteSessionCreate(agentId) {
+  chatSessionInfo?.createSession?.(agentId)
+  quoteSessionDrawerOpen.value = false
+}
+
+function handleQuoteSessionDelete(sessionId, backend) {
+  chatSessionInfo?.deleteSession?.(sessionId, backend)
 }
 
 // 抽屉互斥：打开一个时关闭其他（瞬间关闭，无动画）
