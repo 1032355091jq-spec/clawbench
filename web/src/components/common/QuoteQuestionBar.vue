@@ -14,9 +14,9 @@
 
       <!-- Expanded: session info + input + send -->
       <div v-else class="quote-bar-expanded">
-        <div class="qq-session" @click="showSessionPicker = true">
+        <div class="qq-session" @click="openSessionDrawer">
           <span class="qq-session-icon">{{ sessionIcon }}</span>
-          <span class="qq-session-name">{{ sessionName }}</span>
+          <span class="qq-session-name">{{ displaySessionName }}</span>
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12">
             <polyline points="6 9 12 15 18 9"/>
           </svg>
@@ -47,32 +47,6 @@
       </div>
     </div>
   </Transition>
-
-  <!-- Session picker overlay -->
-  <Teleport to="body">
-    <div v-if="showSessionPicker" class="qq-picker-overlay" @click="showSessionPicker = false">
-      <div class="qq-picker" @click.stop>
-        <div class="qq-picker-header">选择会话</div>
-        <div class="qq-picker-list">
-          <div v-if="loadingSessions" class="qq-picker-empty">加载中...</div>
-          <div v-else-if="sessions.length === 0" class="qq-picker-empty">暂无会话</div>
-          <div
-            v-for="s in sessions"
-            :key="s.id"
-            class="qq-picker-item"
-            :class="{ active: s.id === selectedSessionId }"
-            @click="pickSession(s.id)"
-          >
-            <span class="qq-picker-item-title">{{ s.title || '新会话' }}</span>
-            <span class="qq-picker-item-time">{{ formatTime(s.updatedAt) }}</span>
-          </div>
-        </div>
-        <div class="qq-picker-footer">
-          <button class="qq-picker-create" @click="createAndPick">+ 新会话</button>
-        </div>
-      </div>
-    </div>
-  </Teleport>
 </template>
 
 <script setup>
@@ -82,18 +56,14 @@ const props = defineProps({
   visible: Boolean,
   quoteData: Object,
   sessionIcon: { type: String, default: '🤖' },
-  sessionName: { type: String, default: 'AI 对话' },
+  sessionTitle: { type: String, default: '' },
   currentSessionId: { type: String, default: '' },
 })
-const emit = defineEmits(['send', 'close'])
+const emit = defineEmits(['send', 'close', 'pin', 'open-sessions'])
 
 const expanded = ref(false)
 const inputText = ref('')
 const inputRef = ref(null)
-const showSessionPicker = ref(false)
-const sessions = ref([])
-const loadingSessions = ref(false)
-const selectedSessionId = ref('')
 
 const previewText = computed(() => {
   if (!props.quoteData) return ''
@@ -103,25 +73,8 @@ const previewText = computed(() => {
 
 const canSend = computed(() => inputText.value.trim().length > 0)
 
-// Sync selected session with prop
-watch(() => props.currentSessionId, (id) => {
-  if (!selectedSessionId.value) selectedSessionId.value = id
-}, { immediate: true })
-
-// Load sessions when picker opens
-watch(showSessionPicker, async (val) => {
-  if (val) {
-    loadingSessions.value = true
-    try {
-      const resp = await fetch('/api/ai/sessions')
-      const data = await resp.json()
-      sessions.value = data.sessions || []
-    } catch {
-      sessions.value = []
-    } finally {
-      loadingSessions.value = false
-    }
-  }
+const displaySessionName = computed(() => {
+  return props.sessionTitle || '新会话'
 })
 
 // Reset when bar hides
@@ -129,13 +82,12 @@ watch(() => props.visible, (val) => {
   if (!val) {
     expanded.value = false
     inputText.value = ''
-    showSessionPicker.value = false
   }
 })
 
 async function expand() {
+  emit('pin')  // Pin bar so selection loss won't auto-hide it
   expanded.value = true
-  selectedSessionId.value = props.currentSessionId
   await nextTick()
   inputRef.value?.focus()
 }
@@ -146,48 +98,17 @@ function collapse() {
   emit('close')
 }
 
-function pickSession(sessionId) {
-  selectedSessionId.value = sessionId
-  showSessionPicker.value = false
-}
-
-async function createAndPick() {
-  try {
-    const resp = await fetch('/api/ai/sessions', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({}),
-    })
-    const data = await resp.json()
-    if (data.ok && data.sessionId) {
-      selectedSessionId.value = data.sessionId
-      showSessionPicker.value = false
-    }
-  } catch (err) {
-    console.error('Failed to create session:', err)
-  }
+function openSessionDrawer() {
+  // Delegate to the existing SessionDrawer via event
+  emit('open-sessions')
 }
 
 function handleSend() {
   if (!canSend.value) return
-  emit('send', inputText.value, selectedSessionId.value || undefined)
+  // Always send to current session (after switching via SessionDrawer if needed)
+  emit('send', inputText.value)
   expanded.value = false
   inputText.value = ''
-}
-
-function formatTime(date) {
-  if (!date) return ''
-  const d = new Date(date)
-  const now = new Date()
-  const diff = now - d
-  const minutes = Math.floor(diff / 60000)
-  const hours = Math.floor(diff / 3600000)
-  const days = Math.floor(diff / 86400000)
-  if (minutes < 1) return '刚刚'
-  if (minutes < 60) return `${minutes}分钟前`
-  if (hours < 24) return `${hours}小时前`
-  if (days < 7) return `${days}天前`
-  return d.toLocaleDateString('zh-CN')
 }
 </script>
 
@@ -367,113 +288,5 @@ function formatTime(date) {
 .quote-bar-leave-to {
   opacity: 0;
   transform: translateY(-8px);
-}
-
-/* Session picker */
-.qq-picker-overlay {
-  position: fixed;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.5);
-  z-index: 3000;
-  display: flex;
-  align-items: flex-end;
-  justify-content: center;
-}
-
-.qq-picker {
-  width: 100%;
-  max-width: 400px;
-  max-height: 60vh;
-  background: var(--bg-primary);
-  border-radius: 16px 16px 0 0;
-  display: flex;
-  flex-direction: column;
-  animation: qq-picker-up 0.25s cubic-bezier(0.16, 1, 0.3, 1);
-}
-
-@keyframes qq-picker-up {
-  from { transform: translateY(100%); }
-  to { transform: translateY(0); }
-}
-
-.qq-picker-header {
-  padding: 14px 16px;
-  font-size: 15px;
-  font-weight: 600;
-  color: var(--text-primary);
-  border-bottom: 1px solid var(--border-color);
-}
-
-.qq-picker-list {
-  flex: 1;
-  overflow-y: auto;
-  padding: 8px;
-}
-
-.qq-picker-empty {
-  padding: 24px;
-  text-align: center;
-  color: var(--text-muted);
-  font-size: 14px;
-}
-
-.qq-picker-item {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 10px 12px;
-  border-radius: 8px;
-  cursor: pointer;
-  transition: background 0.15s;
-}
-
-.qq-picker-item:active {
-  background: var(--bg-tertiary);
-}
-
-.qq-picker-item.active {
-  background: var(--accent-bg, rgba(0, 102, 204, 0.1));
-}
-
-.qq-picker-item-title {
-  flex: 1;
-  font-size: 14px;
-  color: var(--text-primary);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.qq-picker-item.active .qq-picker-item-title {
-  color: var(--accent-color);
-  font-weight: 500;
-}
-
-.qq-picker-item-time {
-  font-size: 12px;
-  color: var(--text-muted);
-  white-space: nowrap;
-  margin-left: 8px;
-}
-
-.qq-picker-footer {
-  padding: 10px 12px;
-  border-top: 1px solid var(--border-color);
-}
-
-.qq-picker-create {
-  width: 100%;
-  padding: 10px;
-  border: none;
-  border-radius: 8px;
-  background: var(--accent-color);
-  color: #fff;
-  font-size: 14px;
-  font-weight: 500;
-  cursor: pointer;
-}
-
-.qq-picker-create:active {
-  opacity: 0.85;
 }
 </style>

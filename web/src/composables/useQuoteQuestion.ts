@@ -11,6 +11,7 @@ export interface QuoteData {
 // Module-level singleton: selection state shared across all consumers
 const quoteData = ref<QuoteData | null>(null)
 const barVisible = ref(false)
+const barPinned = ref(false)  // When pinned, selection loss won't auto-hide the bar
 const sheetOpen = ref(false)
 
 let debounceTimer: ReturnType<typeof setTimeout> | null = null
@@ -65,21 +66,28 @@ function onSelectionChange() {
   debounceTimer = setTimeout(() => {
     const sel = window.getSelection()
     if (!sel || sel.isCollapsed || !sel.toString().trim()) {
-      barVisible.value = false
-      quoteData.value = null
+      // When bar is pinned (user clicked "引用提问"), don't auto-hide on selection loss
+      if (!barPinned.value) {
+        barVisible.value = false
+        quoteData.value = null
+      }
       return
     }
 
     // Check if selection is within a code or markdown preview area
     const container = closestElement(sel.anchorNode, '.raw-content-pre, .markdown-body')
     if (!container) {
-      barVisible.value = false
+      if (!barPinned.value) {
+        barVisible.value = false
+      }
       return
     }
 
     const text = sel.toString().trim()
     if (!text) {
-      barVisible.value = false
+      if (!barPinned.value) {
+        barVisible.value = false
+      }
       return
     }
 
@@ -116,10 +124,16 @@ export function useQuoteQuestion() {
     const sel = window.getSelection()
     if (sel) sel.removeAllRanges()
     barVisible.value = false
+    barPinned.value = false
     quoteData.value = null
   }
 
-  async function sendMessage(userMessage: string, sessionId?: string) {
+  function pinBar() {
+    // Pin the bar so it survives selection loss (e.g. after clicking a button)
+    barPinned.value = true
+  }
+
+  async function sendMessage(userMessage: string, sessionId: string) {
     if (!quoteData.value || !userMessage.trim()) return
 
     const q = quoteData.value
@@ -135,7 +149,7 @@ export function useQuoteQuestion() {
 
     // Direct API call — always works regardless of provide/inject hierarchy
     try {
-      // If no session, create one first
+      // If no session ID provided, create one first
       let sid = sessionId
       if (!sid) {
         const createResp = await fetch('/api/ai/sessions', {
@@ -175,6 +189,7 @@ export function useQuoteQuestion() {
     sheetOpen,
     openSheet: () => { sheetOpen.value = true },
     closeSheet,
+    pinBar,
     sendMessage,
   }
 }

@@ -120,10 +120,12 @@
         :visible="quoteQuestion.visible.value"
         :quoteData="quoteQuestion.quoteData.value"
         :sessionIcon="chatSessionInfo?.getAgentIcon?.(chatSessionInfo?.currentAgentId?.value) || '🤖'"
-        :sessionName="chatSessionInfo?.agentHeaderTitle?.value || 'AI 对话'"
+        :sessionTitle="chatSessionInfo?.currentSessionTitle?.value || ''"
         :currentSessionId="chatSessionInfo?.currentSessionId?.value || ''"
-        @send="quoteQuestion.sendMessage"
+        @send="quoteQuestion.sendMessage($event, chatSessionInfo?.currentSessionId?.value || '')"
         @close="quoteQuestion.closeSheet()"
+        @pin="quoteQuestion.pinBar()"
+        @open-sessions="handleQuoteOpenSessions"
       />
 
       <!-- Bottom dock -->
@@ -265,6 +267,14 @@ const proxyOpen = ref(false)
 // Quote question feature
 const quoteQuestion = useQuoteQuestion()
 const chatSessionInfo = inject('chatSessionInfo', null)
+
+// Open chat panel + session drawer when user clicks session info in QuoteQuestionBar
+function handleQuoteOpenSessions() {
+  if (!chatOpen.value) {
+    chatOpen.value = true
+  }
+  chatSessionInfo?.openSessionTab?.('sessions')
+}
 
 // 抽屉互斥：打开一个时关闭其他（瞬间关闭，无动画）
 const drawerStates = {

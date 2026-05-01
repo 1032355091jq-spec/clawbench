@@ -250,6 +250,7 @@ provide('chatSessionInfo', {
   agentHeaderTitle: session.agentHeaderTitle,
   getAgentIcon: session.getAgentIcon,
   getAgentName: session.getAgentName,
+  openSessionTab: session.openSessionTab,
 })
 
 // 子抽屉跟随聊天框关闭；面板打开时刷新渲染（修复 display:none 期间的过时布局状态）
