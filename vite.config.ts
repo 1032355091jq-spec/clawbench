@@ -48,7 +48,7 @@ export default defineConfig({
   root: 'web',
   publicDir: srcAssets,
   server: {
-    host: 'localhost',
+    host: process.env.VITE_HOST || '0.0.0.0',
     allowedHosts: ['xulongzhe.top', 'your-domain.com', 'localhost', '127.0.0.1'],
     port: frontendPort,
     proxy: {
