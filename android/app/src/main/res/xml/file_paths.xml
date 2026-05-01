@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<paths>
+    <!-- External files dir: getExternalFilesDir(DIRECTORY_PICTURES) -->
+    <external-files-path
+        name="camera_images"
+        path="Pictures/" />
+    <!-- Internal files dir for any other temp files -->
+    <files-path
+        name="internal_files"
+        path="." />
+</paths>
