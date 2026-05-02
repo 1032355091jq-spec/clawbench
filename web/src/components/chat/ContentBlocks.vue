@@ -58,7 +58,7 @@
         <span class="warning-text">{{ block.text }}</span>
       </div>
       <!-- Schedule proposal card (inline in message) — must come before generic text block -->
-      <template v-else-if="block.type === 'text' && blockProposals[key(bi)]">
+      <template v-else-if="block.type === 'text' && blockProposals[blockProposalsKey(bi)]">
         <!-- Surrounding text (with proposal tag stripped) -->
         <div v-if="getBlockHtml(bi, block)" v-html="getBlockHtml(bi, block)"></div>
         <div class="schedule-proposal-card">
@@ -66,11 +66,11 @@
             <span class="proposal-icon">⏰</span> 定时任务已创建
           </div>
           <div class="proposal-body">
-            <div class="proposal-row"><strong>任务：</strong>{{ blockProposals[key(bi)].proposal.name }}</div>
-            <div class="proposal-row"><strong>频率：</strong>{{ humanizeCron(blockProposals[key(bi)].proposal.cron_expr) }}</div>
-            <div class="proposal-row"><strong>执行者：</strong>{{ getAgentIcon(blockProposals[key(bi)].proposal.agent_id) }} {{ getAgentName(blockProposals[key(bi)].proposal.agent_id) }}</div>
-            <div class="proposal-row"><strong>重复：</strong>{{ repeatLabel(blockProposals[key(bi)].proposal.repeat_mode, blockProposals[key(bi)].proposal.max_runs) }}</div>
-            <div class="proposal-row"><strong>提示词：</strong>{{ truncate(blockProposals[key(bi)].proposal.prompt, 80) }}</div>
+            <div class="proposal-row"><strong>任务：</strong>{{ blockProposals[blockProposalsKey(bi)].proposal.name }}</div>
+            <div class="proposal-row"><strong>频率：</strong>{{ humanizeCron(blockProposals[blockProposalsKey(bi)].proposal.cron_expr) }}</div>
+            <div class="proposal-row"><strong>执行者：</strong>{{ getAgentIcon(blockProposals[blockProposalsKey(bi)].proposal.agent_id) }} {{ getAgentName(blockProposals[blockProposalsKey(bi)].proposal.agent_id) }}</div>
+            <div class="proposal-row"><strong>重复：</strong>{{ repeatLabel(blockProposals[blockProposalsKey(bi)].proposal.repeat_mode, blockProposals[blockProposalsKey(bi)].proposal.max_runs) }}</div>
+            <div class="proposal-row"><strong>提示词：</strong>{{ truncate(blockProposals[blockProposalsKey(bi)].proposal.prompt, 80) }}</div>
           </div>
         </div>
       </template>
@@ -144,6 +144,11 @@ defineEmits(['toggle-tool'])
 // Key helper: use msgId if available, otherwise msgIndex
 function key(bi) {
   return props.msgId ? `db-${props.msgId}-${bi}` : `local-${props.msgIndex}-${bi}`
+}
+
+// Key for blockProposals lookup — matches the format used in useChatRender.ts
+function blockProposalsKey(bi) {
+  return `${props.msgId}-${bi}`
 }
 
 const thinkingExpanded = ref({})
