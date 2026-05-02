@@ -63,7 +63,7 @@
         :open="chatOpen"
         :current-file="currentFile"
         @close="chatOpen = false"
-        @open="chatOpen = true"
+        @open="ensureDrawerOpen('chat')"
         @message="handleChatMessage()"
       />
 
@@ -318,6 +318,11 @@ function openDrawer(name, tab = null) {
     drawerStates[name].value = false
     return
   }
+  ensureDrawerOpen(name)
+}
+
+// 确保抽屉打开（不切换，用于 @open 事件等"只开不关"场景）
+function ensureDrawerOpen(name) {
   // 清除聊天未读角标
   if (name === 'chat') store.state.chatUnread = false
   // 关闭其他抽屉
