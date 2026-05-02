@@ -2,6 +2,7 @@ package service
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"crypto/tls"
 	"fmt"
@@ -9,6 +10,7 @@ import (
 	"net"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"runtime"
 	"sort"
 	"strconv"
@@ -177,48 +179,59 @@ func (r *ProxyRegistry) GetPortProtocol(port int) string {
 	return "http"
 }
 
-// DetectedPort represents an auto-detected listening port with its protocol.
+// DetectedPort represents an auto-detected listening port with its protocol and process.
 type DetectedPort struct {
-	Port     int    `json:"port"`
-	Protocol string `json:"protocol"` // "http" or "https"
+	Port        int    `json:"port"`
+	Protocol    string `json:"protocol"`    // "http" or "https"
+	ProcessName string `json:"processName"` // Name of the process listening on this port
+	ProcessArgs string `json:"processArgs"` // Partial command-line arguments
+}
+
+// detectedPortInfo is an internal type for platform-specific scan results.
+type detectedPortInfo struct {
+	Port        int
+	ProcessName string
+	ProcessArgs string
 }
 
 // DetectListeningPorts returns a list of TCP ports currently in LISTEN state
 // on the server, filtered to exclude system ports and ClawBench's own port.
 // Each port is probed to determine if it speaks TLS (https).
 func (r *ProxyRegistry) DetectListeningPorts() []DetectedPort {
-	var ports []int
+	var portInfos []detectedPortInfo
 
 	switch runtime.GOOS {
 	case "linux":
-		ports = parseProcNetTCP()
+		portInfos = parseProcNetTCP()
 	case "darwin":
-		ports = parseLsof()
+		portInfos = parseLsof()
 	case "windows":
-		ports = parseNetstat()
+		portInfos = parseNetstat()
 	default:
 		slog.Warn("port auto-detection not supported on this OS", slog.String("os", runtime.GOOS))
 		return nil
 	}
 
 	// Filter: exclude system ports (< 1024) and our own port
-	filtered := make([]int, 0, len(ports))
-	for _, p := range ports {
-		if p >= 1024 && p != r.selfPort {
+	filtered := make([]detectedPortInfo, 0, len(portInfos))
+	for _, p := range portInfos {
+		if p.Port >= 1024 && p.Port != r.selfPort {
 			filtered = append(filtered, p)
 		}
 	}
 
-	sort.Ints(filtered)
+	sort.Slice(filtered, func(i, j int) bool {
+		return filtered[i].Port < filtered[j].Port
+	})
 
 	// Probe each port for TLS
 	result := make([]DetectedPort, len(filtered))
 	for i, p := range filtered {
 		protocol := "http"
-		if detectTLS(p) {
+		if detectTLS(p.Port) {
 			protocol = "https"
 		}
-		result[i] = DetectedPort{Port: p, Protocol: protocol}
+		result[i] = DetectedPort{Port: p.Port, Protocol: protocol, ProcessName: p.ProcessName, ProcessArgs: p.ProcessArgs}
 	}
 	return result
 }
@@ -287,27 +300,44 @@ func checkPortActive(port int) bool {
 	return true
 }
 
-// parseProcNetTCP reads /proc/net/tcp on Linux to find LISTEN sockets.
-func parseProcNetTCP() []int {
+// parseProcNetTCP reads /proc/net/tcp on Linux to find LISTEN sockets
+// and resolves the process name for each port.
+func parseProcNetTCP() []detectedPortInfo {
 	data, err := os.ReadFile("/proc/net/tcp")
 	if err != nil {
 		slog.Debug("failed to read /proc/net/tcp", slog.String("err", err.Error()))
 		return nil
 	}
 
-	return parseProcNetTCPData(string(data))
+	// Parse /proc/net/tcp to get port -> inode mapping
+	portInodes := parseProcNetTCPData(string(data))
+
+	// Build inode -> process name mapping by scanning /proc/PID/fd/
+	inodeProcess := resolveInodeToProcess()
+
+	result := make([]detectedPortInfo, 0, len(portInodes))
+	for port, inode := range portInodes {
+		info := procInfo{}
+		if inode > 0 {
+			if p, ok := inodeProcess[inode]; ok {
+				info = p
+			}
+		}
+		result = append(result, detectedPortInfo{Port: port, ProcessName: info.Name, ProcessArgs: info.Args})
+	}
+
+	return result
 }
 
 // parseProcNetTCPData parses the content of /proc/net/tcp.
-// Format: sl local_address local_port state ...
-// local_address is hex IP, local_port is hex port, state 0A = LISTEN
-func parseProcNetTCPData(data string) []int {
-	var ports []int
+// Returns a mapping of port number to socket inode for LISTEN sockets.
+func parseProcNetTCPData(data string) map[int]uint64 {
+	portInodes := make(map[int]uint64)
 	scanner := bufio.NewScanner(strings.NewReader(data))
 
 	// Skip header line
 	if !scanner.Scan() {
-		return nil
+		return portInodes
 	}
 
 	for scanner.Scan() {
@@ -340,14 +370,114 @@ func parseProcNetTCPData(data string) []int {
 			continue
 		}
 
-		ports = append(ports, int(port))
+		// inode is in field[9]
+		var inode uint64
+		if len(fields) > 9 {
+			inode, _ = strconv.ParseUint(fields[9], 10, 64)
+		}
+
+		portInodes[int(port)] = inode
 	}
 
-	return ports
+	return portInodes
 }
 
-// parseLsof uses lsof on macOS to find LISTEN sockets.
-func parseLsof() []int {
+// procInfo holds resolved process information for a PID.
+type procInfo struct {
+	Name string
+	Args string
+}
+
+// resolveInodeToProcess scans /proc/PID/fd/ to build a mapping from
+// socket inode numbers to process info.
+func resolveInodeToProcess() map[uint64]procInfo {
+	inodeMap := make(map[uint64]procInfo)
+
+	entries, err := os.ReadDir("/proc")
+	if err != nil {
+		return inodeMap
+	}
+
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+		pidStr := entry.Name()
+		// Check if directory name is a number (PID)
+		pid, err := strconv.Atoi(pidStr)
+		if err != nil || pid <= 0 {
+			continue
+		}
+
+		// Read process info from /proc/PID/cmdline
+		// cmdline uses null bytes as separators; fields: exe_path arg1 arg2 ...
+		cmdlinePath := "/proc/" + pidStr + "/cmdline"
+		cmdlineData, err := os.ReadFile(cmdlinePath)
+		if err != nil {
+			continue
+		}
+
+		// Split by null bytes
+		fields := bytes.Split(cmdlineData, []byte{0})
+		if len(fields) == 0 || len(fields[0]) == 0 {
+			continue
+		}
+
+		// First field is the executable path — extract basename
+		procName := filepath.Base(string(fields[0]))
+
+		// Remaining fields are arguments — join with space, truncate to 120 chars
+		var argsStr string
+		if len(fields) > 1 {
+			argParts := make([]string, 0, len(fields)-1)
+			for _, f := range fields[1:] {
+				if len(f) > 0 {
+					argParts = append(argParts, string(f))
+				}
+			}
+			argsStr = strings.Join(argParts, " ")
+			// Truncate long args
+			if len(argsStr) > 120 {
+				argsStr = argsStr[:120] + "…"
+			}
+		}
+
+		info := procInfo{Name: procName, Args: argsStr}
+
+		// Scan /proc/PID/fd/ for socket inodes
+		fdDir := "/proc/" + pidStr + "/fd"
+		fdEntries, err := os.ReadDir(fdDir)
+		if err != nil {
+			continue
+		}
+
+		for _, fd := range fdEntries {
+			link, err := os.Readlink(fdDir + "/" + fd.Name())
+			if err != nil {
+				continue
+			}
+			// Links look like: socket:[12345]
+			if !strings.HasPrefix(link, "socket:[") {
+				continue
+			}
+			inodeStr := strings.TrimPrefix(link, "socket:[")
+			inodeStr = strings.TrimSuffix(inodeStr, "]")
+			inode, err := strconv.ParseUint(inodeStr, 10, 64)
+			if err != nil {
+				continue
+			}
+			// Only store first process per inode (avoid overwriting with less relevant one)
+			if _, exists := inodeMap[inode]; !exists {
+				inodeMap[inode] = info
+			}
+		}
+	}
+
+	return inodeMap
+}
+
+// parseLsof uses lsof on macOS to find LISTEN sockets and their process names.
+func parseLsof() []detectedPortInfo {
 	cmd := exec.Command("lsof", "-iTCP", "-sTCP:LISTEN", "-P", "-n")
 	output, err := cmd.Output()
 	if err != nil {
@@ -355,12 +485,19 @@ func parseLsof() []int {
 		return nil
 	}
 
-	var ports []int
+	// Map port -> process name (first process wins for dedup)
+	portProcess := make(map[int]string)
 	scanner := bufio.NewScanner(strings.NewReader(string(output)))
 	for scanner.Scan() {
 		line := scanner.Text()
 		// Lines look like: node  12345 user  23u  IPv4 ...  TCP *:5173 (LISTEN)
-		// We want the :PORT part
+		fields := strings.Fields(line)
+		if len(fields) < 2 {
+			continue
+		}
+		// COMMAND is field[0]
+		procName := fields[0]
+
 		if idx := strings.LastIndex(line, ":"); idx >= 0 {
 			rest := line[idx+1:]
 			// Extract port number (stop at space or paren)
@@ -373,26 +510,23 @@ func parseLsof() []int {
 				}
 			}
 			if port, err := strconv.Atoi(portStr); err == nil && port > 0 {
-				ports = append(ports, port)
+				if _, exists := portProcess[port]; !exists {
+					portProcess[port] = procName
+				}
 			}
 		}
 	}
 
-	// Deduplicate
-	seen := make(map[int]bool)
-	unique := make([]int, 0)
-	for _, p := range ports {
-		if !seen[p] {
-			seen[p] = true
-			unique = append(unique, p)
-		}
+	result := make([]detectedPortInfo, 0, len(portProcess))
+	for port, procName := range portProcess {
+		result = append(result, detectedPortInfo{Port: port, ProcessName: procName})
 	}
 
-	return unique
+	return result
 }
 
-// parseNetstat uses netstat on Windows to find LISTEN sockets.
-func parseNetstat() []int {
+// parseNetstat uses netstat on Windows to find LISTEN sockets and their process names.
+func parseNetstat() []detectedPortInfo {
 	cmd := exec.Command("netstat", "-ano")
 	output, err := cmd.Output()
 	if err != nil {
@@ -400,7 +534,8 @@ func parseNetstat() []int {
 		return nil
 	}
 
-	var ports []int
+	// Map port -> PID
+	portPID := make(map[int]int)
 	scanner := bufio.NewScanner(strings.NewReader(string(output)))
 	for scanner.Scan() {
 		line := strings.TrimSpace(scanner.Text())
@@ -409,7 +544,7 @@ func parseNetstat() []int {
 		}
 		// Lines look like:  TCP    0.0.0.0:5173          0.0.0.0:0              LISTENING       12345
 		fields := strings.Fields(line)
-		if len(fields) < 2 {
+		if len(fields) < 5 {
 			continue
 		}
 		localAddr := fields[1]
@@ -418,21 +553,72 @@ func parseNetstat() []int {
 			continue
 		}
 		port, err := strconv.Atoi(localAddr[colonIdx+1:])
-		if err == nil && port > 0 {
-			ports = append(ports, port)
+		if err != nil || port <= 0 {
+			continue
+		}
+		pid, err := strconv.Atoi(fields[len(fields)-1])
+		if err != nil {
+			continue
+		}
+		if _, exists := portPID[port]; !exists {
+			portPID[port] = pid
 		}
 	}
 
-	seen := make(map[int]bool)
-	unique := make([]int, 0)
-	for _, p := range ports {
-		if !seen[p] {
-			seen[p] = true
-			unique = append(unique, p)
+	// Resolve PID -> process name via tasklist
+	pidProcess := resolveWindowsPIDs(portPID)
+
+	result := make([]detectedPortInfo, 0, len(portPID))
+	for port, pid := range portPID {
+		procName := pidProcess[pid]
+		result = append(result, detectedPortInfo{Port: port, ProcessName: procName})
+	}
+
+	return result
+}
+
+// resolveWindowsPIDs uses tasklist to map PIDs to process names.
+func resolveWindowsPIDs(portPID map[int]int) map[int]string {
+	pidProcess := make(map[int]string)
+	if len(portPID) == 0 {
+		return pidProcess
+	}
+
+	// Collect unique PIDs
+	pids := make(map[int]bool)
+	for _, pid := range portPID {
+		pids[pid] = true
+	}
+
+	// Run tasklist to get process names
+	cmd := exec.Command("tasklist", "/FO", "CSV", "/NH")
+	output, err := cmd.Output()
+	if err != nil {
+		slog.Debug("tasklist command failed", slog.String("err", err.Error()))
+		return pidProcess
+	}
+
+	scanner := bufio.NewScanner(strings.NewReader(string(output)))
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		// CSV format: "name.exe","12345","Console","1","12,345 K"
+		// Simple CSV parse
+		parts := strings.Split(line, ",")
+		if len(parts) < 2 {
+			continue
+		}
+		name := strings.Trim(parts[0], "\"")
+		pidStr := strings.Trim(parts[1], "\"")
+		pid, err := strconv.Atoi(pidStr)
+		if err != nil {
+			continue
+		}
+		if pids[pid] {
+			pidProcess[pid] = name
 		}
 	}
 
-	return unique
+	return pidProcess
 }
 
 // isPortInRange checks if a port number falls within the allowed range string.

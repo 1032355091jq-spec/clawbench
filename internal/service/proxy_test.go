@@ -196,23 +196,27 @@ func TestParseProcNetTCPData(t *testing.T) {
 `
 	// 0x1F90 = 8080 (LISTEN), 0x1394 = 5012 (LISTEN), 0x0050 = 80 (LISTEN)
 	// Line 3 has state 06 (TIME_WAIT), should be skipped
-	ports := parseProcNetTCPData(data)
-	assert.Contains(t, ports, 8080)
-	assert.Contains(t, ports, 5012)
-	assert.Contains(t, ports, 80)
-	assert.Len(t, ports, 3)
+	portInodes := parseProcNetTCPData(data)
+	assert.Contains(t, portInodes, 8080)
+	assert.Contains(t, portInodes, 5012)
+	assert.Contains(t, portInodes, 80)
+	assert.Len(t, portInodes, 3)
+	// Verify inode values
+	assert.Equal(t, uint64(12345), portInodes[8080])
+	assert.Equal(t, uint64(67890), portInodes[5012])
+	assert.Equal(t, uint64(11111), portInodes[80])
 }
 
 func TestParseProcNetTCPData_Empty(t *testing.T) {
-	ports := parseProcNetTCPData("")
-	assert.Nil(t, ports)
+	portInodes := parseProcNetTCPData("")
+	assert.Empty(t, portInodes)
 }
 
 func TestParseProcNetTCPData_HeaderOnly(t *testing.T) {
 	data := `  sl  local_address rem_address   st tx_queue rx_queue tr tm->when retrnsmt   uid  timeout inode
 `
-	ports := parseProcNetTCPData(data)
-	assert.Empty(t, ports)
+	portInodes := parseProcNetTCPData(data)
+	assert.Empty(t, portInodes)
 }
 
 // --- DB Persistence Tests ---

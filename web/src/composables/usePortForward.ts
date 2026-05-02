@@ -13,6 +13,8 @@ interface ForwardedPort {
 interface DetectedPort {
   port: number
   protocol: string
+  processName: string
+  processArgs: string
 }
 
 export interface SSHConnectionStats {

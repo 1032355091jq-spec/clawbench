@@ -122,8 +122,11 @@
             class="detect-chip"
             :class="p.protocol"
             :style="{ animationDelay: `${i * 60}ms` }"
-            @click="handleQuickAdd(p.port, p.protocol)"
-          >{{ p.port }} <span class="chip-proto">{{ p.protocol }}</span></button>
+            @click="handleQuickAdd(p.port, p.protocol, p.processName)"
+          >
+            <span class="chip-row"><span class="chip-port">{{ p.port }}</span><span class="chip-proto">{{ p.protocol }}</span></span>
+            <span v-if="p.processName" class="chip-cmdline"><span class="chip-process">{{ p.processName }}</span><span v-if="p.processArgs" class="chip-args"> {{ p.processArgs }}</span></span>
+          </button>
           <span v-if="detectedPortsNotRegistered.length === 0" class="detect-all-registered">全部已注册</span>
         </div>
       </div>
@@ -197,8 +200,8 @@ async function handleAdd() {
   showAddForm.value = false
 }
 
-async function handleQuickAdd(port, protocol) {
-  await registerPort(port, '自动检测', protocol || 'http')
+async function handleQuickAdd(port, protocol, processName) {
+  await registerPort(port, processName || '自动检测', protocol || 'http')
 }
 
 async function handleRemove(port) {
@@ -503,51 +506,110 @@ watch(() => props.open, async (val) => {
 .proxy-detected-label {
   font-size: 11px;
   color: var(--text-muted, #999);
-  margin-bottom: 4px;
+  margin-bottom: 6px;
 }
 
 .proxy-detected-chips {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 6px;
 }
 
 .detect-chip {
-  padding: 3px 8px;
-  border: 1px solid var(--accent-color, #0066cc);
-  border-radius: 12px;
-  background: none;
-  color: var(--accent-color, #0066cc);
+  padding: 6px 8px 6px 10px;
+  border: none;
+  border-left: 3px solid #3b82f6;
+  border-radius: 0;
+  background: var(--bg-tertiary, #f5f5f5);
+  color: var(--text-primary, #1a1a1a);
   font-size: 11px;
-  font-family: monospace;
   cursor: pointer;
   transition: all 0.15s;
   display: flex;
-  align-items: center;
-  gap: 3px;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  min-width: 0;
   animation: chip-appear 0.3s ease-out both;
 }
 
 .detect-chip.https {
-  border-color: #2563eb;
-  color: #2563eb;
+  border-left-color: #8b5cf6;
 }
 
-.detect-chip .chip-proto {
-  font-size: 9px;
+.chip-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+
+.chip-port {
+  font-family: monospace;
+  font-weight: 700;
+  font-size: 12px;
+}
+
+.chip-proto {
+  font-size: 8px;
   font-family: sans-serif;
-  padding: 1px 3px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  padding: 1px 5px;
   border-radius: 3px;
-  background: rgba(0, 102, 204, 0.1);
+  background: rgba(59, 130, 246, 0.12);
+  color: #3b82f6;
 }
 
 .detect-chip.https .chip-proto {
-  background: rgba(37, 99, 235, 0.12);
+  background: rgba(139, 92, 246, 0.12);
+  color: #8b5cf6;
 }
 
-.detect-chip:hover {
+.detect-chip .chip-cmdline {
+  font-size: 9px;
+  font-family: monospace;
+  white-space: nowrap;
+  min-width: 0;
+  max-width: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding-left: 1px;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+
+.detect-chip .chip-cmdline::-webkit-scrollbar {
+  display: none;
+}
+
+.detect-chip .chip-process {
+  font-weight: 600;
+  color: var(--text-secondary, #666);
+}
+
+.detect-chip .chip-args {
+  color: var(--text-muted, #999);
+}
+
+.detect-chip:active {
+  transform: scale(0.97);
   background: var(--accent-color, #0066cc);
   color: #fff;
+}
+
+.detect-chip:active .chip-proto {
+  background: rgba(255, 255, 255, 0.2);
+  color: #fff;
+}
+
+.detect-chip:active .chip-process {
+  color: rgba(255, 255, 255, 0.9);
+}
+
+.detect-chip:active .chip-args {
+  color: rgba(255, 255, 255, 0.6);
 }
 
 .detect-all-registered {
