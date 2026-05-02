@@ -358,32 +358,48 @@ watch(() => props.open, async (val) => {
 .agent-list {
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  padding: 10px;
+  gap: 0;
+  padding: 2px;
   overflow-y: auto;
 }
 
 .agent-option {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 10px 12px;
-  border: 1px solid var(--border-color, #e5e5e5);
-  border-radius: 8px;
-  background: var(--bg-primary, #fff);
+  gap: 6px;
+  padding: 6px 8px;
+  border: none;
+  border-bottom: 1px solid var(--border-color, #e5e5e5);
+  border-radius: 0;
+  background: none;
   cursor: pointer;
-  transition: all 0.15s;
+  transition: background 0.12s;
   text-align: left;
 }
 
+.agent-option:last-child {
+  border-bottom: none;
+}
+
 .agent-option:hover {
-  background: var(--bg-secondary, #f8f9fa);
-  border-color: var(--accent-color, #0066cc);
+  background: var(--accent-color, #0066cc);
+  color: #fff;
+}
+
+.agent-option:hover .agent-option-name {
+  color: #fff;
+}
+
+.agent-option:hover .agent-option-specialty {
+  color: rgba(255,255,255,0.75);
+}
+
+.agent-option:hover .agent-tag {
+  opacity: 0.8;
 }
 
 .agent-option.selected {
   background: rgba(0, 102, 204, 0.1);
-  border-color: var(--accent-color, #0066cc);
 }
 
 .agent-option-icon {
@@ -421,8 +437,8 @@ watch(() => props.open, async (val) => {
 
 .agent-tag {
   font-size: 9px;
-  padding: 1px 5px;
-  border-radius: 3px;
+  padding: 1px 4px;
+  border-radius: 0;
   font-weight: 500;
   flex-shrink: 0;
 }
