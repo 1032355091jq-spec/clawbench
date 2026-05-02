@@ -15,7 +15,7 @@
     <div class="task-list">
       <div v-if="loading" class="task-loading">加载中...</div>
       <div v-else-if="tasks.length === 0" class="task-empty">暂无定时任务</div>
-      <div v-for="task in tasks" :key="task.id" class="task-item" :class="task.status">
+      <div v-for="task in tasks" :key="task.id" class="task-item" :class="[task.status, { 'has-unread': task.unreadCount > 0 }]">
         <div class="task-item-main" @click="openEditDialog(task)">
           <div class="task-item-info">
             <div class="task-item-header">
@@ -256,6 +256,21 @@ watch(() => props.open, async (val) => {
   flex-shrink: 0;
   min-width: 14px;
   text-align: center;
+}
+
+.task-item.has-unread .task-item-icon {
+  animation: task-unread-flash 0.8s ease-in-out infinite;
+}
+
+@keyframes task-unread-flash {
+  0%, 100% {
+    opacity: 1;
+    text-shadow: 0 0 0 transparent;
+  }
+  50% {
+    opacity: 0.7;
+    text-shadow: 0 0 8px color-mix(in srgb, var(--accent-color, #0066cc) 40%, transparent);
+  }
 }
 
 .task-item-status {
