@@ -11,11 +11,11 @@
         </button>
         <button class="chat-action-btn"
           @click="handleCreateClick"
-          @touchstart.prevent="onCreateTouchStart"
+          @touchstart="onCreateTouchStart"
           @touchmove="onCreateTouchMove"
           @touchend="onCreateTouchEnd"
           @contextmenu.prevent="onCreateContextMenu"
-          title="新建会话（长按选择智能体）">
+          title="选择智能体（长按直接新建）">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
             <path d="M12 5v14M5 12h14"/>
           </svg>
@@ -109,21 +109,20 @@
         <textarea class="chat-textarea"
           ref="textareaRef"
           v-model="inputText"
-          :disabled="inputDisabled"
+          :disabled="inputDisabled && !loading"
           :placeholder="pendingFiles.length > 0 ? '添加描述（可选）...' : '输入消息...'"
           rows="1"
           @keydown.enter.exact.prevent="$emit('send', inputText.trim())"
           @input="autoResizeTextarea"
           @blur="collapseTextarea"></textarea>
-        <button v-if="loading" class="chat-stop-btn" @click="$emit('cancel')" title="停止生成">
-          <svg viewBox="0 0 24 24" fill="currentColor" width="16" height="16"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>
-          <span class="stop-btn-pulse"></span>
-        </button>
-        <button v-else class="chat-send-btn" @click.stop="handleSendClick" :class="{ disabled: inputDisabled && pendingFiles.length === 0 && attachedFiles.length === 0 }" title="发送">
+        <button v-if="hasInputContent" class="chat-send-btn" @click.stop="handleSendClick" title="发送">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
             <line x1="22" y1="2" x2="11" y2="13"/>
             <polygon points="22 2 15 22 11 13 2 9 22 2"/>
           </svg>
+        </button>
+        <button v-else-if="loading" class="chat-stop-btn" @click="$emit('cancel')" title="停止生成">
+          <svg viewBox="0 0 24 24" fill="currentColor" width="16" height="16"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>
         </button>
       </div>
       <!-- Teleported attach menu (avoids overflow:hidden clipping) -->
@@ -243,6 +242,8 @@ watch(() => props.currentSessionId, (newId, oldId) => {
 
 const uploadingFiles = computed(() => props.pendingFiles.filter(f => f.uploading))
 
+const hasInputContent = computed(() => inputText.value.trim() || props.pendingFiles.length > 0 || props.attachedFiles.length > 0)
+
 // Extract recently referenced files from message history
 const recentReferencedFiles = computed(() => {
   if (!props.messages || props.messages.length === 0) return []
@@ -272,46 +273,60 @@ const hasFileGroups = computed(() => {
 })
 
 // Long-press detection for create-session button
+// Short tap → show agent selector, Long press → create default session directly
 let createPressTimer = null
-let createPressMoved = false
-const LONG_PRESS_MS = 400
+let createPressStartX = 0
+let createPressStartY = 0
+const LONG_PRESS_MS = 500
+const MOVE_THRESHOLD = 10
 
 function onCreateTouchStart(e) {
-  createPressMoved = false
+  const touch = e.touches[0]
+  createPressStartX = touch.clientX
+  createPressStartY = touch.clientY
   createPressTimer = setTimeout(() => {
     createPressTimer = null
-    emit('show-agent-selector')
+    lastCreateEmitTime = Date.now()
+    emit('create-session')
   }, LONG_PRESS_MS)
 }
 
-function onCreateTouchMove() {
-  createPressMoved = true
-  if (createPressTimer) {
+function onCreateTouchMove(e) {
+  if (!createPressTimer) return
+  const touch = e.touches[0]
+  const dx = Math.abs(touch.clientX - createPressStartX)
+  const dy = Math.abs(touch.clientY - createPressStartY)
+  if (dx > MOVE_THRESHOLD || dy > MOVE_THRESHOLD) {
     clearTimeout(createPressTimer)
     createPressTimer = null
   }
 }
+
+// Prevent double-fire: touch devices fire both touchend → click
+let lastCreateEmitTime = 0
 
 function onCreateTouchEnd() {
   if (createPressTimer) {
     clearTimeout(createPressTimer)
     createPressTimer = null
-    // Short tap: emit create-session
-    emit('create-session')
+    // Short tap: show agent selector
+    lastCreateEmitTime = Date.now()
+    emit('show-agent-selector')
   }
 }
 
 function onCreateContextMenu(e) {
-  // Desktop: right-click = long press
+  // Desktop: right-click = create default session directly (same as long press)
   e.preventDefault()
-  emit('show-agent-selector')
+  emit('create-session')
 }
 
 function handleCreateClick(e) {
-  // Only fires on desktop (click); on touch devices touchend handles it
-  // If contextmenu was triggered (right-click), skip this click
+  // Skip if touchend already emitted within 300ms (avoid double-fire on touch devices)
+  if (Date.now() - lastCreateEmitTime < 300) return
+  // On desktop, click = show agent selector (short tap equivalent)
   if (e.detail === 0) return
-  emit('create-session')
+  emit('show-agent-selector')
 }
 
 function handleDelete() {
@@ -523,11 +538,13 @@ defineExpose({
   border: none;
   cursor: pointer;
   color: var(--text-muted, #999);
-  padding: 3px 6px;
+  padding: 5px 8px;
   border-radius: 4px;
   font-size: 11px;
   line-height: 1;
-  transition: color 0.15s, background 0.15s;
+  transition: color 0.15s, background 0.15s, transform 0.1s;
+  -webkit-tap-highlight-color: transparent;
+  user-select: none;
 }
 
 @media (hover: hover) {
@@ -537,9 +554,20 @@ defineExpose({
   }
 }
 
+.chat-action-btn:active {
+  color: var(--accent-color, #0066cc);
+  background: color-mix(in srgb, var(--accent-color, #0066cc) 15%, transparent);
+  transform: scale(0.92);
+}
+
 .chat-action-btn.active {
   color: var(--accent-color, #0066cc);
   background: color-mix(in srgb, var(--accent-color, #0066cc) 10%, transparent);
+}
+
+.chat-action-btn.active:active {
+  background: color-mix(in srgb, var(--accent-color, #0066cc) 25%, transparent);
+  transform: scale(0.92);
 }
 
 .chat-action-btn-delete:not(.disabled) {
@@ -553,6 +581,12 @@ defineExpose({
   }
 }
 
+.chat-action-btn-delete:not(.disabled):active {
+  color: var(--danger-color, #dc3545);
+  background: color-mix(in srgb, var(--danger-color, #dc3545) 18%, transparent);
+  transform: scale(0.92);
+}
+
 .chat-action-btn-delete.disabled {
   opacity: 0.4;
   cursor: not-allowed;
@@ -564,6 +598,12 @@ defineExpose({
     color: var(--accent-color, #0066cc);
     background: color-mix(in srgb, var(--accent-color, #0066cc) 8%, transparent);
     animation: unread-flash 0.8s ease-in-out infinite;
+}
+
+.chat-action-btn.has-unread:active {
+    animation: none;
+    background: color-mix(in srgb, var(--accent-color, #0066cc) 30%, transparent);
+    transform: scale(0.92);
 }
 
 @keyframes unread-flash {
@@ -584,6 +624,12 @@ defineExpose({
     color: var(--accent-color, #0066cc);
     background: color-mix(in srgb, var(--accent-color, #0066cc) 8%, transparent);
 }
+
+.chat-action-btn.has-running:active {
+    background: color-mix(in srgb, var(--accent-color, #0066cc) 25%, transparent);
+    transform: scale(0.92);
+}
+
 .chat-action-btn.has-running::before {
     content: '';
     position: absolute;
@@ -1010,7 +1056,6 @@ defineExpose({
 
 /* Stop button */
 .chat-stop-btn {
-  position: relative;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1022,30 +1067,8 @@ defineExpose({
   border: none;
   border-radius: 50%;
   cursor: pointer;
-  transition: background 0.15s, opacity 0.15s;
+  transition: opacity 0.15s;
   flex-shrink: 0;
-  animation: heartbeat 1.4s ease-in-out infinite;
 }
-.chat-stop-btn:hover { opacity: 0.85; }
-
-.stop-btn-pulse {
-  position: absolute;
-  inset: 0;
-  border-radius: 50%;
-  animation: pulse-ring 1.4s ease-out infinite;
-}
-
-@keyframes heartbeat {
-  0%, 100% { transform: scale(1); }
-  14% { transform: scale(1.12); }
-  28% { transform: scale(1); }
-  42% { transform: scale(1.08); }
-  56% { transform: scale(1); }
-}
-
-@keyframes pulse-ring {
-  0% { box-shadow: 0 0 0 0 rgba(220, 53, 69, 0.45); }
-  70% { box-shadow: 0 0 0 8px rgba(220, 53, 69, 0); }
-  100% { box-shadow: 0 0 0 0 rgba(220, 53, 69, 0); }
-}
+.chat-stop-btn:active { opacity: 0.75; }
 </style>
