@@ -15,10 +15,23 @@
       </div>
     </Transition>
 
-    <!-- Loading indicator for lazy load -->
-    <div v-if="loadingMore" class="chat-load-more">
-      <span class="chat-load-spinner"></span>
-      <span>加载中...</span>
+    <!-- Lazy load feedback -->
+    <div class="chat-load-area">
+      <Transition name="load-hint-fade">
+        <div v-if="loadingMore" class="chat-load-more">
+          <span class="chat-load-spinner"></span>
+          <span>加载中...</span>
+        </div>
+        <div v-else-if="hasMore && remainingCount > 0" class="chat-load-hint" @click="emit('load-more')">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
+            <polyline points="18 15 12 9 6 15"/>
+          </svg>
+          <span>还有 {{ remainingCount }} 条更早消息</span>
+        </div>
+        <div v-else-if="showAllLoaded" class="chat-load-done">
+          <span>已加载全部消息</span>
+        </div>
+      </Transition>
     </div>
 
     <div class="chat-messages-list">
@@ -42,7 +55,7 @@
 
     <ChatMessageItem
       v-for="(msg, i) in messages"
-      :key="msg.id || i"
+      :key="msg.id ? 'db-' + msg.id : 'local-' + i"
       :msg="msg"
       :index="i"
       :expandedTools="expandedTools"
@@ -75,6 +88,7 @@ const props = defineProps({
   renderedContents: Array,
   hasMore: Boolean,
   loadingMore: Boolean,
+  totalMessages: { type: Number, default: 0 },
   indicatorText: String,
   indicatorDirection: String,
 })
@@ -84,6 +98,25 @@ const emit = defineEmits(['toggle-tool', 'show-metadata', 'file-tag-click', 'fil
 const messagesRef = ref(null)
 const { handleDblClick } = useDoubleClickCopy()
 const { openFilePath } = useFilePathAnnotation()
+
+// How many older messages are not yet loaded
+const remainingCount = computed(() => {
+  if (!props.hasMore) return 0
+  return Math.max(0, props.totalMessages - props.messages.length)
+})
+
+// "All loaded" brief hint: shown for 2s after last load completes with no more
+const showAllLoaded = ref(false)
+let allLoadedTimer = null
+
+watch(() => props.hasMore, (hasMore, prevHasMore) => {
+  // When transitioning from hasMore=true to hasMore=false (just finished loading all)
+  if (!hasMore && prevHasMore && props.messages.length > 0) {
+    showAllLoaded.value = true
+    clearTimeout(allLoadedTimer)
+    allLoadedTimer = setTimeout(() => { showAllLoaded.value = false }, 2000)
+  }
+})
 
 // Track manually expanded message indices
 const expandedSet = ref(new Set())
@@ -327,8 +360,15 @@ defineExpose({
   opacity: 0.7;
 }
 
-/* Lazy load indicator */
-.chat-load-more {
+/* Lazy load feedback area */
+.chat-load-area {
+  position: relative;
+  min-height: 0;
+}
+
+.chat-load-more,
+.chat-load-hint,
+.chat-load-done {
   display: flex;
   align-items: center;
   justify-content: center;
@@ -336,6 +376,28 @@ defineExpose({
   padding: 8px 0;
   font-size: 12px;
   color: var(--text-muted);
+}
+
+.chat-load-hint {
+  cursor: pointer;
+  transition: color 0.15s, opacity 0.15s;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.chat-load-hint:active {
+  opacity: 0.6;
+}
+
+@media (hover: hover) {
+  .chat-load-hint:hover {
+    color: var(--text-secondary);
+  }
+}
+
+.chat-load-done {
+  color: var(--text-muted);
+  opacity: 0.7;
+  font-size: 11px;
 }
 
 .chat-load-spinner {
@@ -349,6 +411,18 @@ defineExpose({
 
 @keyframes tool-spin {
   to { transform: rotate(360deg); }
+}
+
+/* Transition for load hint switching */
+.load-hint-fade-enter-active {
+  transition: opacity 0.2s ease-out;
+}
+.load-hint-fade-leave-active {
+  transition: opacity 0.15s ease-in;
+}
+.load-hint-fade-enter-from,
+.load-hint-fade-leave-to {
+  opacity: 0;
 }
 
 /* Session switch indicator */
