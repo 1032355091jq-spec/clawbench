@@ -2,6 +2,8 @@ package ai
 
 import (
 	"context"
+
+	"clawbench/internal/model"
 )
 
 // ChatRequest represents a request to the AI backend
@@ -32,12 +34,13 @@ type Metadata struct {
 
 // StreamEvent represents a single event in the streaming output
 type StreamEvent struct {
-	Type      string    // "content", "thinking", "metadata", "done", "error", "tool_use", "raw_output", "resume_split"
-	Content   string    // Incremental text (Type=content, Type=thinking)
-	Meta      *Metadata // Metadata (Type=metadata)
-	Error     string    // Error message (Type=error)
-	Tool      *ToolCall // Tool call info (Type=tool_use)
-	RawOutput string    // Raw stdout lines from AI backend (Type=raw_output)
+	Type      string          // "content", "thinking", "metadata", "done", "error", "tool_use", "raw_output", "resume_split", "queue_consume", "queue_update"
+	Content   string          // Incremental text (Type=content, Type=thinking)
+	Meta      *Metadata       // Metadata (Type=metadata)
+	Error     string          // Error message (Type=error)
+	Tool      *ToolCall       // Tool call info (Type=tool_use)
+	RawOutput string          // Raw stdout lines from AI backend (Type=raw_output)
+	QueueEvent *QueueEventData // Queue data (Type=queue_consume, Type=queue_update)
 }
 
 // ToolCall represents a tool invocation by the AI.
@@ -51,6 +54,15 @@ type ToolCall struct {
 	ID     string // Tool call ID
 	Input  string // Tool input (JSON string with canonical field names, accumulated incrementally)
 	Done   bool   // Whether the tool call input is complete
+}
+
+// QueueEventData carries data for queue_consume and queue_update SSE events.
+type QueueEventData struct {
+	Text      string                `json:"text,omitempty"`
+	FilePath  string                `json:"filePath,omitempty"`
+	FilePaths []string              `json:"filePaths,omitempty"`
+	Files     []string              `json:"files,omitempty"`
+	Queue     []model.QueuedMessage `json:"queue,omitempty"`
 }
 
 // AIBackend defines the interface for AI backend implementations

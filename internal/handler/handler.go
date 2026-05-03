@@ -116,6 +116,7 @@ func RegisterRoutes(mux *http.ServeMux) {
 	register("/api/ai/chat", middleware.Auth(AIChat))
 	register("/api/ai/chat/stream", middleware.Auth(AIChatStream))
 	register("/api/ai/chat/cancel", middleware.Auth(CancelChat))
+	register("/api/ai/queue", middleware.Auth(QueueHandler))
 	register("/api/ai/history", middleware.Auth(ServeChatHistory))
 	register("/api/ai/session", middleware.Auth(ServeAISession))
 	register("/api/ai/sessions", middleware.Auth(ServeSessions))

@@ -29,6 +29,16 @@ type ChatSession struct {
 	LastReadAt  *time.Time `json:"-"`
 }
 
+// QueuedMessage represents a message waiting in the pending queue for a session.
+// Stored in-memory only (not persisted to DB).
+type QueuedMessage struct {
+	Text      string   `json:"text"`
+	FilePath  string   `json:"filePath,omitempty"`
+	FilePaths []string `json:"filePaths"`
+	Files     []string `json:"files"`
+	CreatedAt string   `json:"createdAt"`
+}
+
 // ContentBlock represents a typed block within an assistant message's content.
 // Stored as JSON in the chat_history.content column.
 type ContentBlock struct {

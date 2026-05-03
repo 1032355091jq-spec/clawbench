@@ -183,12 +183,7 @@ func AIChat(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Prevent concurrent sessions for the same session ID
-	if !service.TrySetSessionRunning(sessionID) {
-		writeJSON(w, http.StatusOK, map[string]any{"running": true})
-		return
-	}
-
+	// Decode request body BEFORE the running check so we can enqueue when busy
 	var req struct {
 		Message   string   `json:"message"`
 		FilePath  string   `json:"filePath"`  // legacy: single file path
@@ -198,14 +193,12 @@ func AIChat(w http.ResponseWriter, r *http.Request) {
 	}
 	r.Body = http.MaxBytesReader(w, r.Body, maxChatBodySize)
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		service.SetSessionRunning(sessionID, false)
 		model.WriteErrorf(w, http.StatusBadRequest, "Invalid request")
 		return
 	}
 
 	// Allow empty message if files are provided
 	if req.Message == "" && len(req.Files) == 0 && len(req.FilePaths) == 0 {
-		service.SetSessionRunning(sessionID, false)
 		model.WriteErrorf(w, http.StatusBadRequest, "Message or files required")
 		return
 	}
@@ -226,11 +219,9 @@ func AIChat(w http.ResponseWriter, r *http.Request) {
 	if len(allFilePaths) > 0 {
 		firstAbsPath, ok := validateAndResolvePath(w, basePath, allFilePaths[0])
 		if !ok {
-			service.SetSessionRunning(sessionID, false)
 			return
 		}
 		if _, err := os.Stat(firstAbsPath); err != nil {
-			service.SetSessionRunning(sessionID, false)
 			model.WriteError(w, model.NotFound(nil, "File not found"))
 			return
 		}
@@ -244,11 +235,9 @@ func AIChat(w http.ResponseWriter, r *http.Request) {
 	for _, fp := range allFilePaths {
 		fAbsPath, ok := validateAndResolvePath(w, basePath, fp)
 		if !ok {
-			service.SetSessionRunning(sessionID, false)
 			return
 		}
 		if _, err := os.Stat(fAbsPath); err != nil {
-			service.SetSessionRunning(sessionID, false)
 			model.WriteError(w, model.NotFound(nil, "File not found: "+fp))
 			return
 		}
@@ -260,11 +249,9 @@ func AIChat(w http.ResponseWriter, r *http.Request) {
 	for _, fPath := range req.Files {
 		fAbsPath, ok := validateAndResolvePath(w, basePath, fPath)
 		if !ok {
-			service.SetSessionRunning(sessionID, false)
 			return
 		}
 		if _, err := os.Stat(fAbsPath); err != nil {
-			service.SetSessionRunning(sessionID, false)
 			model.WriteError(w, model.NotFound(nil, "File not found: "+fPath))
 			return
 		}
@@ -289,6 +276,42 @@ func AIChat(w http.ResponseWriter, r *http.Request) {
 	if len(allFilePaths) > 1 {
 		allFiles = append(allFiles, allFilePaths[1:]...)
 	}
+
+	// Resolve agent config early (needed for both enqueue and execution paths)
+	effectiveAgentID := req.AgentID
+	if effectiveAgentID == "" {
+		effectiveAgentID = model.GetDefaultAgentID()
+	}
+
+	// Prevent concurrent sessions for the same session ID
+	if !service.TrySetSessionRunning(sessionID) {
+		// Session already running — enqueue the message
+		qMsg := model.QueuedMessage{
+			Text:      req.Message,
+			FilePath:  legacyFilePath,
+			FilePaths: allFilePaths,
+			Files:     allFiles,
+			CreatedAt: time.Now().Format(time.RFC3339),
+		}
+		queueState := service.EnqueueMessage(sessionID, qMsg)
+
+		// Persist user message to DB immediately
+		service.AddChatMessage(projectPath, backendName, sessionID, "user", req.Message, legacyFilePath, allFiles, false)
+
+		// Notify the running goroutine via SSE
+		service.SendSessionEvent(sessionID, ai.StreamEvent{
+			Type:       "queue_update",
+			QueueEvent: &ai.QueueEventData{Queue: queueState},
+		})
+
+		writeJSON(w, http.StatusOK, map[string]any{
+			"running": true,
+			"queued":  true,
+			"queue":   queueState,
+		})
+		return
+	}
+
 	if _, err := service.AddChatMessage(projectPath, backendName, sessionID, "user", req.Message, legacyFilePath, allFiles, false); err != nil {
 		service.SetSessionRunning(sessionID, false)
 		model.WriteError(w, model.Internal(fmt.Errorf("failed to save message")))
@@ -325,56 +348,6 @@ func AIChat(w http.ResponseWriter, r *http.Request) {
 		defer service.SetSessionRunning(sessionID, false)
 		defer service.UnregisterSessionStream(sessionID)
 
-		slog.Info("ai stream request started",
-			slog.String("backend", backendName),
-			slog.String("session", sessionID),
-			slog.String("work_dir", fileDir),
-		)
-
-		// Resolve agent config for system prompt and model override
-		agentID := req.AgentID
-		systemPrompt := ""
-		agentModel := ""
-		agentCommand := ""
-
-		if agentID == "" {
-			agentID = model.GetDefaultAgentID()
-		}
-		if agentID == "" {
-			model.WriteErrorf(w, http.StatusServiceUnavailable, "no agents available")
-			return
-		}
-		if agent, ok := model.Agents[agentID]; ok {
-			systemPrompt = agent.SystemPrompt
-			if agent.Model != "" {
-				agentModel = agent.Model
-			}
-			if agent.Command != "" {
-				agentCommand = agent.Command
-			}
-		}
-
-		// For OpenCode/Codex backends, resolve external session ID when resuming
-		effectiveSessionID := sessionID
-		resume := service.SessionHasAssistant(sessionID)
-		if (backendName == "opencode" || backendName == "codex") && resume {
-			extID := service.GetExternalSessionID(sessionID)
-			if extID != "" {
-				effectiveSessionID = extID
-			}
-		}
-
-		chatReq := ai.ChatRequest{
-			Prompt:       prompt,
-			SessionID:    effectiveSessionID,
-			WorkDir:      fileDir,
-			SystemPrompt: systemPrompt,
-			Model:        agentModel,
-			Command:      agentCommand,
-			AgentID:      agentID,
-			Resume:       resume,
-		}
-
 		// Use independent context with cancel to prevent goroutine leaks
 		// and support user-initiated cancellation (no timeout - let AI run indefinitely)
 		ctx, cancel := context.WithCancel(context.Background())
@@ -383,73 +356,155 @@ func AIChat(w http.ResponseWriter, r *http.Request) {
 		service.RegisterSessionCancel(sessionID, cancel)
 		defer service.UnregisterSessionCancel(sessionID)
 
-		backend, err := ai.NewBackend(backendName)
-		if err != nil {
-			slog.Error("failed to create backend", slog.String("backend", backendName), slog.String("err", err.Error()))
-			errMsg := fmt.Sprintf("创建 AI Backend 失败: %v", err)
-			if !sendEvent(ctx, streamCh, ai.StreamEvent{Type: "error", Error: errMsg}) {
-				return
-			}
-			_, _ = service.AddChatMessage(projectPath, backendName, sessionID, "assistant", errMsg, "", nil, false)
-			return
-		}
+		// Build the first chat request
+		firstChatReq := buildChatRequest(prompt, sessionID, backendName, effectiveAgentID, fileDir)
 
-		eventCh, err := backend.ExecuteStream(ctx, chatReq)
-		if err != nil {
-			slog.Error("failed to start stream", slog.String("err", err.Error()))
-			errMsg := fmt.Sprintf("启动流式输出失败: %v", err)
-			if !sendEvent(ctx, streamCh, ai.StreamEvent{Type: "error", Error: errMsg}) {
-				return
-			}
-			_, _ = service.AddChatMessage(projectPath, backendName, sessionID, "assistant", errMsg, "", nil, false)
-			return
-		}
+		// Execute first message
+		result := executeStreamRun(ctx, streamCh, projectPath, sessionID, backendName, effectiveAgentID, firstChatReq, fileDir)
 
-		// Create streaming placeholder message in DB
-		emptyContent, _ := json.Marshal(map[string]any{"blocks": []any{}})
-		_, _ = service.AddChatMessage(projectPath, backendName, sessionID, "assistant", string(emptyContent), "", nil, true)
-
-		var blocks []model.ContentBlock
-		var responseMetadata *ai.Metadata
-		var rawOutput string // collected from raw_output event for debugging
-
-		// Incremental persistence: flush every 1s or every 5 events
-		flushTicker := time.NewTicker(1 * time.Second)
-		defer flushTicker.Stop()
-		eventCount := 0
-
-		serializeBlocks := func() string {
-			contentMap := map[string]any{"blocks": blocks}
-			if responseMetadata != nil {
-				contentMap["metadata"] = responseMetadata
-			}
-			blocksJSON, _ := json.Marshal(contentMap)
-			return string(blocksJSON)
-		}
-
+		// Drain loop: keep executing queued messages after normal completion
 		for {
-			select {
-			case event, ok := <-eventCh:
-				if !ok {
-					// Stream ended — flush ticker and finalize below
-					goto finalize
-				}
-				// Don't forward "done" here — send it after DB finalize
-				// so that the frontend loads complete content on "done".
-				if event.Type == "done" {
-					// Record that stream completed normally (not cancelled/errored)
-					// The actual "done" SSE event is sent after FinalizeStreamingMessage.
-					goto finalize
-				}
-				// Capture raw output for debugging (not forwarded to SSE)
-				if event.Type == "raw_output" {
-					rawOutput = event.RawOutput
-					continue
-				}
-				// Forward to SSE channel
-				if !sendEvent(ctx, streamCh, event) {
-					goto finalize
-				}
+			if result.cancelReason == "user" || result.cancelReason == "disconnect" {
+				service.ClearQueue(sessionID)
+				sendFinalEvent(streamCh, ai.StreamEvent{Type: "cancelled"})
+				return
+			}
+			if result.err != "" {
+				sendFinalEvent(streamCh, ai.StreamEvent{Type: "error", Error: result.err})
+				return
+			}
+			if result.empty {
+				sendFinalEvent(streamCh, ai.StreamEvent{Type: "error", Error: "AI 未返回任何内容"})
+				return
+			}
+			if result.cancelReason != "" {
+				// Other cancel reasons
+				sendFinalEvent(streamCh, ai.StreamEvent{Type: "cancelled"})
+				return
+			}
+
+			// Normal completion — check queue for next message
+			qMsg, ok := service.DequeueMessage(sessionID)
+			if !ok {
+				// Brief re-check for enqueue-during-exit race
+				time.Sleep(50 * time.Millisecond)
+				qMsg, ok = service.DequeueMessage(sessionID)
+			}
+			if !ok {
+				// Queue empty — truly done
+				sendFinalEvent(streamCh, ai.StreamEvent{Type: "done"})
+				return
+			}
+
+			// Queue has next message — send queue_consume + queue_update, persist, execute
+			slog.Info("draining queued message", slog.String("session", sessionID), slog.String("text", qMsg.Text))
+
+			// Notify frontend: a queued message is about to execute
+			sendEvent(ctx, streamCh, ai.StreamEvent{
+				Type:       "queue_consume",
+				QueueEvent: &ai.QueueEventData{Text: qMsg.Text, FilePath: qMsg.FilePath, FilePaths: qMsg.FilePaths, Files: qMsg.Files},
+			})
+
+			// Persist user message to DB
+			service.AddChatMessage(projectPath, backendName, sessionID, "user", qMsg.Text, qMsg.FilePath, qMsg.Files, false)
+
+			// Send updated queue state
+			remainingQueue := service.GetQueue(sessionID)
+			sendEvent(ctx, streamCh, ai.StreamEvent{
+				Type:       "queue_update",
+				QueueEvent: &ai.QueueEventData{Queue: remainingQueue},
+			})
+
+			// Build chat request from queued message and execute
+			nextChatReq := buildChatRequestFromQueue(qMsg, sessionID, projectPath, backendName, effectiveAgentID, fileDir)
+			result = executeStreamRun(ctx, streamCh, projectPath, sessionID, backendName, effectiveAgentID, nextChatReq, fileDir)
+			// Loop continues
+		}
+	}()
+}
+
+// streamRunResult captures the outcome of a single AI stream execution.
+type streamRunResult struct {
+	cancelReason string // "", "user", "disconnect"
+	err          string // error message if execution failed
+	empty        bool   // true if AI returned no content
+}
+
+// executeStreamRun runs one AI backend execution from start to finish.
+// It handles event accumulation, incremental DB persistence, resume_split,
+// and finalizes the streaming message in the DB.
+// It does NOT send a terminal SSE event — the caller decides what to send.
+func executeStreamRun(
+	ctx context.Context,
+	streamCh chan<- ai.StreamEvent,
+	projectPath, sessionID, backendName, agentID string,
+	chatReq ai.ChatRequest,
+	fileDir string,
+) streamRunResult {
+	backend, err := ai.NewBackend(backendName)
+	if err != nil {
+		slog.Error("failed to create backend", slog.String("backend", backendName), slog.String("err", err.Error()))
+		errMsg := fmt.Sprintf("创建 AI Backend 失败: %v", err)
+		if !sendEvent(ctx, streamCh, ai.StreamEvent{Type: "error", Error: errMsg}) {
+			return streamRunResult{err: errMsg}
+		}
+		_, _ = service.AddChatMessage(projectPath, backendName, sessionID, "assistant", errMsg, "", nil, false)
+		return streamRunResult{err: errMsg}
+	}
+
+	eventCh, err := backend.ExecuteStream(ctx, chatReq)
+	if err != nil {
+		slog.Error("failed to start stream", slog.String("err", err.Error()))
+		errMsg := fmt.Sprintf("启动流式输出失败: %v", err)
+		if !sendEvent(ctx, streamCh, ai.StreamEvent{Type: "error", Error: errMsg}) {
+			return streamRunResult{err: errMsg}
+		}
+		_, _ = service.AddChatMessage(projectPath, backendName, sessionID, "assistant", errMsg, "", nil, false)
+		return streamRunResult{err: errMsg}
+	}
+
+	// Create streaming placeholder message in DB
+	emptyContent, _ := json.Marshal(map[string]any{"blocks": []any{}})
+	_, _ = service.AddChatMessage(projectPath, backendName, sessionID, "assistant", string(emptyContent), "", nil, true)
+
+	var blocks []model.ContentBlock
+	var responseMetadata *ai.Metadata
+	var rawOutput string // collected from raw_output event for debugging
+
+	// Incremental persistence: flush every 1s or every 5 events
+	flushTicker := time.NewTicker(1 * time.Second)
+	defer flushTicker.Stop()
+	eventCount := 0
+
+	serializeBlocks := func() string {
+		contentMap := map[string]any{"blocks": blocks}
+		if responseMetadata != nil {
+			contentMap["metadata"] = responseMetadata
+		}
+		blocksJSON, _ := json.Marshal(contentMap)
+		return string(blocksJSON)
+	}
+
+	for {
+		select {
+		case event, ok := <-eventCh:
+			if !ok {
+				// Stream ended — finalize below
+				return finalizeStreamRun(ctx, streamCh, projectPath, backendName, sessionID, agentID, chatReq, blocks, responseMetadata, rawOutput, eventCh)
+			}
+			// Don't forward "done" here — finalize below
+			if event.Type == "done" {
+				return finalizeStreamRun(ctx, streamCh, projectPath, backendName, sessionID, agentID, chatReq, blocks, responseMetadata, rawOutput, eventCh)
+			}
+			// Capture raw output for debugging (not forwarded to SSE)
+			if event.Type == "raw_output" {
+				rawOutput = event.RawOutput
+				continue
+			}
+			// Forward to SSE channel
+			if !sendEvent(ctx, streamCh, event) {
+				return finalizeStreamRun(ctx, streamCh, projectPath, backendName, sessionID, agentID, chatReq, blocks, responseMetadata, rawOutput, eventCh)
+			}
 
 			accumulateBlock(&blocks, event, projectPath, sessionID, agentID)
 
@@ -489,176 +544,232 @@ func AIChat(w http.ResponseWriter, r *http.Request) {
 					slog.Error("failed to create resume streaming message",
 						slog.String("session", sessionID),
 						slog.String("err", err.Error()))
-					sendFinalEvent(streamCh, ai.StreamEvent{Type: "done"})
-					return
+					return streamRunResult{err: "failed to create resume streaming message"}
 				}
 				continue
 			}
 
 			if event.Type == "metadata" && event.Meta != nil {
-					responseMetadata = event.Meta
-					// Capture external session ID on first response (OpenCode/Codex)
-					if (backendName == "opencode" || backendName == "codex") && event.Meta.SessionID != "" {
-						existingExtID := service.GetExternalSessionID(sessionID)
-						if existingExtID == "" {
-							if err := service.UpdateExternalSessionID(sessionID, event.Meta.SessionID); err != nil {
-								slog.Error("failed to save external session ID",
-									slog.String("session", sessionID),
-									slog.String("external_id", event.Meta.SessionID),
-									slog.String("err", err.Error()),
-								)
-							}
+				responseMetadata = event.Meta
+				// Capture external session ID on first response (OpenCode/Codex)
+				if (backendName == "opencode" || backendName == "codex") && event.Meta.SessionID != "" {
+					existingExtID := service.GetExternalSessionID(sessionID)
+					if existingExtID == "" {
+						if err := service.UpdateExternalSessionID(sessionID, event.Meta.SessionID); err != nil {
+							slog.Error("failed to save external session ID",
+								slog.String("session", sessionID),
+								slog.String("external_id", event.Meta.SessionID),
+								slog.String("err", err.Error()),
+							)
 						}
 					}
 				}
-				eventCount++
-				if eventCount%5 == 0 {
-					if err := service.UpdateStreamingMessage(projectPath, backendName, sessionID, serializeBlocks()); err != nil {
-						slog.Error("failed to update streaming message",
-							slog.String("session", sessionID),
-							slog.String("err", err.Error()),
-						)
-					}
-				}
-			case <-flushTicker.C:
-				if len(blocks) > 0 {
-					if err := service.UpdateStreamingMessage(projectPath, backendName, sessionID, serializeBlocks()); err != nil {
-						slog.Error("failed to update streaming message",
-							slog.String("session", sessionID),
-							slog.String("err", err.Error()),
-						)
-					}
-				}
 			}
-		}
-
-	finalize:
-		// Detect <schedule-proposal> in the fully accumulated text blocks.
-		// This must happen after all deltas are coalesced, because the tag
-		// spans multiple incremental content events and is never complete in
-		// any single delta.
-		// Skip proposal detection for scheduled task executions to prevent
-		// recursive task creation.
-		if !chatReq.ScheduledExecution {
-			for i := range blocks {
-				if blocks[i].Type == "text" && strings.Contains(blocks[i].Text, "<schedule-proposal") {
-					slog.Info("detected schedule-proposal tag in accumulated text block",
+			eventCount++
+			if eventCount%5 == 0 {
+				if err := service.UpdateStreamingMessage(projectPath, backendName, sessionID, serializeBlocks()); err != nil {
+					slog.Error("failed to update streaming message",
 						slog.String("session", sessionID),
+						slog.String("err", err.Error()),
 					)
-					if taskID := detectAndCreateScheduleProposal(blocks[i].Text, projectPath, sessionID, agentID); taskID != "" {
-						// Inject task_id into the proposal JSON so the frontend can link to the created task
-						blocks[i].Text = injectTaskIDIntoProposal(blocks[i].Text, taskID)
-					}
 				}
 			}
-		}
-
-		// Determine cancellation reason
-		cancelReason := service.GetAndClearCancelReason(sessionID)
-
-		// Serialize blocks + metadata as JSON for database storage
-		var content string
-		if len(blocks) == 0 {
-			// Auto-infer reason for empty response
-			var errMsg string
-			switch {
-			case cancelReason == "user":
-				errMsg = "用户已中断"
-			case cancelReason == "disconnect":
-				errMsg = "连接已断开，AI 响应中断"
-			case ctx.Err() == context.Canceled:
-				errMsg = "AI 响应被中断"
-			case ctx.Err() == context.DeadlineExceeded:
-				errMsg = "AI 响应超时（30分钟）"
-			default:
-				errMsg = "AI 未返回任何内容"
-			}
-			blocks = append(blocks, model.ContentBlock{Type: "warning", Text: errMsg})
-			contentMap := map[string]any{"blocks": blocks}
-			if cancelReason == "user" || cancelReason == "disconnect" || ctx.Err() == context.Canceled {
-				contentMap["cancelled"] = true
-			}
-			blocksJSON, _ := json.Marshal(contentMap)
-			content = string(blocksJSON)
-		} else {
-			contentMap := map[string]any{"blocks": blocks}
-			if responseMetadata != nil {
-				contentMap["metadata"] = responseMetadata
-			}
-			// When there are blocks but the stream was interrupted, add a warning and mark cancelled
-			if cancelReason == "disconnect" {
-				blocks = append(blocks, model.ContentBlock{Type: "warning", Text: "连接已断开，AI 响应中断"})
-				contentMap["cancelled"] = true
-			} else if cancelReason == "user" {
-				contentMap["cancelled"] = true
-			} else if ctx.Err() == context.Canceled {
-				contentMap["cancelled"] = true
-			} else if ctx.Err() == context.DeadlineExceeded {
-				blocks = append(blocks, model.ContentBlock{Type: "warning", Text: "AI 响应超时（30分钟）"})
-			}
-			contentMap["blocks"] = blocks
-			blocksJSON, _ := json.Marshal(contentMap)
-			content = string(blocksJSON)
-		}
-		if err := service.FinalizeStreamingMessage(projectPath, backendName, sessionID, content); err != nil {
-			slog.Error("failed to finalize streaming message",
-				slog.String("session", sessionID),
-				slog.String("err", err.Error()),
-			)
-		}
-
-		// Drain any remaining events from channel (raw_output should already
-		// be captured in the main loop before "done", but drain as safety net)
-		for {
-			select {
-			case event, ok := <-eventCh:
-				if !ok {
-					goto saveRaw
-				}
-				if event.Type == "raw_output" && rawOutput == "" {
-					rawOutput = event.RawOutput
-				}
-			default:
-				goto saveRaw
-			}
-		}
-
-	saveRaw:
-		// Save raw AI backend output for debugging/analysis
-		if rawOutput != "" {
-			if msgID := service.GetStreamingMessageID(sessionID); msgID > 0 {
-				if err := service.SaveRawResponse(sessionID, backendName, msgID, rawOutput); err != nil {
-					slog.Error("failed to save raw response",
+		case <-flushTicker.C:
+			if len(blocks) > 0 {
+				if err := service.UpdateStreamingMessage(projectPath, backendName, sessionID, serializeBlocks()); err != nil {
+					slog.Error("failed to update streaming message",
 						slog.String("session", sessionID),
 						slog.String("err", err.Error()),
 					)
 				}
 			}
 		}
+	}
+}
 
-		// Send terminal SSE event AFTER DB finalize, so frontend can safely
-		// load complete content from DB when it receives "done"/"cancelled".
-		// Use sendFinalEvent (no ctx check) to ensure the terminal event is
-		// always delivered, even after context cancellation.
-		if cancelReason == "user" || cancelReason == "disconnect" {
-			sendFinalEvent(streamCh, ai.StreamEvent{Type: "cancelled"})
-		} else if ctx.Err() == context.Canceled {
-			sendFinalEvent(streamCh, ai.StreamEvent{Type: "cancelled"})
-		} else if ctx.Err() == context.DeadlineExceeded {
-			sendFinalEvent(streamCh, ai.StreamEvent{Type: "error", Error: "AI 响应超时（30分钟）"})
-		} else if len(blocks) == 0 {
-			sendFinalEvent(streamCh, ai.StreamEvent{Type: "error", Error: "AI 未返回任何内容"})
-		} else {
-			// Normal completion
-			sendFinalEvent(streamCh, ai.StreamEvent{Type: "done"})
+// finalizeStreamRun handles the finalize phase of a stream run: schedule-proposal detection,
+// DB finalization, raw output saving, and determining the result.
+// It does NOT send a terminal SSE event.
+func finalizeStreamRun(
+	ctx context.Context,
+	streamCh chan<- ai.StreamEvent,
+	projectPath, backendName, sessionID, agentID string,
+	chatReq ai.ChatRequest,
+	blocks []model.ContentBlock,
+	responseMetadata *ai.Metadata,
+	rawOutput string,
+	eventCh <-chan ai.StreamEvent,
+) streamRunResult {
+	// Detect <schedule-proposal> in the fully accumulated text blocks.
+	if !chatReq.ScheduledExecution {
+		for i := range blocks {
+			if blocks[i].Type == "text" && strings.Contains(blocks[i].Text, "<schedule-proposal") {
+				slog.Info("detected schedule-proposal tag in accumulated text block",
+					slog.String("session", sessionID),
+				)
+				if taskID := detectAndCreateScheduleProposal(blocks[i].Text, projectPath, sessionID, agentID); taskID != "" {
+					blocks[i].Text = injectTaskIDIntoProposal(blocks[i].Text, taskID)
+				}
+			}
 		}
+	}
 
-		slog.Info("ai stream request done",
+	// Determine cancellation reason
+	cancelReason := service.GetAndClearCancelReason(sessionID)
+
+	// Serialize blocks + metadata as JSON for database storage
+	var content string
+	if len(blocks) == 0 {
+		// Auto-infer reason for empty response
+		var errMsg string
+		switch {
+		case cancelReason == "user":
+			errMsg = "用户已中断"
+		case cancelReason == "disconnect":
+			errMsg = "连接已断开，AI 响应中断"
+		case ctx.Err() == context.Canceled:
+			errMsg = "AI 响应被中断"
+		case ctx.Err() == context.DeadlineExceeded:
+			errMsg = "AI 响应超时（30分钟）"
+		default:
+			errMsg = "AI 未返回任何内容"
+		}
+		blocks = append(blocks, model.ContentBlock{Type: "warning", Text: errMsg})
+		contentMap := map[string]any{"blocks": blocks}
+		if cancelReason == "user" || cancelReason == "disconnect" || ctx.Err() == context.Canceled {
+			contentMap["cancelled"] = true
+		}
+		blocksJSON, _ := json.Marshal(contentMap)
+		content = string(blocksJSON)
+	} else {
+		contentMap := map[string]any{"blocks": blocks}
+		if responseMetadata != nil {
+			contentMap["metadata"] = responseMetadata
+		}
+		// When there are blocks but the stream was interrupted, add a warning and mark cancelled
+		if cancelReason == "disconnect" {
+			blocks = append(blocks, model.ContentBlock{Type: "warning", Text: "连接已断开，AI 响应中断"})
+			contentMap["cancelled"] = true
+		} else if cancelReason == "user" {
+			contentMap["cancelled"] = true
+		} else if ctx.Err() == context.Canceled {
+			contentMap["cancelled"] = true
+		} else if ctx.Err() == context.DeadlineExceeded {
+			blocks = append(blocks, model.ContentBlock{Type: "warning", Text: "AI 响应超时（30分钟）"})
+		}
+		contentMap["blocks"] = blocks
+		blocksJSON, _ := json.Marshal(contentMap)
+		content = string(blocksJSON)
+	}
+	if err := service.FinalizeStreamingMessage(projectPath, backendName, sessionID, content); err != nil {
+		slog.Error("failed to finalize streaming message",
 			slog.String("session", sessionID),
-			slog.Int("blocks", len(blocks)),
-			slog.String("cancel_reason", cancelReason),
+			slog.String("err", err.Error()),
 		)
-	}()
+	}
+
+	// Drain any remaining events from channel
+	for {
+		select {
+		case event, ok := <-eventCh:
+			if !ok {
+				goto saveRaw
+			}
+			if event.Type == "raw_output" && rawOutput == "" {
+				rawOutput = event.RawOutput
+			}
+		default:
+			goto saveRaw
+		}
+	}
+
+saveRaw:
+	// Save raw AI backend output for debugging/analysis
+	if rawOutput != "" {
+		if msgID := service.GetStreamingMessageID(sessionID); msgID > 0 {
+			if err := service.SaveRawResponse(sessionID, backendName, msgID, rawOutput); err != nil {
+				slog.Error("failed to save raw response",
+					slog.String("session", sessionID),
+					slog.String("err", err.Error()),
+				)
+			}
+		}
+	}
+
+	// Build result — do NOT send terminal SSE event here
+	result := streamRunResult{}
+
+	if cancelReason == "user" || cancelReason == "disconnect" {
+		result.cancelReason = cancelReason
+	} else if ctx.Err() == context.Canceled {
+		result.cancelReason = "cancel"
+	} else if ctx.Err() == context.DeadlineExceeded {
+		result.err = "AI 响应超时（30分钟）"
+	} else if len(blocks) == 0 {
+		result.empty = true
+	}
+
+	slog.Info("ai stream run done",
+		slog.String("session", sessionID),
+		slog.Int("blocks", len(blocks)),
+		slog.String("cancel_reason", cancelReason),
+	)
+
+	return result
+}
+
+// buildChatRequest constructs an ai.ChatRequest from the given parameters.
+func buildChatRequest(prompt, sessionID, backendName, agentID, fileDir string) ai.ChatRequest {
+	systemPrompt := ""
+	agentModel := ""
+	agentCommand := ""
+
+	if agentID == "" {
+		agentID = model.GetDefaultAgentID()
+	}
+	if agent, ok := model.Agents[agentID]; ok {
+		systemPrompt = agent.SystemPrompt
+		if agent.Model != "" {
+			agentModel = agent.Model
+		}
+		if agent.Command != "" {
+			agentCommand = agent.Command
+		}
+	}
+
+	// For OpenCode/Codex backends, resolve external session ID when resuming
+	effectiveSessionID := sessionID
+	resume := service.SessionHasAssistant(sessionID)
+	if (backendName == "opencode" || backendName == "codex") && resume {
+		extID := service.GetExternalSessionID(sessionID)
+		if extID != "" {
+			effectiveSessionID = extID
+		}
+	}
+
+	return ai.ChatRequest{
+		Prompt:       prompt,
+		SessionID:    effectiveSessionID,
+		WorkDir:      fileDir,
+		SystemPrompt: systemPrompt,
+		Model:        agentModel,
+		Command:      agentCommand,
+		AgentID:      agentID,
+		Resume:       resume,
+	}
+}
+
+// buildChatRequestFromQueue constructs an ai.ChatRequest from a queued message.
+func buildChatRequestFromQueue(qMsg model.QueuedMessage, sessionID, projectPath, backendName, agentID, fileDir string) ai.ChatRequest {
+	prompt := qMsg.Text
+	if len(qMsg.FilePaths) > 0 {
+		prompt = fmt.Sprintf("[当前文件: %s]\n%s", strings.Join(qMsg.FilePaths, ", "), qMsg.Text)
+	}
+	if len(qMsg.Files) > 0 {
+		prompt = fmt.Sprintf("[用户上传了 %d 个文件: %s]\n%s", len(qMsg.Files), strings.Join(qMsg.Files, ", "), prompt)
+	}
+
+	return buildChatRequest(prompt, sessionID, backendName, agentID, fileDir)
 }
 
 // CancelChat handles POST to cancel an ongoing AI stream for a session.

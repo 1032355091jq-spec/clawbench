@@ -1,0 +1,231 @@
+import { ref, watch, type Ref } from 'vue'
+import { useSessionIdentity } from '@/composables/useSessionIdentity.ts'
+import { useToast } from '@/composables/useToast.ts'
+
+/**
+ * Unified session manager — a thin coordination layer that ensures
+ * consistent cleanup + queue sync around every session operation.
+ *
+ * All session switching paths (SessionDrawer @select, useSwipeSession,
+ * identity proxy from App.vue/QuoteQuestionBar, ChatPanel handlers)
+ * MUST go through this manager so that:
+ *   1. cleanupActiveStream() is always called before switching
+ *   2. pendingMessages is always synced on session change
+ *   3. backend queue is cleared on session deletion
+ *
+ * This composable does NOT own useChatSession or useChatStream.
+ * It receives their functions as options and wraps them.
+ */
+
+export interface UseSessionManagerOptions {
+  // Core state refs (owned by ChatPanel)
+  messages: Ref<any[]>
+  loading: Ref<boolean>
+
+  // Session operations (from useChatSession)
+  switchSessionCore: (sessionId: string) => Promise<void>
+  createSessionCore: (agentId?: string) => Promise<void>
+  deleteSessionCore: (sessionId: string, backend?: string) => Promise<void>
+
+  // Stream operations (from useChatStream)
+  disconnectStream: () => void
+  stopPolling: () => void
+
+  // Render callback
+  updateRenderedContents: (forceFull?: boolean) => void
+
+  // Input cleanup after enqueue (ChatPanel-specific)
+  clearInputState: () => void
+
+  // Scroll
+  scrollBottom: (force?: boolean) => void
+}
+
+export function useSessionManager(options: UseSessionManagerOptions) {
+  const {
+    messages,
+    loading,
+    switchSessionCore,
+    createSessionCore,
+    deleteSessionCore,
+    disconnectStream,
+    stopPolling,
+    updateRenderedContents,
+    clearInputState,
+    scrollBottom,
+  } = options
+
+  const identity = useSessionIdentity()
+  const toast = useToast()
+
+  // ── Pending message queue ──
+
+  const pendingMessages = ref([])
+
+  /** Fetch the current queue for a session from the backend. */
+  async function fetchQueue(sessionId: string) {
+    if (!sessionId) return
+    try {
+      const resp = await fetch(`/api/ai/queue?session_id=${encodeURIComponent(sessionId)}`)
+      if (resp.ok) {
+        const data = await resp.json()
+        pendingMessages.value = data.queue || []
+      }
+    } catch (_) {
+      // Non-critical — queue will be empty until next SSE queue_update
+    }
+  }
+
+  /** Enqueue a message for later delivery while AI is generating. */
+  async function enqueueMessage(text: string, extraFilePaths: string[] = [], attachedFiles: string[] = [], pendingFilePaths: string[] = []) {
+    const inputText = text !== undefined ? text : ''
+    const filePaths = [...(extraFilePaths || []), ...(attachedFiles.length > 0 ? attachedFiles : [])]
+    const allFiles = [...(pendingFilePaths || []), ...filePaths]
+
+    try {
+      const resp = await fetch(
+        `/api/ai/queue?session_id=${encodeURIComponent(identity.currentSessionId.value)}`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            message: inputText,
+            filePaths,
+            files: allFiles,
+          }),
+        }
+      )
+      const data = await resp.json()
+      if (data.queue) {
+        pendingMessages.value = data.queue
+      }
+    } catch (err) {
+      toast.show('加入队列失败', { icon: '⚠️', type: 'error' })
+    }
+
+    clearInputState()
+    scrollBottom(true)
+  }
+
+  /** Remove a pending message from the queue by index. */
+  async function handleRemovePending(index: number) {
+    try {
+      const resp = await fetch(
+        `/api/ai/queue?session_id=${encodeURIComponent(identity.currentSessionId.value)}&index=${index}`,
+        { method: 'DELETE' }
+      )
+      const data = await resp.json()
+      pendingMessages.value = data.queue || []
+    } catch (err) {
+      toast.show('移除失败', { icon: '⚠️', type: 'error' })
+    }
+  }
+
+  /** Set pendingMessages from external source (e.g. SSE queue_update, sendMessageNow response). */
+  function setPendingMessages(queue: any[]) {
+    pendingMessages.value = queue
+  }
+
+  // ── Cleanup ──
+
+  /** Clean up streaming state when user wants to interact with session management
+   *  while AI is still generating. */
+  function cleanupActiveStream() {
+    if (!loading.value) return
+    disconnectStream()
+    stopPolling()
+    const streamingMsg = messages.value.find(m => m.role === 'assistant' && m.streaming)
+    if (streamingMsg) {
+      delete streamingMsg.streaming
+      if (streamingMsg.blocks) {
+        for (const block of streamingMsg.blocks) {
+          if (block.type === 'tool_use' && !block.done) block.done = true
+        }
+      }
+    }
+    updateRenderedContents(true)
+  }
+
+  // ── Unified session operations (cleanup + core + queue sync) ──
+
+  async function switchSession(sessionId: string) {
+    cleanupActiveStream()
+    await switchSessionCore(sessionId)
+    // pendingMessages is synced by the watch on currentSessionId below
+  }
+
+  async function createSession(agentId?: string) {
+    cleanupActiveStream()
+    pendingMessages.value = []
+    await createSessionCore(agentId)
+  }
+
+  async function deleteSession(sessionId: string, backend?: string) {
+    cleanupActiveStream()
+    // Clear backend queue for deleted session
+    try {
+      await fetch(`/api/ai/queue?session_id=${encodeURIComponent(sessionId)}`, { method: 'DELETE' })
+    } catch (_) {}
+    await deleteSessionCore(sessionId, backend)
+  }
+
+  /** Delete the current session (convenience for ChatInputBar button). */
+  async function deleteCurrentSession(deleteDraft: (id: string) => void) {
+    const deletedId = identity.currentSessionId.value
+    if (!deletedId) return
+    cleanupActiveStream()
+    try {
+      await fetch(`/api/ai/queue?session_id=${encodeURIComponent(deletedId)}`, { method: 'DELETE' })
+    } catch (_) {}
+    pendingMessages.value = []
+    await deleteSessionCore(deletedId, identity.currentBackend.value)
+    deleteDraft(deletedId)
+  }
+
+  // ── Queue sync on session change ──
+
+  // When currentSessionId changes (from ANY path), fetch the queue
+  watch(() => identity.currentSessionId.value, async (newSessionId) => {
+    if (newSessionId) {
+      await fetchQueue(newSessionId)
+    } else {
+      pendingMessages.value = []
+    }
+  })
+
+  // ── Register identity actions ──
+
+  /** Wire the identity singleton's proxy callbacks to our unified methods.
+   *  Call this from ChatPanel's setup. */
+  function registerIdentityActions(extra: {
+    sendMessage: (text: string, filePaths?: string[]) => Promise<void>
+    openChatPanel: () => void
+  }) {
+    identity.registerSessionActions({
+      switchSession,
+      createSession,
+      deleteSession,
+      sendMessage: extra.sendMessage,
+      openChatPanel: extra.openChatPanel,
+    })
+  }
+
+  return {
+    // State
+    pendingMessages,
+    // Queue operations
+    fetchQueue,
+    enqueueMessage,
+    handleRemovePending,
+    setPendingMessages,
+    // Unified session operations
+    switchSession,
+    createSession,
+    deleteSession,
+    deleteCurrentSession,
+    // Cleanup (exposed for onStreamEnd and other edge cases)
+    cleanupActiveStream,
+    // Identity registration
+    registerIdentityActions,
+  }
+}

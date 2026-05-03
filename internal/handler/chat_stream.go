@@ -122,6 +122,23 @@ func AIChatStream(w http.ResponseWriter, r *http.Request) {
 			case "warning":
 				data, _ := json.Marshal(map[string]string{"text": event.Content})
 				fmt.Fprintf(w, "event: warning\ndata: %s\n\n", data)
+			case "queue_consume":
+				if event.QueueEvent != nil {
+					data, _ := json.Marshal(map[string]any{
+						"text":      event.QueueEvent.Text,
+						"filePath":  event.QueueEvent.FilePath,
+						"filePaths": event.QueueEvent.FilePaths,
+						"files":     event.QueueEvent.Files,
+					})
+					fmt.Fprintf(w, "event: queue_consume\ndata: %s\n\n", data)
+				}
+			case "queue_update":
+				if event.QueueEvent != nil {
+					data, _ := json.Marshal(map[string]any{
+						"queue": event.QueueEvent.Queue,
+					})
+					fmt.Fprintf(w, "event: queue_update\ndata: %s\n\n", data)
+				}
 			}
 
 			if canFlush {

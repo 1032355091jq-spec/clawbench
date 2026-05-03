@@ -23,7 +23,7 @@
       :hasMore="session.hasMore.value"
       :loadingMore="session.loadingMore.value"
       :totalMessages="session.totalMessages.value"
-      :pendingMessages="pendingMessages.value"
+      :pendingMessages="manager.pendingMessages.value"
       @touchstart="swipeSession.onTouchStart"
       @touchend="swipeSession.onTouchEnd"
       @toggle-tool="render.toggleToolDetail"
@@ -32,7 +32,7 @@
       @load-more="handleLoadMore"
       @edit-task="openTaskEdit"
       @send-message="handleToolSendMessage"
-      @remove-pending="handleRemovePending"
+      @remove-pending="manager.handleRemovePending"
     />
 
     <!-- Session switching overlay — placed here to cover the entire message area -->
@@ -78,7 +78,6 @@
       :chatRunning="store.state.chatRunning"
       :taskUnread="store.state.taskUnread"
       :quickSend="store.state.chatQuickSend"
-      :pendingCount="pendingMessages.value.length"
       @send="sendMessage"
       @cancel="stream.cancelStream"
       @file-select="handleFileSelect"
@@ -89,9 +88,9 @@
       @open-session-tab="session.openSessionTab"
       @file-tag-click="handleFileTagClick"
       @toggle-auto-speech="autoSpeech.toggle"
-      @create-session="handleCreateSession"
+      @create-session="manager.createSession"
       @show-agent-selector="handleShowAgentSelector"
-      @delete-session="handleDeleteSession"
+      @delete-session="(id) => manager.deleteCurrentSession((draftId) => inputBarRef.value?.deleteDraft(draftId))"
     />
 
   </BottomSheet>
@@ -115,9 +114,9 @@
     :currentSessionId="identity.currentSessionId.value"
     :runningSessionIds="identity.runningSessions.value"
     @close="session.sessionDrawerOpen.value = false"
-    @select="session.switchSession"
-    @create="handleCreateSession"
-    @delete="handleDeleteSessionById"
+    @select="manager.switchSession"
+    @create="manager.createSession"
+    @delete="(sessionId, backend) => manager.deleteSession(sessionId, backend).then(() => inputBarRef.value?.deleteDraft(sessionId))"
   />
 
   <!-- Task Drawer -->
@@ -151,6 +150,7 @@ import { useChatRender } from '@/composables/useChatRender.ts'
 import { useChatStream } from '@/composables/useChatStream.ts'
 import { useChatSession } from '@/composables/useChatSession.ts'
 import { useSessionIdentity } from '@/composables/useSessionIdentity.ts'
+import { useSessionManager } from '@/composables/useSessionManager.ts'
 import { useAgents } from '@/composables/useAgents.ts'
 import { useToast } from '@/composables/useToast.ts'
 import { useFilePathAnnotation } from '@/composables/useFilePathAnnotation.ts'
@@ -174,9 +174,6 @@ const { agents: agentsList, getAgentIcon, getAgentName } = useAgents()
 const messages = ref([])
 const inputDisabled = ref(true)
 const loading = ref(false)
-// Pending message queue: messages enqueued while AI is generating,
-// consumed automatically when the current stream ends normally.
-const pendingMessages = ref([])
 // Incremented when the panel reopens, so ChatMessageItem can re-check
 // overflow after being hidden (display:none gives scrollHeight=0).
 const layoutRefreshKey = ref(0)
@@ -254,9 +251,77 @@ const session = useChatSession({
   onStreamDone: playNotificationSound,
 })
 
+// onStreamEnd: fires when current session stream completes with a reason
+// - 'done': normal completion → play sound, auto-speech; backend handles queue drain
+// - 'cancelled': user cancelled → clear locally for immediate UI response
+// - 'error': error occurred → don't touch pendingMessages; backend preserves queue
+function onStreamEnd(reason) {
+  if (reason === 'done') {
+    playNotificationSound()
+    if (autoSpeech.enabled.value) {
+      const lastMsg = messages.value[messages.value.length - 1]
+      if (lastMsg?.role === 'assistant') {
+        const textBlocks = (lastMsg.blocks || []).filter(b => b.type === 'text')
+        const fullText = textBlocks.map(b => b.text || '').join('\n')
+        if (fullText.trim() && lastMsg.id) {
+          autoSpeech.speakMessage(lastMsg.id, fullText.trim())
+        }
+      }
+    }
+  } else if (reason === 'cancelled') {
+    // Backend already cleared queue; clear locally for immediate UI response
+    manager.pendingMessages.value = []
+  }
+  // 'error': don't touch pendingMessages — backend preserves queue
+}
+
+const stream = useChatStream({
+  messages,
+  currentSessionId: identity.currentSessionId,
+  currentBackend: identity.currentBackend,
+  loading,
+  onRenderNeeded: (forceFull) => render.updateRenderedContents(forceFull),
+  onScrollBottom: (force) => scrollBottom(force),
+  onLoadHistory: () => session.loadHistory(),
+  onMessage: () => emit('message'),
+  onOpen: () => emit('open'),
+  isOpen: toRef(props, 'open'),
+  createScheduledTask: (proposal) => render.createScheduledTask(proposal),
+  onParseAssistantContent: (content) => render.parseAssistantContent(content),
+  onToast: (msg, opts) => toast.show(msg, opts),
+  onNotification: (title, opts) => notification.show(title, opts),
+  onStreamEnd,
+  onQueueUpdate: (queue) => { manager.setPendingMessages(queue) },
+})
+
+const { pendingFiles, attachedFiles, handleFileSelect, handleFileDrop, removeFile, addAttachedFile, removeAttachedFile, cleanupPreviewUrls, clearPendingFiles } = useFileUpload({ inputDisabled })
+
+const manager = useSessionManager({
+  messages,
+  loading,
+  switchSessionCore: session.switchSession,
+  createSessionCore: session.createSession,
+  deleteSessionCore: session.deleteSession,
+  disconnectStream: stream.disconnectStream,
+  stopPolling: stream.stopPolling,
+  updateRenderedContents: (forceFull) => render.updateRenderedContents(forceFull),
+  clearInputState: () => {
+    attachedFiles.value = []
+    inputBarRef.value?.clearInput()
+    clearPendingFiles()
+  },
+  scrollBottom: (force) => scrollBottom(force),
+})
+
+// Register identity actions — all paths now go through manager
+manager.registerIdentityActions({
+  sendMessage: (text, filePaths) => sendMessage(text, filePaths),
+  openChatPanel: () => emit('open'),
+})
+
 const swipeSession = useSwipeSession({
   currentSessionId: identity.currentSessionId,
-  switchSession: session.switchSession,
+  switchSession: manager.switchSession,
 })
 
 const showPositionIndicator = computed(() =>
@@ -277,50 +342,6 @@ const capsuleSliderStyle = computed(() => {
   }
 })
 
-// onStreamEnd: fires when current session stream completes with a reason
-// - 'done': normal completion → consume pending queue, play sound, auto-speech
-// - 'cancelled': user cancelled → clear queue (user chose to stop)
-// - 'error': error occurred → pause queue, let user decide
-function onStreamEnd(reason) {
-  if (reason === 'done') {
-    playNotificationSound()
-    if (autoSpeech.enabled.value) {
-      const lastMsg = messages.value[messages.value.length - 1]
-      if (lastMsg?.role === 'assistant') {
-        const textBlocks = (lastMsg.blocks || []).filter(b => b.type === 'text')
-        const fullText = textBlocks.map(b => b.text || '').join('\n')
-        if (fullText.trim() && lastMsg.id) {
-          autoSpeech.speakMessage(lastMsg.id, fullText.trim())
-        }
-      }
-    }
-    // Consume pending queue after a tick so loading=false has settled
-    nextTick(() => consumeQueue())
-  } else if (reason === 'cancelled') {
-    // User explicitly cancelled — clear the pending queue
-    pendingMessages.value = []
-  }
-  // 'error': don't touch the queue — user can decide to continue or clear
-}
-
-const stream = useChatStream({
-  messages,
-  currentSessionId: identity.currentSessionId,
-  currentBackend: identity.currentBackend,
-  loading,
-  onRenderNeeded: (forceFull) => render.updateRenderedContents(forceFull),
-  onScrollBottom: (force) => scrollBottom(force),
-  onLoadHistory: () => session.loadHistory(),
-  onMessage: () => emit('message'),
-  onOpen: () => emit('open'),
-  isOpen: toRef(props, 'open'),
-  createScheduledTask: (proposal) => render.createScheduledTask(proposal),
-  onParseAssistantContent: (content) => render.parseAssistantContent(content),
-  onToast: (msg, opts) => toast.show(msg, opts),
-  onNotification: (title, opts) => notification.show(title, opts),
-  onStreamEnd,
-})
-
 provide('chatRender', {
   renderTextBlock: render.renderTextBlock,
   formatMessageTime: render.formatMessageTime,
@@ -335,22 +356,6 @@ provide('chatSession', { getAgentIcon, getAgentName })
 provide('chatUI', { closeSheet: () => bottomSheetRef.value?.close() })
 provide('autoSpeech', autoSpeech)
 provide('layoutRefreshKey', layoutRefreshKey)
-
-// Register session actions with the identity singleton so that
-// App.vue / QuoteQuestionBar can trigger ChatPanel operations.
-identity.registerSessionActions({
-  switchSession: session.switchSession,
-  createSession: async (agentId) => {
-    cleanupActiveStream()
-    await session.createSession(agentId)
-  },
-  deleteSession: async (sessionId, backend) => {
-    cleanupActiveStream()
-    await session.deleteSession(sessionId, backend)
-  },
-  sendMessage: (text, filePaths) => sendMessage(text, filePaths),
-  openChatPanel: () => emit('open'),
-})
 
 // 子抽屉跟随聊天框关闭；面板打开时刷新渲染（修复 display:none 期间的过时布局状态）
 watch(() => props.open, async (val) => {
@@ -368,80 +373,8 @@ watch(() => props.open, async (val) => {
   }
 })
 
-const { pendingFiles, attachedFiles, handleFileSelect, handleFileDrop, removeFile, addAttachedFile, removeAttachedFile, cleanupPreviewUrls, clearPendingFiles } = useFileUpload({ inputDisabled })
-
-// ── Pending message queue ──
-
-/** Enqueue a message for later delivery while AI is generating. */
-function enqueueMessage(text, extraFilePaths) {
-  const inputText = text !== undefined ? text : ''
-  const filePaths = [...(extraFilePaths || []), ...(attachedFiles.value.length > 0 ? attachedFiles.value : [])]
-  const uploadedFiles = pendingFiles.value.map(f => ({ path: f.path }))
-  const projectFiles = filePaths.map(p => ({ path: p }))
-
-  pendingMessages.value.push({
-    text: inputText,
-    filePaths,
-    files: [...uploadedFiles, ...projectFiles].map(f => f.path),
-    createdAt: new Date().toISOString(),
-  })
-
-  // Clear input state after enqueueing
-  attachedFiles.value = []
-  inputBarRef.value?.clearInput()
-  clearPendingFiles()
-  scrollBottom(true)
-}
-
-/** Consume the next pending message from the queue (called after stream ends normally). */
-function consumeQueue() {
-  if (pendingMessages.value.length === 0) return
-  if (loading.value) return // safety: don't send if somehow still loading
-  const next = pendingMessages.value.shift()
-  sendMessageNow(next.text, next.filePaths, next.files)
-}
-
-// Clean up streaming state when user wants to interact with session management
-// (new session, delete session) while AI is still generating
-function cleanupActiveStream() {
-  if (!loading.value) return
-  stream.disconnectStream()
-  stream.stopPolling()
-  const streamingMsg = messages.value.find(m => m.role === 'assistant' && m.streaming)
-  if (streamingMsg) {
-    delete streamingMsg.streaming
-    if (streamingMsg.blocks) {
-      for (const block of streamingMsg.blocks) {
-        if (block.type === 'tool_use' && !block.done) block.done = true
-      }
-    }
-  }
-  render.updateRenderedContents(true)
-  // Clear pending queue on forced cleanup (session switch / delete)
-  pendingMessages.value = []
-}
-
-async function handleCreateSession(agentId) {
-  cleanupActiveStream()
-  await session.createSession(agentId)
-}
-
 function handleShowAgentSelector() {
   sessionDrawerRef.value?.openAgentSelector()
-}
-
-async function handleDeleteSession() {
-  if (!identity.currentSessionId.value) return
-  const deletedId = identity.currentSessionId.value
-  cleanupActiveStream()
-  await session.deleteSession(deletedId, identity.currentBackend.value)
-  inputBarRef.value?.deleteDraft(deletedId)
-}
-
-async function handleDeleteSessionById(sessionId, backend) {
-  cleanupActiveStream()
-  await session.deleteSession(sessionId, backend)
-  inputBarRef.value?.deleteDraft(sessionId)
 }
 
 async function sendMessage(text, extraFilePaths) {
@@ -452,7 +385,7 @@ async function sendMessage(text, extraFilePaths) {
 
     // If AI is generating, enqueue the message instead of sending immediately
     if (loading.value) {
-      enqueueMessage(inputText, extraFilePaths)
+      manager.enqueueMessage(inputText, extraFilePaths, attachedFiles.value, pendingFiles.value.map(f => f.path))
       return
     }
 
@@ -505,6 +438,9 @@ async function sendMessageNow(text, filePaths, files) {
         }
         // Session already running — another request is in progress
         if (data.running) {
+            if (data.queued && data.queue) {
+                manager.setPendingMessages(data.queue)
+            }
             stream.connectStream(identity.currentSessionId.value)
             return
         }
@@ -527,15 +463,10 @@ async function sendMessageNow(text, filePaths, files) {
 async function handleToolSendMessage(text) {
     if (!text) return
     if (loading.value) {
-      enqueueMessage(text)
+      manager.enqueueMessage(text)
     } else {
       await sendMessage(text)
     }
-}
-
-/** Remove a pending message from the queue by index. */
-function handleRemovePending(index) {
-  pendingMessages.value.splice(index, 1)
 }
 
 function scrollBottom(force = false) {

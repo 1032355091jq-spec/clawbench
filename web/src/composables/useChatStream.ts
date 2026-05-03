@@ -17,6 +17,7 @@ export interface UseChatStreamOptions {
   onToast: (msg: string, opts?: any) => void
   onNotification: (title: string, opts?: any) => void
   onStreamEnd?: (reason: 'done' | 'cancelled' | 'error') => void
+  onQueueUpdate?: (queue: any[]) => void
 }
 
 export function useChatStream(options: UseChatStreamOptions) {
@@ -36,6 +37,7 @@ export function useChatStream(options: UseChatStreamOptions) {
     onToast,
     onNotification,
     onStreamEnd,
+    onQueueUpdate,
   } = options
 
   let eventSource: EventSource | null = null
@@ -376,6 +378,42 @@ export function useChatStream(options: UseChatStreamOptions) {
       }
       msg.blocks.push({ type: 'warning', text: data.text })
       onRenderNeeded()
+    })
+
+    eventSource.addEventListener('queue_consume', (e) => {
+      if (!guard()) return
+      resetStreamTimeout()
+      const data = JSON.parse(e.data)
+
+      // Add user message bubble (DB message already persisted by backend)
+      messages.value.push({
+        role: 'user',
+        content: data.text || '',
+        filePath: data.filePaths?.length > 0 ? data.filePaths[0] : '',
+        files: (data.files || []).map(p => ({ path: p })),
+        createdAt: new Date().toISOString(),
+      })
+
+      // Create new streaming assistant placeholder
+      messages.value.push({
+        role: 'assistant',
+        content: '',
+        blocks: [],
+        streaming: true,
+        createdAt: new Date().toISOString(),
+        backend: currentBackend.value,
+      })
+      lastIndex = messages.value.length - 1 // CRITICAL: update closure variable
+
+      onRenderNeeded()
+      onScrollBottom()
+    })
+
+    eventSource.addEventListener('queue_update', (e) => {
+      if (!guard()) return
+      resetStreamTimeout()
+      const data = JSON.parse(e.data)
+      onQueueUpdate?.(data.queue || [])
     })
 
     eventSource.addEventListener('error', (e) => {

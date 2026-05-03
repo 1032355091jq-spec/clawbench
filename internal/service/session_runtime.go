@@ -93,6 +93,7 @@ func CancelSession(sessionID string) bool {
 	// Cancel the context first (kills CLI subprocess), which causes the goroutine
 	// to stop producing events and drain the channel, making room for the cancelled event.
 	sessionCancelReasons.Store(sessionID, "user")
+	ClearQueue(sessionID)
 	cancel()
 
 	// Send cancelled event to SSE stream after cancelling context (non-blocking)
@@ -121,6 +122,7 @@ func ForceCancelSession(sessionID string) {
 		return
 	}
 	sessionCancelReasons.Store(sessionID, "disconnect")
+	ClearQueue(sessionID)
 	if cancel, ok := val.(context.CancelFunc); ok {
 		cancel()
 	}

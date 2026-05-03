@@ -124,16 +124,20 @@
           @keydown.enter.exact.prevent="$emit('send', inputText.trim())"
           @input="autoResizeTextarea"
           @blur="collapseTextarea"></textarea>
-        <button v-if="loading" class="chat-stop-btn" :class="{ primed: stopPrimed }" @click="handleStopClick" :title="stopPrimed ? '确认停止' : '停止生成'">
-          <svg v-if="!stopPrimed" viewBox="0 0 24 24" fill="currentColor" width="16" height="16"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>
-          <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="14" height="14"><line x1="6" y1="6" x2="18" y2="18"/><line x1="18" y1="6" x2="6" y2="18"/></svg>
-        </button>
-        <button class="chat-send-btn" :class="{ disabled: !hasInputContent, queued: loading }" @click.stop="handleSendClick" :title="loading ? '加入队列' : '发送'">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+        <button class="chat-send-btn" :class="{ disabled: !hasInputContent && !hasQuickSend, queued: loading }" @click.stop="handleSendClick" :title="loading ? '加入队列' : '发送'">
+          <!-- Queue mode: inbox with down arrow (enqueue) -->
+          <svg v-if="loading" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+            <polyline points="22 12 16 12 14 15 10 15 8 12 2 12"/>
+            <path d="M5.45 5.11L2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/>
+          </svg>
+          <!-- Normal mode: paper plane (send) -->
+          <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
             <line x1="22" y1="2" x2="11" y2="13"/>
             <polygon points="22 2 15 22 11 13 2 9 22 2"/>
           </svg>
-          <span v-if="loading && pendingCount > 0" class="chat-queue-badge">{{ pendingCount }}</span>
+        </button>
+        <button v-if="loading" class="chat-stop-btn" :class="{ primed: stopPrimed }" @click="handleStopClick" :title="stopPrimed ? '确认停止' : '停止生成'">
+          <svg viewBox="0 0 24 24" fill="currentColor" width="16" height="16"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>
         </button>
       </div>
       <!-- Teleported attach menu (avoids overflow:hidden clipping) -->
@@ -204,7 +208,6 @@ const props = defineProps({
   chatRunning: Boolean,
   taskUnread: Boolean,
   quickSend: { type: Object, default: () => ({}) },
-  pendingCount: { type: Number, default: 0 },
 })
 
 const emit = defineEmits([
@@ -273,6 +276,8 @@ watch(() => props.currentSessionId, (newId, oldId) => {
 const uploadingFiles = computed(() => props.pendingFiles.filter(f => f.uploading))
 
 const hasInputContent = computed(() => inputText.value.trim() || props.pendingFiles.length > 0 || props.attachedFiles.length > 0)
+
+const hasQuickSend = computed(() => Object.keys(props.quickSend).length > 0)
 
 // Extract recently referenced files from message history
 const recentReferencedFiles = computed(() => {
@@ -1103,7 +1108,6 @@ defineExpose({
   cursor: pointer;
   transition: background 0.15s, opacity 0.15s, transform 0.15s;
   flex-shrink: 0;
-  position: relative;
 }
 .chat-send-btn:hover { background: #0055aa; }
 .chat-send-btn:disabled { opacity: 0.5; cursor: not-allowed; }
@@ -1115,25 +1119,7 @@ defineExpose({
 }
 .chat-send-btn.queued:hover { background: #d35400; }
 
-/* Queue count badge on send button */
-.chat-queue-badge {
-  position: absolute;
-  top: -4px;
-  right: -4px;
-  min-width: 14px;
-  height: 14px;
-  padding: 0 3px;
-  background: var(--danger-color, #dc3545);
-  color: #fff;
-  font-size: 9px;
-  font-weight: 700;
-  line-height: 14px;
-  text-align: center;
-  border-radius: 7px;
-  pointer-events: none;
-}
-
-/* Stop button */
+/* Stop button — default: dim red solid */
 .chat-stop-btn {
   display: flex;
   align-items: center;
@@ -1141,35 +1127,32 @@ defineExpose({
   width: 28px;
   height: 28px;
   padding: 0;
-  background: var(--danger-color, #dc3545);
-  color: #fff;
+  background: color-mix(in srgb, var(--danger-color, #dc3545) 40%, transparent);
+  color: color-mix(in srgb, #fff 60%, var(--danger-color, #dc3545));
   border: none;
   border-radius: 50%;
   cursor: pointer;
-  transition: all 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
+  transition: all 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
   flex-shrink: 0;
 }
 .chat-stop-btn:active { opacity: 0.75; }
 
-/* Stop button — primed (first click, awaiting confirmation) */
+/* Stop button — primed (first click, awaiting confirmation): bright red + heartbeat */
 .chat-stop-btn.primed {
-  background: transparent;
-  border: 2px solid var(--danger-color, #dc3545);
-  color: var(--danger-color, #dc3545);
-  transform: scale(1.15);
-  animation: stop-prime-pulse 0.8s ease-in-out infinite;
-}
-
-/* Pressed in primed state: flash back to solid red as preview of "will stop" */
-.chat-stop-btn.primed:active {
   background: var(--danger-color, #dc3545);
   color: #fff;
-  transform: scale(1.05);
+  transform: scale(1.15);
+  animation: stop-heartbeat 0.8s ease-in-out infinite;
+}
+
+/* Pressed in primed state: scale feedback */
+.chat-stop-btn.primed:active {
+  transform: scale(1.0);
   animation: none;
 }
 
-@keyframes stop-prime-pulse {
-  0%, 100% { box-shadow: 0 0 0 0 rgba(220, 53, 69, 0.4); }
-  50%      { box-shadow: 0 0 0 6px rgba(220, 53, 69, 0); }
+@keyframes stop-heartbeat {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(220, 53, 69, 0.5); }
+  50%      { box-shadow: 0 0 0 8px rgba(220, 53, 69, 0); }
 }
 </style>

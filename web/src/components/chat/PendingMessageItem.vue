@@ -2,7 +2,7 @@
   <div class="pending-message">
     <div class="pending-bubble">
       <span class="pending-text">{{ msg.text || '(附件消息)' }}</span>
-      <button v-if="index > 0" class="pending-remove" @click="$emit('remove', index)" title="移除">×</button>
+      <button class="pending-remove" @click="$emit('remove', index)" title="移除">×</button>
     </div>
     <span class="pending-hint">
       <span class="pending-spinner"></span>

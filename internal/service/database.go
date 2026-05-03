@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"time"
 
 	"clawbench/internal/model"
 
@@ -14,6 +15,11 @@ import (
 )
 
 var DB *sql.DB
+
+// ttsFailedCacheTTL is how long a failed TTS summary entry remains cached.
+// After this duration the entry is treated as a cache miss so summarization
+// is retried instead of serving the stale raw text forever.
+const ttsFailedCacheTTL = 10 * time.Minute
 
 // InitDB initializes the SQLite database with latest schema.
 func InitDB() error {
@@ -204,15 +210,28 @@ func InitDB() error {
 
 // GetTTSSummary looks up a cached TTS summary by cache key.
 // Returns (summary, summarizeFailed, found).
+// Failed entries (summarize_failed=1) are treated as missing if they are
+// older than ttsFailedCacheTTL, so the system retries summarization.
 func GetTTSSummary(cacheKey string) (string, bool, bool) {
 	var summary string
 	var summarizeFailed bool
+	var createdAt string
 	err := DB.QueryRow(
-		"SELECT summary, summarize_failed FROM tts_summaries WHERE cache_key = ?",
+		"SELECT summary, summarize_failed, created_at FROM tts_summaries WHERE cache_key = ?",
 		cacheKey,
-	).Scan(&summary, &summarizeFailed)
+	).Scan(&summary, &summarizeFailed, &createdAt)
 	if err != nil {
 		return "", false, false
+	}
+	// Expire stale failed entries so summarization is retried
+	if summarizeFailed {
+		t, err := time.Parse("2006-01-02 15:04:05", createdAt)
+		if err == nil && time.Since(t) > ttsFailedCacheTTL {
+			slog.Info("tts summary cache expired for failed entry, will retry",
+				slog.String("cache_key", cacheKey),
+			)
+			return "", false, false
+		}
 	}
 	return summary, summarizeFailed, true
 }
