@@ -124,8 +124,9 @@
           @keydown.enter.exact.prevent="$emit('send', inputText.trim())"
           @input="autoResizeTextarea"
           @blur="collapseTextarea"></textarea>
-        <button v-if="loading" class="chat-stop-btn" @click="$emit('cancel')" title="停止生成">
-          <svg viewBox="0 0 24 24" fill="currentColor" width="16" height="16"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>
+        <button v-if="loading" class="chat-stop-btn" :class="{ primed: stopPrimed }" @click="handleStopClick" :title="stopPrimed ? '确认停止' : '停止生成'">
+          <svg v-if="!stopPrimed" viewBox="0 0 24 24" fill="currentColor" width="16" height="16"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>
+          <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="14" height="14"><line x1="6" y1="6" x2="18" y2="18"/><line x1="18" y1="6" x2="6" y2="18"/></svg>
         </button>
         <button v-else class="chat-send-btn" @click.stop="handleSendClick" :class="{ disabled: !hasInputContent }" title="发送">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
@@ -230,6 +231,24 @@ const attachMenuRef = ref(null)
 const menuStyle = ref({})
 const showQuickMenu = ref(false)
 const quickMenuStyle = ref({})
+
+// Stop button two-click confirmation state
+const stopPrimed = ref(false)
+let stopPrimeTimer = null
+
+function handleStopClick() {
+  if (!stopPrimed.value) {
+    // First click: enter confirmation state (solid ■ → hollow ✕)
+    stopPrimed.value = true
+    clearTimeout(stopPrimeTimer)
+    stopPrimeTimer = setTimeout(() => { stopPrimed.value = false }, 1500)
+  } else {
+    // Second click: confirmed — execute stop
+    stopPrimed.value = false
+    clearTimeout(stopPrimeTimer)
+    emit('cancel')
+  }
+}
 
 // Per-session draft cache: save input text when switching away, restore when switching back
 const draftCache = new Map()
@@ -498,6 +517,15 @@ onMounted(() => {
 
 onBeforeUnmount(() => {
   document.removeEventListener('click', handleClickOutside)
+  clearTimeout(stopPrimeTimer)
+})
+
+// Reset stop confirmation state when loading ends (AI finished or cancelled)
+watch(() => props.loading, (val) => {
+  if (!val) {
+    stopPrimed.value = false
+    clearTimeout(stopPrimeTimer)
+  }
 })
 
 defineExpose({
@@ -1091,8 +1119,30 @@ defineExpose({
   border: none;
   border-radius: 50%;
   cursor: pointer;
-  transition: opacity 0.15s;
+  transition: all 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
   flex-shrink: 0;
 }
 .chat-stop-btn:active { opacity: 0.75; }
+
+/* Stop button — primed (first click, awaiting confirmation) */
+.chat-stop-btn.primed {
+  background: transparent;
+  border: 2px solid var(--danger-color, #dc3545);
+  color: var(--danger-color, #dc3545);
+  transform: scale(1.15);
+  animation: stop-prime-pulse 0.8s ease-in-out infinite;
+}
+
+/* Pressed in primed state: flash back to solid red as preview of "will stop" */
+.chat-stop-btn.primed:active {
+  background: var(--danger-color, #dc3545);
+  color: #fff;
+  transform: scale(1.05);
+  animation: none;
+}
+
+@keyframes stop-prime-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(220, 53, 69, 0.4); }
+  50%      { box-shadow: 0 0 0 6px rgba(220, 53, 69, 0); }
+}
 </style>
