@@ -11,25 +11,26 @@
     <!-- Dir nav -->
     <div id="dirNav" class="dir-nav">
       <div class="dir-toolbar">
-        <button class="toolbar-btn" :class="{ active: sortField === 'name' }" @click="$emit('toggleSort', 'name')" :title="sortField === 'name' ? t('file.sortByName') + ' (' + (sortDir === 'asc' ? t('file.sortAsc') + ')' : t('file.sortDesc') + ')') : t('file.sortByName')">
+        <button class="toolbar-btn" :class="{ 'sort-active': sortField === 'name' }" @click="$emit('toggleSort', 'name')" :title="sortField === 'name' ? t('file.sortByName') + ' (' + (sortDir === 'asc' ? t('file.sortAsc') + ')' : t('file.sortDesc') + ')') : t('file.sortByName')">
           <ArrowDownAz :size="14" />
           <ChevronDown v-if="sortField === 'name' && sortDir === 'desc'" :size="8" :stroke-width="3" class="sort-arrow" />
-          <ChevronUp v-else :size="8" :stroke-width="3" class="sort-arrow" />
+          <ChevronUp v-else-if="sortField === 'name'" :size="8" :stroke-width="3" class="sort-arrow" />
         </button>
-        <button class="toolbar-btn" :class="{ active: sortField === 'time' }" @click="$emit('toggleSort', 'time')" :title="sortField === 'time' ? t('file.sortByTime') + ' (' + (sortDir === 'asc' ? t('file.sortAsc') + ')' : t('file.sortDesc') + ')') : t('file.sortByTime')">
+        <button class="toolbar-btn" :class="{ 'sort-active': sortField === 'time' }" @click="$emit('toggleSort', 'time')" :title="sortField === 'time' ? t('file.sortByTime') + ' (' + (sortDir === 'asc' ? t('file.sortAsc') + ')' : t('file.sortDesc') + ')') : t('file.sortByTime')">
           <Clock :size="14" />
           <ChevronDown v-if="sortField === 'time' && sortDir === 'desc'" :size="8" :stroke-width="3" class="sort-arrow" />
-          <ChevronUp v-else :size="8" :stroke-width="3" class="sort-arrow" />
+          <ChevronUp v-else-if="sortField === 'time'" :size="8" :stroke-width="3" class="sort-arrow" />
         </button>
-        <button class="toolbar-btn" :class="{ active: sortField === 'type' }" @click="$emit('toggleSort', 'type')" :title="sortField === 'type' ? t('file.sortByType') + ' (' + (sortDir === 'asc' ? t('file.sortAsc') + ')' : t('file.sortDesc') + ')') : t('file.sortByType')">
+        <button class="toolbar-btn" :class="{ 'sort-active': sortField === 'type' }" @click="$emit('toggleSort', 'type')" :title="sortField === 'type' ? t('file.sortByType') + ' (' + (sortDir === 'asc' ? t('file.sortAsc') + ')' : t('file.sortDesc') + ')') : t('file.sortByType')">
           <FileText :size="14" />
           <ChevronDown v-if="sortField === 'type' && sortDir === 'desc'" :size="8" :stroke-width="3" class="sort-arrow" />
-          <ChevronUp v-else :size="8" :stroke-width="3" class="sort-arrow" />
+          <ChevronUp v-else-if="sortField === 'type'" :size="8" :stroke-width="3" class="sort-arrow" />
         </button>
-        <button class="toolbar-btn" :class="{ active: !showHidden }" @click="$emit('toggleHidden')" :title="t('file.hideHiddenFiles')">
-          <EyeOff :size="14" />
+        <button class="toolbar-btn" @click="$emit('toggleHidden')" :title="showHidden ? t('file.hideHiddenFiles') : t('file.showHiddenFiles')">
+          <EyeOff v-if="!showHidden" :size="14" />
+          <Eye v-else :size="14" />
         </button>
-        <button class="toolbar-btn" :class="{ active: isInSync }" :disabled="!currentFile?.path" @click="syncToCurrentFile" :title="t('file.syncToCurrentDir')">
+        <button class="toolbar-btn" :disabled="!currentFile?.path" @click="syncToCurrentFile" :title="t('file.syncToCurrentDir')">
           <ArrowRightLeft :size="14" />
         </button>
         <SearchInput v-model="searchQuery" :placeholder="t('search.defaultPlaceholder')" @dblclick="searchQuery = ''" />
@@ -142,7 +143,7 @@
 <script setup>
 import { ref, computed, reactive, inject, nextTick, Teleport, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { Folder, ArrowDownAz, ChevronDown, ChevronUp, Clock, FileText, EyeOff, ArrowRightLeft, Loader, FileImage, FileMusic, ChevronRight, Copy, Scissors, ClipboardPaste, FilePlus, FolderPlus, Pencil, Download, Trash2, FolderOpen } from 'lucide-vue-next'
+import { Folder, ArrowDownAz, ChevronDown, ChevronUp, Clock, FileText, Eye, EyeOff, ArrowRightLeft, Loader, FileImage, FileMusic, ChevronRight, Copy, Scissors, ClipboardPaste, FilePlus, FolderPlus, Pencil, Download, Trash2, FolderOpen } from 'lucide-vue-next'
 import BottomSheet from '@/components/common/BottomSheet.vue'
 import HeaderMarquee from '@/components/common/HeaderMarquee.vue'
 import { getFileType } from '@/utils/helpers.ts'
@@ -594,16 +595,6 @@ function doDelete() {
     color: var(--text-secondary, #666);
 }
 
-.toolbar-btn.active {
-    background: var(--accent-color, #4a90d9);
-    color: #fff;
-}
-
-.toolbar-btn.active:hover {
-    background: var(--accent-hover, #3a80c9);
-    color: #fff;
-}
-
 .toolbar-btn svg {
     width: 14px;
     height: 14px;
@@ -613,13 +604,9 @@ function doDelete() {
 .toolbar-btn .sort-arrow {
     width: 8px;
     height: 8px;
-    opacity: 0.4;
-}
-
-.toolbar-btn.active .sort-arrow {
     opacity: 1;
+    color: var(--accent-color, #4a90d9);
 }
-
 
 /* ── File Items ── */
 

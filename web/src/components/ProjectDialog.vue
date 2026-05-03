@@ -10,8 +10,9 @@
         <button class="toolbar-btn" @click="doNewFolder" :title="t('projectDialog.newFolder')">
           <FolderPlus :size="14" />
         </button>
-        <button class="toolbar-btn" :class="{ active: !showHidden }" @click="showHidden = !showHidden" :title="t('projectDialog.hideHiddenFiles')">
-          <EyeOff :size="14" />
+        <button class="toolbar-btn" @click="showHidden = !showHidden" :title="showHidden ? t('projectDialog.hideHiddenFiles') : t('projectDialog.showHiddenFiles')">
+          <EyeOff v-if="!showHidden" :size="14" />
+          <Eye v-else :size="14" />
         </button>
         <SearchInput v-model="searchQuery" :placeholder="t('projectDialog.search')" />
       </div>
@@ -51,7 +52,7 @@
 </template>
 
 <script setup>
-import { Projector, FolderPlus, EyeOff, Pencil, Trash2 } from 'lucide-vue-next'
+import { Projector, FolderPlus, Eye, EyeOff, Pencil, Trash2 } from 'lucide-vue-next'
 import { ref, computed, watch, inject } from 'vue'
 import { useI18n } from 'vue-i18n'
 import ModalDialog from './common/ModalDialog.vue'
@@ -261,10 +262,6 @@ async function confirm() {
   color: var(--accent-color, #0066cc);
 }
 .toolbar-btn:disabled { opacity: 0.35; cursor: not-allowed; }
-.toolbar-btn.active {
-  background: var(--accent-color, #0066cc);
-  color: #fff;
-}
 
 /* Content */
 .dialog-content {

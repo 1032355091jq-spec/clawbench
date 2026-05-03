@@ -400,7 +400,13 @@ function toggleHidden() {
 
 function handleToggleSort(field) {
     if (sortField.value === field) {
-        sortDir.value = sortDir.value === 'asc' ? 'desc' : 'asc'
+        if (sortDir.value === 'asc') {
+            sortDir.value = 'desc'
+        } else {
+            // Third click: clear sort
+            sortField.value = null
+            sortDir.value = 'asc'
+        }
     } else {
         sortField.value = field
         sortDir.value = 'asc'
