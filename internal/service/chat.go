@@ -4,7 +4,6 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
-	"log/slog"
 
 	"clawbench/internal/model"
 )
@@ -271,13 +270,6 @@ func DeleteSession(projectPath, backend, sessionID string) error {
 	_, err := DB.Exec("DELETE FROM chat_history WHERE project_path = ? AND backend = ? AND session_id = ?", projectPath, backend, sessionID)
 	if err != nil {
 		return err
-	}
-	// Delete scheduled tasks that reference this session
-	_, err = DB.Exec("DELETE FROM scheduled_tasks WHERE project_path = ? AND session_id = ?", projectPath, sessionID)
-	if err != nil {
-		slog.Warn("failed to delete tasks referencing deleted session",
-			slog.String("session", sessionID),
-			slog.String("err", err.Error()))
 	}
 	// Delete the session record
 	_, err = DB.Exec("DELETE FROM chat_sessions WHERE project_path = ? AND backend = ? AND id = ?", projectPath, backend, sessionID)

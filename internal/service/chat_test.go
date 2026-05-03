@@ -57,18 +57,20 @@ CREATE TABLE IF NOT EXISTS scheduled_tasks (
 	prompt TEXT NOT NULL,
 	session_id TEXT,
 	status TEXT NOT NULL DEFAULT 'active',
-	repeat_mode TEXT NOT NULL DEFAULT 'always',
+	repeat_mode TEXT NOT NULL DEFAULT 'unlimited',
 	max_runs INTEGER DEFAULT 0,
 	last_run_at DATETIME,
 	next_run_at DATETIME,
 	run_count INTEGER DEFAULT 0,
+	last_read_at DATETIME,
 	created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
 	updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 CREATE TABLE IF NOT EXISTS task_executions (
 	id INTEGER PRIMARY KEY AUTOINCREMENT,
 	task_id TEXT NOT NULL,
-	message_id INTEGER NOT NULL REFERENCES chat_history(id),
+	content TEXT NOT NULL DEFAULT '',
+	trigger_type TEXT NOT NULL DEFAULT 'auto',
 	created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 CREATE INDEX IF NOT EXISTS idx_executions_task ON task_executions(task_id, created_at DESC);
