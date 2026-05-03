@@ -1,9 +1,9 @@
 <template>
-  <ModalDialog :open="open" :title="view === 'detail' ? '' : '执行记录'" @close="handleClose">
+  <ModalDialog :open="open" :title="view === 'detail' ? '' : t('task.exec.title')" @close="handleClose">
     <template #header>
       <!-- Detail view: back arrow + time -->
       <template v-if="view === 'detail' && selectedExec">
-        <button class="back-btn" @click.stop="view = 'list'" title="返回列表">
+        <button class="back-btn" @click.stop="view = 'list'" :title="t('nav.prevFile')">
           <ChevronLeft :size="16" />
         </button>
         <span class="modal-title">{{ formatAbsoluteTime(selectedExec.createdAt) }}</span>
@@ -11,14 +11,14 @@
       <!-- List view: icon + task name -->
       <template v-else>
         <Clock :size="16" class="modal-header-icon" />
-        <span class="modal-title">{{ task?.name || '执行记录' }}</span>
+        <span class="modal-title">{{ task?.name || t('task.exec.title') }}</span>
       </template>
     </template>
 
     <!-- List view -->
     <div v-if="view === 'list'" class="executions-content">
-      <div v-if="loading" class="dialog-empty">加载中...</div>
-      <div v-else-if="executions.length === 0" class="dialog-empty">暂无执行记录</div>
+      <div v-if="loading" class="dialog-empty">{{ t('common.loading') }}</div>
+      <div v-else-if="executions.length === 0" class="dialog-empty">{{ t('task.exec.noExecutions') }}</div>
       <div v-for="(exec, idx) in executions" :key="idx" class="execution-item" :class="{ unread: exec.isUnread }" @click="openDetail(exec)">
         <div class="execution-row">
           <div class="execution-info">
@@ -29,8 +29,8 @@
             </div>
             <div class="exec-summary-row">
               <div v-if="exec.summary" class="exec-summary">{{ exec.summary }}</div>
-              <div v-else class="exec-summary empty">无文本输出</div>
-              <span v-if="exec.triggerType === 'manual'" class="exec-trigger-type manual">手动</span>
+              <div v-else class="exec-summary empty">{{ t('task.exec.noTextOutput') }}</div>
+              <span v-if="exec.triggerType === 'manual'" class="exec-trigger-type manual">{{ t('task.exec.manual') }}</span>
             </div>
           </div>
           <ChevronRight :size="14" class="exec-chevron" />
@@ -55,15 +55,16 @@
 
     <template #footer>
       <button class="btn btn-primary" @click="triggerTask" :disabled="triggering">
-        {{ triggering ? '执行中...' : '立即执行' }}
+        {{ triggering ? t('task.exec.executing') : t('task.exec.executeNow') }}
       </button>
-      <button class="btn btn-secondary" @click="handleClose">关闭</button>
+      <button class="btn btn-secondary" @click="handleClose">{{ t('common.close') }}</button>
     </template>
   </ModalDialog>
 </template>
 
 <script setup>
 import { ref, watch, inject } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { Clock, ChevronLeft, ChevronRight } from 'lucide-vue-next'
 import ModalDialog from '@/components/common/ModalDialog.vue'
 import ContentBlocks from '@/components/chat/ContentBlocks.vue'
@@ -76,6 +77,8 @@ const props = defineProps({
 })
 
 const emit = defineEmits(['close'])
+
+const { t } = useI18n()
 
 const loading = ref(false)
 const triggering = ref(false)
@@ -142,7 +145,7 @@ async function triggerTask() {
       body: JSON.stringify({ action: 'trigger' }),
     })
     if (resp.ok) {
-      toast.show(`已触发「${props.task.name}」`, { type: 'success' })
+      toast.show(t('task.exec.triggered', { name: props.task.name }), { type: 'success' })
     }
   } catch (err) {
     console.error('Failed to trigger task:', err)

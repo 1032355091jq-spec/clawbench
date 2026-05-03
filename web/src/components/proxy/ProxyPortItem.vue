@@ -13,10 +13,10 @@
       </div>
     </div>
     <div class="port-actions">
-      <button class="port-action-btn open" @click.stop="$emit('open', port, protocol)" title="打开">
+      <button class="port-action-btn open" @click.stop="$emit('open', port, protocol)" :title="t('common.open')">
         <ExternalLink :size="14" />
       </button>
-      <button class="port-action-btn delete" @click.stop="$emit('remove', port)" title="删除">
+      <button class="port-action-btn delete" @click.stop="$emit('remove', port)" :title="t('common.delete')">
         <Trash2 :size="14" />
       </button>
     </div>
@@ -26,6 +26,9 @@
 <script setup>
 import { ExternalLink, Trash2 } from 'lucide-vue-next'
 import { computed } from 'vue'
+import { useI18n } from 'vue-i18n'
+
+const { t } = useI18n()
 
 const props = defineProps({
   port: { type: Number, required: true },
@@ -44,9 +47,9 @@ const statusClass = computed(() => {
 })
 
 const statusTitle = computed(() => {
-  if (props.active) return '活跃'
-  if (props.tunnelDisconnected) return '隧道断开'
-  return '离线'
+  if (props.active) return t('proxy.portItem.active')
+  if (props.tunnelDisconnected) return t('proxy.portItem.tunnelDown')
+  return t('proxy.portItem.inactive')
 })
 </script>
 

@@ -5,45 +5,45 @@
     </div>
     <div class="header-actions">
       <!-- TOC button (only for file types that support TOC) -->
-      <button v-if="hasToc" class="file-header-btn" :class="{ active: tocOpen }" @click.stop="$emit('toggleToc')" title="目录">
+      <button v-if="hasToc" class="file-header-btn" :class="{ active: tocOpen }" @click.stop="$emit('toggleToc')" :title="t('file.header.toc')">
         <List :size="13" />
       </button>
 
 
       <!-- Search button (only for file types that support search) -->
-      <button v-if="hasToc" class="file-header-btn" :class="{ active: searchOpen }" :disabled="!file.content" @click.stop="$emit('toggleSearch')" title="搜索">
+      <button v-if="hasToc" class="file-header-btn" :class="{ active: searchOpen }" :disabled="!file.content" @click.stop="$emit('toggleSearch')" :title="t('file.header.search')">
         <Search :size="13" />
       </button>
 
       <!-- More actions dropdown -->
       <div class="dropdown-wrapper" ref="dropdownRef">
-        <button class="file-header-btn" @click.stop="menuOpen = !menuOpen" title="更多">
+        <button class="file-header-btn" @click.stop="menuOpen = !menuOpen" :title="t('file.header.more')">
           <MoreVertical :size="13" />
         </button>
         <div v-if="menuOpen" class="dropdown-menu">
           <button v-if="file.isBinary" class="dropdown-item" @click="handleOpenAsText">
             <Code2 :size="14" />
-            以文本打开
+            {{ t('file.header.openAsText') }}
           </button>
           <button v-if="isMarkdown" class="dropdown-item" @click="handleToggleView">
             <Code2 :size="14" />
-            {{ viewMode === 'rendered' ? '源码' : '渲染' }}
+            {{ viewMode === 'rendered' ? t('file.header.sourceView') : t('file.header.renderedView') }}
           </button>
           <a v-if="!isAppMode" class="dropdown-item" :href="'/api/local-file/' + encodeURIComponent(file.path)" :download="file.name" @click="menuOpen = false">
             <Download :size="14" />
-            下载
+            {{ t('common.download') }}
           </a>
           <button v-else class="dropdown-item" @click="handleDownload">
             <Download :size="14" />
-            下载
+            {{ t('common.download') }}
           </button>
           <button class="dropdown-item" @click="handleDelete">
             <Trash2 :size="14" />
-            删除
+            {{ t('common.delete') }}
           </button>
           <button class="dropdown-item" @click="handleGitHistory">
             <GitBranch :size="14" />
-            文件历史
+            {{ t('file.header.fileHistory') }}
           </button>
         </div>
       </div>
@@ -53,6 +53,7 @@
 
 <script setup>
 import { computed, ref, onMounted, onBeforeUnmount } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { List, Search, MoreVertical, Code2, Download, Trash2, GitBranch } from 'lucide-vue-next'
 import { getFileType } from '@/utils/helpers.ts'
 import { useAppMode } from '@/composables/useAppMode.ts'
@@ -66,6 +67,7 @@ const props = defineProps({
 const emit = defineEmits(['delete', 'toggleView', 'showDetails', 'openGitHistory', 'toggleToc', 'toggleSearch', 'openAsText'])
 
 const { isAppMode } = useAppMode()
+const { t } = useI18n()
 
 const menuOpen = ref(false)
 const dropdownRef = ref(null)
@@ -117,7 +119,7 @@ function handleDownload() {
 
 function handleDelete() {
     menuOpen.value = false
-    if (!confirm(`确定要删除"${props.file?.name}"吗？`)) return
+    if (!confirm(t('file.header.confirmDelete', { name: props.file?.name }))) return
     emit('delete', props.file?.path)
 }
 

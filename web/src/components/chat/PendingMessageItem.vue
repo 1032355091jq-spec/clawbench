@@ -3,12 +3,12 @@
     <!-- File attachments — same structure as ChatMessageItem -->
     <div v-if="hasFiles" class="chat-files">
       <template v-for="(f, idx) in allFiles" :key="idx">
-        <span v-if="isUploadPath(normalizeFileEntry(f).path)" class="chat-file-attachment attachment-upload" title="上传附件">
+        <span v-if="isUploadPath(normalizeFileEntry(f).path)" class="chat-file-attachment attachment-upload" :title="t('chat.pending.uploadedAttachment')">
           <FileImage v-if="isImageFile(normalizeFileEntry(f).path)" :size="12" :stroke-width="1.5" />
           <FileText v-else :size="12" :stroke-width="1.5" />
           <span class="chat-file-name">{{ getFileName(normalizeFileEntry(f).path) }}</span>
         </span>
-        <span v-else class="chat-file-attachment attachment-ref" title="文件引用">
+        <span v-else class="chat-file-attachment attachment-ref" :title="t('chat.pending.fileReference')">
           <Paperclip :size="12" :stroke-width="1.5" />
           <span class="chat-file-name">{{ getFileName(normalizeFileEntry(f).path) }}</span>
         </span>
@@ -18,16 +18,19 @@
     <span v-if="msg.text" class="pending-text">{{ msg.text }}</span>
     <span class="pending-hint">
       <span class="pending-spinner"></span>
-      排队中
-      <button class="pending-remove" @click="$emit('remove', index)" title="移除">×</button>
+      {{ t('chat.pending.queuing') }}
+      <button class="pending-remove" @click="$emit('remove', index)" :title="t('common.remove')">×</button>
     </span>
   </div>
 </template>
 
 <script setup>
 import { computed } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { FileImage, FileText, Paperclip } from 'lucide-vue-next'
 import { baseName } from '@/utils/helpers.ts'
+
+const { t } = useI18n()
 
 const props = defineProps({
   msg: Object,

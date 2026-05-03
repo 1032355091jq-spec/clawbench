@@ -123,7 +123,9 @@
 
 <script setup>
 import { computed, ref, watch, onMounted, onUnmounted } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { computeGraphData, refLabelText } from '@/utils/gitGraph'
+const { t } = useI18n()
 
 const props = defineProps({
   commits: { type: Array, default: () => [] },
@@ -203,7 +205,7 @@ const onNodeClick = (node, event) => {
 
   tooltip.value = {
     x, y,
-    items: items.length > 0 ? items : [node.isWT ? '工作区' : props.commits[node.row]?.sha?.slice(0, 7)],
+    items: items.length > 0 ? items : [node.isWT ? t('git.graph.workingTree') : props.commits[node.row]?.sha?.slice(0, 7)],
     color: node.color,
   }
 }

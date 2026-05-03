@@ -3,17 +3,17 @@
     <div class="login-box">
       <img class="login-logo" src="/logo.png" alt="ClawBench">
       <h1>ClawBench</h1>
-      <p>请输入密码以继续访问。</p>
+      <p>{{ t('login.prompt') }}</p>
       <form @submit.prevent="handleLogin">
         <input
           type="password"
           v-model="password"
-          placeholder="请输入密码"
+          :placeholder="t('login.passwordPlaceholder')"
           autocomplete="current-password"
           :disabled="loading"
         />
         <button type="submit" :disabled="loading">
-          {{ loading ? '验证中...' : '登 录' }}
+          {{ loading ? t('login.verifying') : t('login.submit') }}
         </button>
         <div v-if="error" class="error">{{ error }}</div>
       </form>
@@ -23,7 +23,9 @@
 
 <script setup>
 import { ref } from 'vue'
+import { useI18n } from 'vue-i18n'
 
+const { t } = useI18n()
 const emit = defineEmits(['loginSuccess'])
 
 const password = ref('')
@@ -47,12 +49,12 @@ async function handleLogin() {
             }
             emit('loginSuccess')
         } else if (res.status >= 500) {
-            error.value = '服务器错误，请稍后重试。'
+            error.value = t('login.serverError')
         } else {
-            error.value = '密码错误，请重试。'
+            error.value = t('login.wrongPassword')
         }
     } catch (_) {
-        error.value = '网络错误，请检查后端服务是否启动。'
+        error.value = t('login.networkError')
     } finally {
         loading.value = false
     }

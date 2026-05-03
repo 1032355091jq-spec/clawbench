@@ -1,6 +1,7 @@
 import { ref, watch, type Ref } from 'vue'
 import { useSessionIdentity } from '@/composables/useSessionIdentity.ts'
 import { useToast } from '@/composables/useToast.ts'
+import { gt } from '@/composables/useLocale'
 
 /**
  * Unified session manager — a thin coordination layer that ensures
@@ -100,7 +101,7 @@ export function useSessionManager(options: UseSessionManagerOptions) {
         pendingMessages.value = data.queue
       }
     } catch (err) {
-      toast.show('加入队列失败', { icon: '⚠️', type: 'error' })
+      toast.show(gt('session.queueFailed'), { icon: '⚠️', type: 'error' })
     }
 
     clearInputState()
@@ -117,7 +118,7 @@ export function useSessionManager(options: UseSessionManagerOptions) {
       const data = await resp.json()
       pendingMessages.value = data.queue || []
     } catch (err) {
-      toast.show('移除失败', { icon: '⚠️', type: 'error' })
+      toast.show(gt('session.removeFailed'), { icon: '⚠️', type: 'error' })
     }
   }
 

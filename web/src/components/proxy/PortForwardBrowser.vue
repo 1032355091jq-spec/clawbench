@@ -3,11 +3,11 @@
     <div v-if="visible" class="pf-browser">
       <!-- Toolbar -->
       <div class="pf-toolbar">
-        <button class="pf-back-btn" @click="close" title="返回">
+        <button class="pf-back-btn" @click="close" :title="t('nav.prevFile')">
           <ChevronLeft :size="18" />
         </button>
         <div class="pf-url-bar" ref="urlBarRef">
-          <span class="pf-protocol" @click="toggleProtocol" :title="`切换为 ${altProtocol}`">{{ currentProtocol }}://</span>
+          <span class="pf-protocol" @click="toggleProtocol" :title="t('proxy.switchProtocol', { protocol: altProtocol })">{{ currentProtocol }}://</span>
           <span class="pf-host">localhost:{{ port }}</span>
           <input
             ref="pathInputRef"
@@ -18,7 +18,7 @@
             spellcheck="false"
           />
         </div>
-        <button class="pf-refresh-btn" @click="refresh" title="刷新">
+        <button class="pf-refresh-btn" @click="refresh" :title="t('nav.refresh')">
           <RotateCw :size="16" />
         </button>
       </div>
@@ -44,6 +44,9 @@
 <script setup>
 import { ref, computed, nextTick } from 'vue'
 import { ChevronLeft, RotateCw, Loader } from 'lucide-vue-next'
+import { useI18n } from 'vue-i18n'
+
+const { t } = useI18n()
 
 const visible = ref(false)
 const port = ref(0)

@@ -6,6 +6,7 @@ import { formatToolInput } from '@/utils/renderToolDetail.ts'
 import { renderKatexInString, renderMermaidInElement } from '@/composables/useMarkdownRenderer.ts'
 import { useFilePathAnnotation } from '@/composables/useFilePathAnnotation.ts'
 import { useToast } from '@/composables/useToast.ts'
+import { gt } from '@/composables/useLocale'
 import { store } from '@/stores/app.ts'
 
 export function useChatRender(options) {
@@ -273,14 +274,14 @@ export function useChatRender(options) {
     const diffMs = now - date
     const diffMins = Math.floor(diffMs / 60000)
 
-    if (diffMins < 1) return '刚刚'
-    if (diffMins < 60) return `${diffMins}分钟前`
+    if (diffMins < 1) return gt('time.justNow')
+    if (diffMins < 60) return gt('time.minutesAgo', { count: diffMins })
 
     const diffHours = Math.floor(diffMins / 60)
-    if (diffHours < 24) return `${diffHours}小时前`
+    if (diffHours < 24) return gt('time.hoursAgo', { count: diffHours })
 
     const diffDays = Math.floor(diffHours / 24)
-    if (diffDays < 7) return `${diffDays}天前`
+    if (diffDays < 7) return gt('time.daysAgo', { count: diffDays })
 
     const month = date.getMonth() + 1
     const day = date.getDate()
@@ -304,17 +305,17 @@ export function useChatRender(options) {
     const parts = expr.split(' ')
     if (parts.length !== 5) return expr
     const [min, hour, day, month, weekday] = parts
-    if (min.startsWith('*/') && hour === '*') return `每 ${min.slice(2)} 分钟`
-    if (hour.startsWith('*/') && min === '0') return `每 ${hour.slice(2)} 小时`
-    if (min === '0' && !hour.includes('/') && day === '*' && month === '*' && weekday === '*') return `每天 ${hour}:00`
-    if (min === '0' && weekday === '1-5') return `工作日 ${hour}:00`
+    if (min.startsWith('*/') && hour === '*') return gt('cron.everyMinutes', { count: min.slice(2) })
+    if (hour.startsWith('*/') && min === '0') return gt('cron.everyHours', { count: hour.slice(2) })
+    if (min === '0' && !hour.includes('/') && day === '*' && month === '*' && weekday === '*') return gt('cron.daily', { time: `${hour}:00` })
+    if (min === '0' && weekday === '1-5') return gt('cron.weekdays', { time: `${hour}:00` })
     return expr
   }
 
   function repeatLabel(mode, maxRuns) {
-    if (mode === 'once') return '单次执行'
-    if (mode === 'limited') return `${maxRuns} 次后停止`
-    return '不限次数'
+    if (mode === 'once') return gt('task.repeat.onceExecute')
+    if (mode === 'limited') return gt('task.repeat.timesThenStop', { count: maxRuns })
+    return gt('task.repeat.unlimitedTimes')
   }
 
   function truncate(str, len) {

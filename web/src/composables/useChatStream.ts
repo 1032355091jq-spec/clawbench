@@ -1,5 +1,6 @@
 import { onUnmounted, type Ref } from 'vue'
 import { cancelChat } from '@/utils/api.ts'
+import { gt } from '@/composables/useLocale'
 
 export interface UseChatStreamOptions {
   messages: Ref<any[]>
@@ -171,9 +172,9 @@ export function useChatStream(options: UseChatStreamOptions) {
           if (!isOpen.value) {
             const lastMsg = messages.value[messages.value.length - 1]
             if (lastMsg?.role === 'assistant') {
-              onToast('AI 已回复', { icon: '🤖', duration: 5000, onClick: () => onOpen() })
-              onNotification('AI 已回复', {
-                body: '点击查看回复详情',
+              onToast(gt('chat.stream.aiReplied'), { icon: '🤖', duration: 5000, onClick: () => onOpen() })
+              onNotification(gt('chat.stream.aiReplied'), {
+                body: gt('chat.stream.clickToViewReply'),
                 onClick: () => onOpen()
               })
             }
@@ -183,7 +184,7 @@ export function useChatStream(options: UseChatStreamOptions) {
       } catch (err) {
         console.error('Polling error:', err)
         stopPolling()
-        onToast('连接失败，请刷新页面', { icon: '⚠️' })
+        onToast(gt('chat.stream.connectionFailed'), { icon: '⚠️' })
         loading.value = false
         onStreamEnd?.('error')
       }
@@ -332,9 +333,9 @@ export function useChatStream(options: UseChatStreamOptions) {
         if (!isOpen.value) {
           const lastMsg = messages.value[messages.value.length - 1]
           if (lastMsg?.role === 'assistant') {
-            onToast('AI 已回复', { icon: '🤖', duration: 5000, onClick: () => onOpen() })
-            onNotification('AI 已回复', {
-              body: '点击查看回复详情',
+            onToast(gt('chat.stream.aiReplied'), { icon: '🤖', duration: 5000, onClick: () => onOpen() })
+            onNotification(gt('chat.stream.aiReplied'), {
+              body: gt('chat.stream.clickToViewReply'),
               onClick: () => onOpen()
             })
           }
@@ -359,7 +360,7 @@ export function useChatStream(options: UseChatStreamOptions) {
       }
       // If no content was received, add error block so the UI shows the error card instead of loading dots
       if ((!msg.blocks || msg.blocks.length === 0) && !msg.content) {
-        msg.blocks = [{ type: 'error', text: '用户已中断' }]
+        msg.blocks = [{ type: 'error', text: gt('chat.stream.userCancelled') }]
       }
       onRenderNeeded()
       loading.value = false
@@ -424,7 +425,7 @@ export function useChatStream(options: UseChatStreamOptions) {
       onLoadHistory().catch(() => {
         if (!guard()) return
         const data = JSON.parse(e.data)
-        messages.value[lastIndex].content = `错误: ${data.error}`
+        messages.value[lastIndex].content = `${gt('chat.stream.errorPrefix')} ${data.error}`
         messages.value[lastIndex].blocks = [{ type: 'error', text: data.error }]
         delete messages.value[lastIndex].streaming
         // Mark any unfinished tool_use blocks as done

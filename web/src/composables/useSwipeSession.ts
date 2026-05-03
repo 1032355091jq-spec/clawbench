@@ -1,4 +1,5 @@
 import { ref, type Ref } from 'vue'
+import { gt } from '@/composables/useLocale'
 
 export interface UseSwipeSessionOptions {
   currentSessionId: Ref<string>
@@ -39,7 +40,7 @@ export function useSwipeSession(options: UseSwipeSessionOptions) {
       const data = await resp.json()
       sessionCache = (data.sessions || []).map(s => ({
         id: s.id,
-        title: s.title || '未命名会话',
+        title: s.title || gt('session.unnamed'),
       }))
       sessionCacheTime = now
       updatePosition(sessionCache)

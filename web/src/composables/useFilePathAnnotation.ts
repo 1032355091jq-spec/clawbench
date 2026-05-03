@@ -2,6 +2,7 @@ import { nextTick } from 'vue'
 import { escapeHtml } from '@/utils/html.ts'
 import { splitPath } from '@/utils/path.ts'
 import { store } from '@/stores/app.ts'
+import { gt } from '@/composables/useLocale'
 
 /**
  * Resolve a file path to a project-relative path usable by store.selectFile().
@@ -58,7 +59,7 @@ export const FILE_OPEN_ICON_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="
  * Generate HTML for the small open-file button.
  */
 export function fileOpenButtonHtml(resolvedPath: string): string {
-    return `<button class="chat-file-open-btn" data-file-path="${escapeHtml(resolvedPath)}" title="打开文件">${FILE_OPEN_ICON_SVG}</button>`
+    return `<button class="chat-file-open-btn" data-file-path="${escapeHtml(resolvedPath)}" title="${escapeHtml(gt('chat.attach.openFile'))}">${FILE_OPEN_ICON_SVG}</button>`
 }
 
 export interface AnnotateFilePathsOptions {

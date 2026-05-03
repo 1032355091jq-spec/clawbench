@@ -1,16 +1,16 @@
 <template>
-  <BottomSheet ref="bottomSheetRef" :open="open" compact title="定时任务" @close="$emit('close')">
+  <BottomSheet ref="bottomSheetRef" :open="open" compact :title="t('task.title')" @close="$emit('close')">
     <template #header>
       <Clock :size="16" class="bs-header-icon" />
-      <span class="bs-header-title">定时任务</span>
-      <button class="create-btn" @click="openCreateDialog" title="新建定时任务">
+      <span class="bs-header-title">{{ t('task.title') }}</span>
+      <button class="create-btn" @click="openCreateDialog" :title="t('task.form.createTitle')">
         <Plus :size="16" />
       </button>
     </template>
 
     <div class="task-list">
-      <div v-if="loading" class="task-loading">加载中...</div>
-      <div v-else-if="tasks.length === 0" class="task-empty">暂无定时任务</div>
+      <div v-if="loading" class="task-loading">{{ t('common.loading') }}</div>
+      <div v-else-if="tasks.length === 0" class="task-empty">{{ t('task.noTasks') }}</div>
       <div v-for="task in tasks" :key="task.id" class="task-item" :class="[task.status, { 'has-unread': task.unreadCount > 0 }]">
         <div class="task-item-main" @click="openExecDialog(task)">
           <div class="task-item-info">
@@ -26,20 +26,20 @@
               <span v-if="task.repeatMode !== 'unlimited'" class="task-item-progress">{{ task.runCount }}/{{ task.maxRuns || 1 }}</span>
             </div>
             <div v-if="task.nextRunAt" class="task-item-next">
-              下次执行: {{ formatDateTime(task.nextRunAt) }}
+              {{ t('task.nextRun', { time: formatDateTime(task.nextRunAt) }) }}
             </div>
           </div>
           <div class="task-item-actions">
-            <button class="task-action-btn edit" @click.stop="openEditDialog(task)" title="编辑">
+            <button class="task-action-btn edit" @click.stop="openEditDialog(task)" :title="t('common.edit')">
               <Pencil :size="14" />
             </button>
-            <button v-if="task.status === 'active'" class="task-action-btn pause" @click.stop="pauseTask(task.id)" title="暂停">
+            <button v-if="task.status === 'active'" class="task-action-btn pause" @click.stop="pauseTask(task.id)" :title="t('task.pause')">
               <Pause :size="14" />
             </button>
-            <button v-if="task.status === 'paused'" class="task-action-btn resume" @click.stop="resumeTask(task.id)" title="恢复">
+            <button v-if="task.status === 'paused'" class="task-action-btn resume" @click.stop="resumeTask(task.id)" :title="t('task.resume')">
               <Play :size="14" />
             </button>
-            <button class="task-action-btn delete" @click.stop="deleteTask(task.id)" title="删除">
+            <button class="task-action-btn delete" @click.stop="deleteTask(task.id)" :title="t('common.delete')">
               <Trash2 :size="14" />
             </button>
           </div>
@@ -65,12 +65,15 @@
 <script setup>
 import { Clock, Plus, Pencil, Pause, Play, Trash2 } from 'lucide-vue-next'
 import { ref, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
 import BottomSheet from '@/components/common/BottomSheet.vue'
 import TaskFormDialog from '@/components/task/TaskFormDialog.vue'
 import TaskExecDialog from '@/components/task/TaskExecDialog.vue'
 import { useAgents } from '@/composables/useAgents.ts'
 import { humanizeCron, repeatLabel, statusLabel, formatDateTime } from '@/utils/helpers.ts'
 import { store } from '@/stores/app.ts'
+
+const { t } = useI18n()
 
 const props = defineProps({
   open: Boolean,
@@ -158,7 +161,7 @@ async function resumeTask(id) {
 }
 
 async function deleteTask(id) {
-  if (!confirm('确定删除此任务？')) return
+  if (!confirm(t('task.confirmDelete'))) return
   try {
     await fetch(`/api/tasks/${id}`, { method: 'DELETE' })
     await loadTasks()

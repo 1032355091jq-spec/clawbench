@@ -1,27 +1,27 @@
 <template>
-  <ModalDialog :open="open" title="浏览项目" :z-index="2500" @close="$emit('close')">
+  <ModalDialog :open="open" :title="t('projectDialog.title')" :z-index="2500" @close="$emit('close')">
     <template #header>
       <Projector :size="16" class="modal-header-icon" />
-      <span class="modal-title">浏览项目</span>
+      <span class="modal-title">{{ t('projectDialog.title') }}</span>
     </template>
     <!-- Browse nav -->
     <div class="dialog-nav">
       <div class="dialog-toolbar-row">
-        <button class="toolbar-btn" @click="doNewFolder" title="新建文件夹">
+        <button class="toolbar-btn" @click="doNewFolder" :title="t('projectDialog.newFolder')">
           <FolderPlus :size="14" />
         </button>
-        <button class="toolbar-btn" :class="{ active: !showHidden }" @click="showHidden = !showHidden" title="隐藏隐藏文件">
+        <button class="toolbar-btn" :class="{ active: !showHidden }" @click="showHidden = !showHidden" :title="t('projectDialog.hideHiddenFiles')">
           <EyeOff :size="14" />
         </button>
-        <SearchInput v-model="searchQuery" placeholder="搜索..." />
+        <SearchInput v-model="searchQuery" :placeholder="t('projectDialog.search')" />
       </div>
       <DirBreadcrumb :path="browsePath === '/' ? '' : browsePath" @navigate="onBreadcrumbNavigate" />
     </div>
 
     <!-- Content -->
     <div class="dialog-content">
-      <div v-if="loading" class="dialog-loading">加载中...</div>
-      <div v-else-if="displayItems.length === 0" class="dialog-empty">{{ searchQuery ? '没有匹配的目录' : '空目录' }}</div>
+      <div v-if="loading" class="dialog-loading">{{ t('common.loading') }}</div>
+      <div v-else-if="displayItems.length === 0" class="dialog-empty">{{ searchQuery ? t('projectDialog.noMatchDirs') : t('projectDialog.emptyDir') }}</div>
       <div
         v-else
         v-for="item in displayItems"
@@ -32,19 +32,19 @@
       >
         <Projector :size="16" class="item-icon-svg" />
         <span class="item-name">{{ item.name }}</span>
-        <button class="item-action-btn" @click.stop="doRename(item)" title="重命名">
+        <button class="item-action-btn" @click.stop="doRename(item)" :title="t('common.rename')">
           <Pencil :size="14" />
         </button>
-        <button class="item-action-btn danger" @click.stop="doDelete(item)" title="删除">
+        <button class="item-action-btn danger" @click.stop="doDelete(item)" :title="t('common.delete')">
           <Trash2 :size="14" />
         </button>
       </div>
     </div>
 
     <template #footer>
-      <button class="cancel-btn" @click="$emit('close')">取消</button>
+      <button class="cancel-btn" @click="$emit('close')">{{ t('common.cancel') }}</button>
       <button class="confirm-btn" @click="confirm">
-        <span>确定</span>
+        <span>{{ t('common.confirm') }}</span>
       </button>
     </template>
   </ModalDialog>
@@ -53,10 +53,13 @@
 <script setup>
 import { Projector, FolderPlus, EyeOff, Pencil, Trash2 } from 'lucide-vue-next'
 import { ref, computed, watch, inject } from 'vue'
+import { useI18n } from 'vue-i18n'
 import ModalDialog from './common/ModalDialog.vue'
 import SearchInput from './common/SearchInput.vue'
 import DirBreadcrumb from './file/DirBreadcrumb.vue'
 import { baseName } from '@/utils/helpers.ts'
+
+const { t } = useI18n()
 
 const props = defineProps({
   open: Boolean,
@@ -132,14 +135,14 @@ async function loadBrowse() {
         browseItems.value = (data.items || []).filter(i => i.type === 'dir')
     } catch (_) {
         browseItems.value = []
-        if (toast) toast.show('无法加载目录，后端服务可能未启动', { icon: '⚠️', type: 'error', duration: 5000 })
+        if (toast) toast.show(t('projectDialog.loadFailed'), { icon: '⚠️', type: 'error', duration: 5000 })
     } finally {
         loading.value = false
     }
 }
 
 async function doNewFolder() {
-    const name = prompt('输入文件夹名：')
+    const name = prompt(t('projectDialog.promptFolderName'))
     if (!name || !name.trim()) return
     const dir = browsePath.value
     try {
@@ -149,12 +152,12 @@ async function doNewFolder() {
             body: JSON.stringify({ path: dir, name: name.trim() })
         })
         if (resp.ok) await loadBrowse()
-        else alert('创建失败')
-    } catch (_) { alert('创建失败') }
+        else alert(t('projectDialog.createFailed'))
+    } catch (_) { alert(t('projectDialog.createFailed')) }
 }
 
 async function doRename(item) {
-    const newName = prompt('输入新名称：', item.name)
+    const newName = prompt(t('projectDialog.promptNewName'), item.name)
     if (!newName || newName === item.name) return
     try {
         const resp = await fetch('/api/file/rename', {
@@ -165,13 +168,13 @@ async function doRename(item) {
         if (resp.ok) await loadBrowse()
         else {
             const err = await resp.json()
-            alert('重命名失败: ' + (err.error || ''))
+            alert(t('projectDialog.renameFailedDetail', { error: err.error || '' }))
         }
-    } catch (_) { alert('重命名失败') }
+    } catch (_) { alert(t('projectDialog.renameFailed')) }
 }
 
 async function doDelete(item) {
-    if (!window.confirm('确认删除目录 "' + item.name + '" 及其所有内容？')) return
+    if (!window.confirm(t('projectDialog.confirmDelete', { name: item.name }))) return
     try {
         const resp = await fetch('/api/file/delete', {
             method: 'POST',
@@ -183,9 +186,9 @@ async function doDelete(item) {
             await loadBrowse()
         } else {
             const err = await resp.json()
-            alert('删除失败: ' + (err.error || ''))
+            alert(t('projectDialog.deleteFailedDetail', { error: err.error || '' }))
         }
-    } catch (_) { alert('删除失败') }
+    } catch (_) { alert(t('projectDialog.deleteFailed')) }
 }
 
 async function confirm() {
@@ -206,10 +209,10 @@ async function confirm() {
             const text = await resp.text()
             let msg = text
             try { msg = JSON.parse(text).error || msg } catch (_) {}
-            alert('设置项目失败: ' + msg)
+            alert(t('projectDialog.setProjectFailedDetail', { error: msg }))
         }
     } catch (err) {
-        alert('设置项目失败: ' + err.message)
+        alert(t('projectDialog.setProjectFailedDetail', { error: err.message }))
     }
 }
 </script>

@@ -2,25 +2,25 @@
   <div v-if="commit || isWorkingTree" class="diff-meta-panel">
     <template v-if="isWorkingTree">
       <div class="diff-meta-row diff-meta-row-msg">
-        <span class="diff-meta-label">说明</span>
-        <span class="diff-meta-value">工作区变更</span>
+        <span class="diff-meta-label">{{ t('git.commitMeta.description') }}</span>
+        <span class="diff-meta-value">{{ t('git.commitMeta.workingTreeChanges') }}</span>
       </div>
     </template>
     <template v-else-if="commit">
       <div class="diff-meta-row">
         <span class="diff-meta-label">SHA</span>
-        <span class="diff-meta-value diff-meta-sha" :class="{ 'sha-copied': shaCopied }" @click="copySHA" title="点击复制">{{ commit.sha.substring(0, 8) }}</span>
+        <span class="diff-meta-value diff-meta-sha" :class="{ 'sha-copied': shaCopied }" @click="copySHA" :title="t('git.commitMeta.clickToCopy')">{{ commit.sha.substring(0, 8) }}<span v-if="shaCopied" class="sha-copied-text">{{ t('git.commitMeta.copied') }}</span></span>
       </div>
       <div class="diff-meta-row">
-        <span class="diff-meta-label">作者</span>
+        <span class="diff-meta-label">{{ t('git.commitMeta.author') }}</span>
         <span class="diff-meta-value">{{ commit.author }}</span>
       </div>
       <div class="diff-meta-row">
-        <span class="diff-meta-label">时间</span>
+        <span class="diff-meta-label">{{ t('git.commitMeta.time') }}</span>
         <span class="diff-meta-value">{{ formatDate(commit.date) }}</span>
       </div>
       <div class="diff-meta-row diff-meta-row-msg">
-        <span class="diff-meta-label">说明</span>
+        <span class="diff-meta-label">{{ t('git.commitMeta.description') }}</span>
         <span class="diff-meta-value">{{ commit.msg }}</span>
       </div>
     </template>
@@ -29,7 +29,9 @@
 
 <script setup>
 import { ref } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { copyText } from '@/utils/helpers.ts'
+const { t } = useI18n()
 
 const props = defineProps({
   commit: Object,
@@ -101,8 +103,7 @@ function formatDate(dateStr) {
   background: var(--bg-tertiary, #f0f0f0);
 }
 
-.sha-copied::after {
-  content: ' 已复制';
+.sha-copied-text {
   color: var(--color-green, #16a34a);
   font-size: 11px;
   font-weight: 400;

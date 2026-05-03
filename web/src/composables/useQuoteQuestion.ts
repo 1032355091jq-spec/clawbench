@@ -1,6 +1,7 @@
 import { ref, onMounted, onUnmounted } from 'vue'
 import { useSessionIdentity } from '@/composables/useSessionIdentity.ts'
 import { useToast } from '@/composables/useToast.ts'
+import { gt } from '@/composables/useLocale'
 
 export interface QuoteData {
   text: string           // selected text
@@ -162,9 +163,9 @@ export function useQuoteQuestion() {
     // sendMessage if registered, otherwise falls back to a direct API call.
     try {
       await sessionIdentity.sendMessage(message, filePaths)
-      toast.show('已发送到会话', { icon: '✅', type: 'success', duration: 2000 })
+      toast.show(gt('quoteBar.sentToSession'), { icon: '✅', type: 'success', duration: 2000 })
     } catch (err) {
-      toast.show('发送失败: ' + (err as Error).message, { icon: '⚠️', type: 'error' })
+      toast.show(gt('quoteBar.sendFailed', { error: (err as Error).message }), { icon: '⚠️', type: 'error' })
     }
 
     // Close the bar after sending — user expects the floating window to dismiss.

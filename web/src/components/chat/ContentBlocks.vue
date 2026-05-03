@@ -41,17 +41,17 @@
         <div v-if="getBlockHtml(bi, block)" v-html="getBlockHtml(bi, block)"></div>
         <div class="schedule-proposal-card">
           <div class="proposal-header">
-            <span class="proposal-icon">⏰</span> 定时任务已创建
-            <button v-if="blockProposals[blockProposalsKey(bi)].proposal.task_id" class="proposal-edit-btn" @click.stop="$emit('edit-task', blockProposals[blockProposalsKey(bi)].proposal.task_id)" title="编辑">
+            <span class="proposal-icon">⏰</span> {{ t('chat.contentBlocks.scheduledTaskCreated') }}
+            <button v-if="blockProposals[blockProposalsKey(bi)].proposal.task_id" class="proposal-edit-btn" @click.stop="$emit('edit-task', blockProposals[blockProposalsKey(bi)].proposal.task_id)" :title="t('chat.contentBlocks.edit')">
               <Pencil :size="14" />
             </button>
           </div>
           <div class="proposal-body">
-            <div class="proposal-row"><strong>任务：</strong>{{ blockProposals[blockProposalsKey(bi)].proposal.name }}</div>
-            <div class="proposal-row"><strong>频率：</strong>{{ humanizeCron(blockProposals[blockProposalsKey(bi)].proposal.cron_expr) }}</div>
-            <div class="proposal-row"><strong>执行者：</strong>{{ getAgentIcon(blockProposals[blockProposalsKey(bi)].proposal.agent_id) }} {{ getAgentName(blockProposals[blockProposalsKey(bi)].proposal.agent_id) }}</div>
-            <div class="proposal-row"><strong>重复：</strong>{{ repeatLabel(blockProposals[blockProposalsKey(bi)].proposal.repeat_mode, blockProposals[blockProposalsKey(bi)].proposal.max_runs) }}</div>
-            <div class="proposal-row"><strong>提示词：</strong>{{ truncate(blockProposals[blockProposalsKey(bi)].proposal.prompt, 80) }}</div>
+            <div class="proposal-row"><strong>{{ t('chat.contentBlocks.task') }}</strong>{{ blockProposals[blockProposalsKey(bi)].proposal.name }}</div>
+            <div class="proposal-row"><strong>{{ t('chat.contentBlocks.frequency') }}</strong>{{ humanizeCron(blockProposals[blockProposalsKey(bi)].proposal.cron_expr) }}</div>
+            <div class="proposal-row"><strong>{{ t('chat.contentBlocks.executor') }}</strong>{{ getAgentIcon(blockProposals[blockProposalsKey(bi)].proposal.agent_id) }} {{ getAgentName(blockProposals[blockProposalsKey(bi)].proposal.agent_id) }}</div>
+            <div class="proposal-row"><strong>{{ t('chat.contentBlocks.repeat') }}</strong>{{ repeatLabel(blockProposals[blockProposalsKey(bi)].proposal.repeat_mode, blockProposals[blockProposalsKey(bi)].proposal.max_runs) }}</div>
+            <div class="proposal-row"><strong>{{ t('chat.contentBlocks.prompt') }}</strong>{{ truncate(blockProposals[blockProposalsKey(bi)].proposal.prompt, 80) }}</div>
           </div>
         </div>
       </template>
@@ -61,15 +61,18 @@
     <!-- Loading dots while AI is still streaming (not when cancelled) -->
     <div v-if="streaming && !cancelled" class="placeholder-dots"><span></span><span></span><span></span></div>
     <!-- Cancelled marker -->
-    <div v-if="cancelled" class="chat-cancelled-mark">已中断</div>
+    <div v-if="cancelled" class="chat-cancelled-mark">{{ t('chat.contentBlocks.cancelled') }}</div>
   </div>
 </template>
 
 <script setup>
 import { ref, watch, onUnmounted } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { handleToolAction, shouldAutoExpandTool } from '@/utils/renderToolDetail.ts'
 import { getToolIcon } from '@/utils/icons'
 import { CircleHelp, ChevronDown, CheckCircle2, AlertCircle, AlertTriangle, Pencil } from 'lucide-vue-next'
+
+const { t } = useI18n()
 
 function hasToolResult(block) {
   if (!block.done) return false

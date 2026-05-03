@@ -4,16 +4,16 @@
     <img class="header-logo" src="/logo.png" alt="ClawBench">
 
     <div class="project-dropdown-wrapper" ref="dropdownRef">
-      <button class="project-switch-btn" @click="toggleDropdown" title="切换项目">
+      <button class="project-switch-btn" @click="toggleDropdown" :title="t('appHeader.switchProject')">
         <Projector :size="16" />
         <span class="project-name">{{ projectName }}</span>
         <ChevronDown :size="12" class="switch-chevron" :class="{ open: dropdownOpen }" />
       </button>
       <Transition name="dropdown">
         <div v-if="dropdownOpen" class="project-dropdown">
-          <div v-if="loadingRecent" class="dropdown-loading">加载中...</div>
+          <div v-if="loadingRecent" class="dropdown-loading">{{ t('common.loading') }}</div>
           <template v-else>
-            <div v-if="recentItems.length === 0" class="dropdown-empty">暂无最近项目</div>
+            <div v-if="recentItems.length === 0" class="dropdown-empty">{{ t('appHeader.noRecentProjects') }}</div>
             <div
               v-for="item in recentItems"
               :key="item.path"
@@ -28,13 +28,16 @@
             <div class="dropdown-divider"></div>
             <div class="dropdown-item other-item" @click="openBrowse">
               <Search :size="14" class="item-icon" />
-              <span class="item-label">浏览...</span>
+              <span class="item-label">{{ t('appHeader.browse') }}</span>
             </div>
           </template>
         </div>
       </Transition>
     </div>
 
+    <button class="locale-toggle" @click="toggleLocale" :title="currentLocale === 'zh' ? t('locale.switchToEn') : t('locale.switchToZh')">
+      {{ localeLabel }}
+    </button>
     <button class="theme-toggle" @click="$emit('toggleTheme')" aria-label="Toggle theme">
       <Moon v-if="theme === 'dark'" :size="20" />
       <Sun v-else :size="20" />
@@ -46,7 +49,12 @@
 <script setup>
 import { Projector, ChevronDown, Search, Moon, Sun } from 'lucide-vue-next'
 import { ref, computed, onMounted, onUnmounted, inject } from 'vue'
+import { useI18n } from 'vue-i18n'
+import { useLocale } from '@/composables/useLocale'
 import { baseName } from '@/utils/helpers.ts'
+
+const { t } = useI18n()
+const { currentLocale, toggleLocale, localeLabel } = useLocale()
 
 const props = defineProps({
     projectRoot: String,
@@ -57,7 +65,7 @@ const emit = defineEmits(['toggleTheme', 'openProjectDialog'])
 const toast = inject('toast')
 
 const projectName = computed(() => {
-    if (!props.projectRoot) return '选择项目'
+    if (!props.projectRoot) return t('appHeader.selectProject')
     return baseName(props.projectRoot) || props.projectRoot
 })
 
@@ -122,7 +130,7 @@ async function selectRecent(item) {
             let msg = text
             try { msg = JSON.parse(text).error || msg } catch (_) {}
             if (msg === 'Not a directory') {
-                toast?.show('项目路径不存在或已被删除', { icon: '⚠️', type: 'error', duration: 3000 })
+                toast?.show(t('appHeader.projectPathNotFound'), { icon: '⚠️', type: 'error', duration: 3000 })
                 // Remove stale entry from recent projects
                 fetch('/api/recent-projects', {
                     method: 'DELETE',
@@ -132,11 +140,11 @@ async function selectRecent(item) {
                 // Remove from local list immediately
                 recentItems.value = recentItems.value.filter(r => r.path !== item.path)
             } else {
-                toast?.show('切换项目失败: ' + msg, { icon: '⚠️', type: 'error', duration: 3000 })
+                toast?.show(t('appHeader.switchProjectFailed', { error: msg }), { icon: '⚠️', type: 'error', duration: 3000 })
             }
         }
     } catch (err) {
-        toast?.show('切换项目失败: 网络错误', { icon: '⚠️', type: 'error', duration: 3000 })
+        toast?.show(t('appHeader.switchProjectNetworkError'), { icon: '⚠️', type: 'error', duration: 3000 })
     }
 }
 
@@ -354,6 +362,31 @@ onUnmounted(() => {
     transform: translateY(-4px);
 }
 
+.locale-toggle {
+    padding: 4px 8px;
+    border: 1px solid var(--border-color);
+    background: transparent;
+    cursor: pointer;
+    color: var(--text-secondary);
+    border-radius: var(--radius-sm);
+    transition: background 0.15s, border-color 0.15s;
+    flex-shrink: 0;
+    margin-left: auto;
+    font-size: 12px;
+    font-weight: 600;
+    line-height: 1;
+}
+
+.locale-toggle:hover {
+    background: var(--bg-tertiary);
+    border-color: var(--accent-color);
+    color: var(--accent-color);
+}
+
+.locale-toggle:active {
+    transform: scale(0.95);
+}
+
 .theme-toggle {
     padding: 6px;
     border: none;
@@ -363,7 +396,6 @@ onUnmounted(() => {
     border-radius: var(--radius-sm);
     transition: background 0.15s;
     flex-shrink: 0;
-    margin-left: auto;
 }
 
 .theme-toggle:hover {

@@ -16,6 +16,7 @@
 
 import { ref } from 'vue'
 import { useToast } from '@/composables/useToast.ts'
+import { gt } from '@/composables/useLocale'
 
 const STORAGE_KEY = 'clawbench-auto-speech'
 
@@ -103,7 +104,7 @@ export function useAutoSpeech() {
       })
 
       if (!resp.ok) {
-        let errorMsg = `语音生成失败 (HTTP ${resp.status})`
+        let errorMsg = gt('autoSpeech.generateFailed', { status: resp.status })
         try {
           const errData = await resp.json()
           if (errData.error) errorMsg = errData.error
@@ -113,7 +114,7 @@ export function useAutoSpeech() {
 
       // Parse SSE stream to get phase updates and the final result
       const reader = resp.body?.getReader()
-      if (!reader) throw new Error('无法读取响应流')
+      if (!reader) throw new Error(gt('autoSpeech.cannotReadStream'))
 
       const decoder = new TextDecoder()
       let resultData: any = null
@@ -158,18 +159,18 @@ export function useAutoSpeech() {
         }
       }
 
-      if (!resultData) throw new Error('语音服务未返回结果')
+      if (!resultData) throw new Error(gt('autoSpeech.noResult'))
 
       // Handle synthesize failure
       if (resultData.synthesizeFailed) {
-        throw new Error(resultData.synthesizeError || '语音合成失败，请稍后重试')
+        throw new Error(resultData.synthesizeError || gt('autoSpeech.synthesisFailed'))
       }
 
-      if (!resultData.audioPath) throw new Error('语音服务未返回音频文件')
+      if (!resultData.audioPath) throw new Error(gt('autoSpeech.noAudioFile'))
 
       // Warn if summarization failed (fell back to full text)
       if (resultData.summarizeFailed) {
-        toast.show('摘要生成失败，将朗读原文', { icon: '🔊', type: 'info', duration: 3000 })
+        toast.show(gt('autoSpeech.summaryFailed'), { icon: '🔊', type: 'info', duration: 3000 })
       }
 
       // Store the AI-generated summary for display
@@ -205,7 +206,7 @@ export function useAutoSpeech() {
           activeId.value = ''
           playingSummary.value = ''
           state.value = 'idle'
-          reportError('音频播放失败，请重试')
+          reportError(gt('autoSpeech.playbackFailed'))
         }
       }
 
@@ -213,9 +214,9 @@ export function useAutoSpeech() {
     } catch (err: any) {
       if (err?.name === 'AbortError') return
 
-      let message = '语音生成失败，请稍后重试'
+      let message = gt('autoSpeech.generateFailedGeneric')
       if (err?.name === 'NotAllowedError') {
-        message = '浏览器禁止自动播放音频，请手动点击朗读按钮'
+        message = gt('autoSpeech.autoplayBlocked')
       } else if (err?.message) {
         message = err.message
       }
@@ -250,9 +251,9 @@ export function useAutoSpeech() {
   function getPhaseLabel(id: string): string {
     if (activeId.value !== id) return ''
     switch (state.value) {
-      case 'summarizing': return '摘要中'
-      case 'synthesizing': return '合成中'
-      case 'playing': return '朗读中'
+      case 'summarizing': return 'summarizing'
+      case 'synthesizing': return 'synthesizing'
+      case 'playing': return 'playing'
       default: return ''
     }
   }

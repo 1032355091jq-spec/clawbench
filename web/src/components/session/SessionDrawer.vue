@@ -1,16 +1,16 @@
 <template>
-  <BottomSheet ref="bottomSheetRef" :open="open" compact title="会话" @close="$emit('close')">
+  <BottomSheet ref="bottomSheetRef" :open="open" compact :title="t('session.title')" @close="$emit('close')">
     <template #header>
       <Bot :size="16" class="bs-header-icon" />
-      <span class="bs-header-title">会话</span>
-      <button class="create-btn" @click.stop="showAgentSelector = true" title="新建会话">
+      <span class="bs-header-title">{{ t('session.title') }}</span>
+      <button class="create-btn" @click.stop="showAgentSelector = true" :title="t('session.newSession')">
         <Plus :size="16" />
       </button>
     </template>
 
     <div class="session-list">
-      <div v-if="loading" class="session-loading">加载中...</div>
-      <div v-else-if="sessions.length === 0" class="session-empty">暂无会话</div>
+      <div v-if="loading" class="session-loading">{{ t('common.loading') }}</div>
+      <div v-else-if="sessions.length === 0" class="session-empty">{{ t('session.noSessions') }}</div>
       <div
         v-for="session in sessionsWithStatus"
         :key="session.id"
@@ -25,7 +25,7 @@
               <span v-if="session.unreadCount > 0" class="session-item-unread">{{ session.unreadCount }}</span>
               <span v-if="session.running" class="session-item-status running">
                 <span class="status-dot"></span>
-                运行中
+                {{ t('session.running') }}
               </span>
             </div>
             <div class="session-item-meta">
@@ -35,7 +35,7 @@
               <span v-if="session.model" class="session-item-model">{{ session.model }}</span>
             </div>
           </div>
-          <button class="session-item-delete" @click.stop="deleteSession(session.id)" title="删除">
+          <button class="session-item-delete" @click.stop="deleteSession(session.id)" :title="t('common.delete')">
             <Trash2 :size="14" />
           </button>
         </div>
@@ -44,10 +44,10 @@
   </BottomSheet>
 
   <!-- Agent selector dialog -->
-  <ModalDialog :open="showAgentSelector" title="选择智能体" @close="showAgentSelector = false">
+  <ModalDialog :open="showAgentSelector" :title="t('session.selectAgent')" @close="showAgentSelector = false">
     <template #header>
       <Bot :size="16" class="modal-header-icon" />
-      <span class="modal-title">选择智能体</span>
+      <span class="modal-title">{{ t('session.selectAgent') }}</span>
     </template>
     <div class="agent-list">
       <button
@@ -69,12 +69,13 @@
       </button>
     </div>
     <template #footer>
-      <button class="btn btn-secondary" @click="showAgentSelector = false">取消</button>
+      <button class="btn btn-secondary" @click="showAgentSelector = false">{{ t('common.cancel') }}</button>
     </template>
   </ModalDialog>
 </template>
 
 <script setup>
+import { useI18n } from 'vue-i18n'
 import { Bot, Plus, Trash2 } from 'lucide-vue-next'
 import { ref, watch, computed } from 'vue'
 import BottomSheet from '@/components/common/BottomSheet.vue'
@@ -82,6 +83,7 @@ import ModalDialog from '@/components/common/ModalDialog.vue'
 import { useAgents } from '@/composables/useAgents.ts'
 import { formatRelativeTime } from '@/utils/helpers.ts'
 
+const { t } = useI18n()
 const props = defineProps({
   open: Boolean,
   currentSessionId: String,
@@ -150,7 +152,7 @@ function createSession(agentId) {
 }
 
 async function deleteSession(sessionId) {
-  if (!confirm('确定删除此会话及其所有聊天记录?')) return
+  if (!confirm(t('session.confirmDelete'))) return
   const session = sessions.value.find(s => s.id === sessionId)
   emit('delete', sessionId, session?.backend)
   // Reload list after a short delay to let the delete API complete

@@ -1,8 +1,8 @@
 <template>
-  <BottomSheet ref="bottomSheetRef" :open="open" title="端口转发" @close="$emit('close')">
+  <BottomSheet ref="bottomSheetRef" :open="open" :title="t('proxy.title')" @close="$emit('close')">
     <template #header>
       <Waypoints :size="16" class="bs-header-icon" />
-      <span class="bs-header-title">端口转发</span>
+      <span class="bs-header-title">{{ t('proxy.title') }}</span>
     </template>
 
     <div class="proxy-panel">
@@ -10,20 +10,20 @@
       <div v-if="tunnelStatus === 'disconnected'" class="tunnel-banner error">
         <XCircle :size="16" />
         <div class="tunnel-banner-content">
-          <span class="tunnel-banner-title">SSH 隧道未连接</span>
-          <span class="tunnel-banner-detail">端口转发将无法使用，请检查网络或重新打开页面</span>
+          <span class="tunnel-banner-title">{{ t('proxy.tunnelDisconnected') }}</span>
+          <span class="tunnel-banner-detail">{{ t('proxy.tunnelDisconnectedDetail') }}</span>
         </div>
-        <button class="tunnel-retry-btn" :class="{ spinning: tunnelChecking }" @click="handleRetryTunnel" title="重新检测">
+        <button class="tunnel-retry-btn" :class="{ spinning: tunnelChecking }" @click="handleRetryTunnel" :title="t('proxy.retryCheck')">
           <RotateCcw :size="14" />
         </button>
       </div>
       <div v-else-if="tunnelStatus === 'degraded'" class="tunnel-banner warning">
         <AlertTriangle :size="16" />
         <div class="tunnel-banner-content">
-          <span class="tunnel-banner-title">转发端口无响应</span>
-          <span class="tunnel-banner-detail">SSH 隧道已连接，但所有端口的服务均未响应</span>
+          <span class="tunnel-banner-title">{{ t('proxy.portsNoResponse') }}</span>
+          <span class="tunnel-banner-detail">{{ t('proxy.tunnelConnectedButNoResponse') }}</span>
         </div>
-        <button class="tunnel-retry-btn" :class="{ spinning: tunnelChecking }" @click="handleRetryTunnel" title="重新检测">
+        <button class="tunnel-retry-btn" :class="{ spinning: tunnelChecking }" @click="handleRetryTunnel" :title="t('proxy.retryCheck')">
           <RotateCcw :size="14" />
         </button>
       </div>
@@ -32,12 +32,12 @@
       <div v-if="isAppMode && tunnelStatus === 'ok'" class="tunnel-banner tip">
         <Info :size="16" />
         <div class="tunnel-banner-content">
-          <span class="tunnel-banner-detail">请允许应用后台运行，否则隧道可能在 APP 进入后台后被系统终止</span>
+          <span class="tunnel-banner-detail">{{ t('proxy.backgroundTip') }}</span>
         </div>
       </div>
 
       <!-- Loading -->
-      <div v-if="loading" class="proxy-loading">加载中...</div>
+      <div v-if="loading" class="proxy-loading">{{ t('common.loading') }}</div>
 
       <!-- Port list -->
       <div v-else-if="ports.length > 0" class="proxy-list">
@@ -56,8 +56,8 @@
 
       <!-- Empty state -->
       <div v-else class="proxy-empty">
-        <div class="proxy-empty-text">暂无转发端口</div>
-        <div class="proxy-empty-hint">添加服务器上的端口，即可在浏览器或其他应用中直接访问</div>
+        <div class="proxy-empty-text">{{ t('proxy.noPorts') }}</div>
+        <div class="proxy-empty-hint">{{ t('proxy.emptyHint') }}</div>
       </div>
 
       <!-- Add port form -->
@@ -72,7 +72,7 @@
             v-model="newPort"
             type="number"
             class="proxy-add-input"
-            placeholder="端口号"
+            :placeholder="t('proxy.portPlaceholder')"
             min="1"
             max="65535"
             @keydown.enter="handleAdd"
@@ -81,30 +81,30 @@
             v-model="newName"
             type="text"
             class="proxy-add-input name-input"
-            placeholder="名称（可选）"
+            :placeholder="t('proxy.namePlaceholder')"
             @keydown.enter="handleAdd"
           />
-          <button class="proxy-add-confirm" @click="handleAdd" :disabled="!isValidPort">确定</button>
-          <button class="proxy-add-cancel" @click="showAddForm = false">取消</button>
+          <button class="proxy-add-confirm" @click="handleAdd" :disabled="!isValidPort">{{ t('common.confirm') }}</button>
+          <button class="proxy-add-cancel" @click="showAddForm = false">{{ t('common.cancel') }}</button>
         </div>
         <div v-else class="proxy-add-buttons">
           <button class="proxy-add-btn" @click="showAddForm = true; nextTick(() => portInputRef?.focus())">
             <Plus :size="14" />
-            添加端口
+            {{ t('proxy.addPort') }}
           </button>
           <button class="proxy-add-btn" :class="{ detecting }" @click="handleDetect" :disabled="detecting">
             <span class="detect-icon-wrap">
               <Search :size="14" class="detect-icon" />
               <span v-if="detecting" class="radar-ping"></span>
             </span>
-            {{ detecting ? '检测中...' : '自动检测' }}
+            {{ detecting ? t('proxy.detecting') : t('proxy.autoDetect') }}
           </button>
         </div>
       </div>
 
       <!-- Detected ports (suggestion chips) -->
       <div v-if="detectedPorts.length > 0" class="proxy-detected">
-        <div class="proxy-detected-label">检测到的端口：</div>
+        <div class="proxy-detected-label">{{ t('proxy.detectedPorts') }}</div>
         <div class="proxy-detected-chips">
           <button
             v-for="(p, i) in detectedPortsNotRegistered"
@@ -117,7 +117,7 @@
             <span class="chip-row"><span class="chip-port">{{ p.port }}</span><span class="chip-proto">{{ p.protocol }}</span></span>
             <span v-if="p.processName" class="chip-cmdline"><span class="chip-process">{{ p.processName }}</span><span v-if="p.processArgs" class="chip-args"> {{ p.processArgs }}</span></span>
           </button>
-          <span v-if="detectedPortsNotRegistered.length === 0" class="detect-all-registered">全部已注册</span>
+          <span v-if="detectedPortsNotRegistered.length === 0" class="detect-all-registered">{{ t('proxy.allRegistered') }}</span>
         </div>
       </div>
 
@@ -126,13 +126,13 @@
         <div class="proxy-ssh-divider"></div>
         <div class="proxy-ssh-header">
           <Lock :size="14" />
-          <span>SSH 隧道</span>
+          <span>{{ t('proxy.sshTunnel') }}</span>
         </div>
         <div class="proxy-ssh-meta">
           <span class="ssh-label">{{ sshInfo.username }}@{{ sshInfo.host }}:{{ sshInfo.port }}</span>
-          <button class="ssh-copy-btn" @click="copySSHCommand" title="复制 SSH 命令">
+          <button class="ssh-copy-btn" @click="copySSHCommand" :title="t('proxy.copyCommand')">
             <Copy :size="12" />
-            {{ sshCopied ? '已复制' : '复制命令' }}
+            {{ sshCopied ? t('common.copied') : t('proxy.copyCommand') }}
           </button>
         </div>
         <div v-if="sshInfo.fingerprint" class="ssh-fingerprint">
@@ -146,6 +146,7 @@
 <script setup>
 import { Waypoints, XCircle, RotateCcw, AlertTriangle, Info, Plus, Search, Lock, Copy } from 'lucide-vue-next'
 import { ref, computed, watch, nextTick } from 'vue'
+import { useI18n } from 'vue-i18n'
 import BottomSheet from '@/components/common/BottomSheet.vue'
 import ProxyPortItem from './ProxyPortItem.vue'
 import { usePortForward } from '@/composables/usePortForward.ts'
@@ -153,6 +154,8 @@ import { useToast } from '@/composables/useToast.ts'
 
 const props = defineProps({ open: Boolean })
 const emit = defineEmits(['close'])
+
+const { t } = useI18n()
 
 const bottomSheetRef = ref(null)
 const showAddForm = ref(false)
@@ -186,7 +189,7 @@ async function handleAdd() {
 }
 
 async function handleQuickAdd(port, protocol, processName) {
-  await registerPort(port, processName || '自动检测', protocol || 'http')
+  await registerPort(port, processName || t('proxy.autoDetect'), protocol || 'http')
 }
 
 async function handleRemove(port) {
@@ -216,17 +219,17 @@ async function handleRetryTunnel() {
   try {
     await checkTunnelHealth()
   } catch {
-    toast.show('检测失败，请检查网络连接', { type: 'error' })
+    toast.show(t('proxy.toast.checkFailed'), { type: 'error' })
     return
   }
   if (tunnelStatus.value === 'ok') {
-    toast.show('SSH 隧道已恢复', { type: 'success' })
+    toast.show(t('proxy.toast.tunnelRecovered'), { type: 'success' })
   } else if (tunnelStatus.value === 'degraded' && prevStatus === 'disconnected') {
-    toast.show('SSH 隧道已连接，但端口服务未响应', { type: 'info' })
+    toast.show(t('proxy.toast.tunnelConnectedNoResponse'), { type: 'info' })
   } else if (tunnelStatus.value === 'disconnected') {
-    toast.show('SSH 隧道仍未连接', { type: 'error' })
+    toast.show(t('proxy.toast.tunnelStillDisconnected'), { type: 'error' })
   } else if (tunnelStatus.value === 'degraded') {
-    toast.show('端口服务仍未响应', { type: 'error' })
+    toast.show(t('proxy.toast.portsStillNoResponse'), { type: 'error' })
   }
 }
 

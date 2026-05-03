@@ -1,13 +1,16 @@
 <template>
   <div class="welcome-view" id="welcomeView">
     <FileText :size="60" :stroke-width="1.5" />
-    <h2>选择文件开始对话</h2>
-    <p>打开文件后与 AI 对话，让 AI 直接帮你阅读、编辑和修改文件。</p>
+    <h2>{{ t('welcome.selectFile') }}</h2>
+    <p>{{ t('welcome.description') }}</p>
   </div>
 </template>
 
 <script setup>
 import { FileText } from 'lucide-vue-next'
+import { useI18n } from 'vue-i18n'
+
+const { t } = useI18n()
 </script>
 
 <style scoped>

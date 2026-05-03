@@ -1,5 +1,6 @@
 import { defineConfig, Plugin } from 'vite'
 import vue from '@vitejs/plugin-vue'
+import VueI18nPlugin from '@intlify/unplugin-vue-i18n/vite'
 import { resolve, dirname } from 'path'
 import { fileURLToPath } from 'url'
 import { cpSync, existsSync, mkdirSync, readdirSync } from 'fs'
@@ -44,7 +45,14 @@ const backendPort = process.env.VITE_BACKEND_PORT || 20000
 const frontendPort = parseInt(process.env.VITE_FRONTEND_PORT || '20001', 10)
 
 export default defineConfig({
-  plugins: [vue(), hljsThemeWrapper()],
+  plugins: [
+    vue(),
+    VueI18nPlugin({
+      include: resolve(__dirname, 'web/src/i18n/locales/**'),
+      strictMessage: false,
+    }),
+    hljsThemeWrapper()
+  ],
   root: 'web',
   publicDir: srcAssets,
   server: {

@@ -2,7 +2,7 @@
   <BottomSheet :open="open" @close="$emit('close')">
     <template #header>
       <FileText :size="16" class="bs-header-icon" />
-      <span class="bs-header-title">文件详情</span>
+      <span class="bs-header-title">{{ t('file.details.title') }}</span>
     </template>
 
     <div class="details-body">
@@ -11,7 +11,7 @@
         <span class="details-label">{{ item.label }}</span>
         <div class="details-value-wrap" @click="item.copyable && copyValue(item.value, $event)">
           <span class="details-value" :class="{ 'details-value-copyable': item.copyable }">{{ item.value }}</span>
-          <button v-if="item.copyable" class="details-copy-btn" @click.stop="copyValue(item.value, $event)" title="复制">
+          <button v-if="item.copyable" class="details-copy-btn" @click.stop="copyValue(item.value, $event)" :title="t('common.copy')">
             <Copy :size="13" />
           </button>
         </div>
@@ -23,6 +23,7 @@
 
 <script setup>
 import { computed, inject } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { FileText, Copy } from 'lucide-vue-next'
 import BottomSheet from '@/components/common/BottomSheet.vue'
 import { store } from '@/stores/app.ts'
@@ -34,6 +35,7 @@ const props = defineProps({
 })
 defineEmits(['close'])
 
+const { t } = useI18n()
 const toast = inject('toast', null)
 
 function copyValue(value, event) {
@@ -43,7 +45,7 @@ function copyValue(value, event) {
   const doCopy = () => {
     if (btn) { btn.classList.add('copied'); setTimeout(() => btn.classList.remove('copied'), 800) }
     if (txt) { txt.classList.add('copied'); setTimeout(() => txt.classList.remove('copied'), 800) }
-    if (toast) toast.show('已复制', { icon: '📋', type: 'success', duration: 1500 })
+    if (toast) toast.show(t('common.copied'), { icon: '📋', type: 'success', duration: 1500 })
   }
   if (navigator.clipboard?.writeText) {
     navigator.clipboard.writeText(value).then(doCopy).catch(() => fallbackCopy(value, doCopy))
@@ -100,21 +102,21 @@ const charCount = computed(() => {
 const detailItems = computed(() => {
   if (!props.file) return []
   const items = [
-    { label: '文件名', value: props.file.name, copyable: true },
-    { label: '路径', value: absPath.value, copyable: true },
-    { label: '类型', value: fileType.value?.label || '未知' },
+    { label: t('file.details.fileName'), value: props.file.name, copyable: true },
+    { label: t('file.details.path'), value: absPath.value, copyable: true },
+    { label: t('file.details.type'), value: fileType.value?.label || t('file.details.unknownType') },
   ]
   if (props.file.size != null) {
-    items.push({ label: '大小', value: formatFileSize(props.file.size) })
+    items.push({ label: t('file.details.size'), value: formatFileSize(props.file.size) })
   }
   if (modified.value) {
-    items.push({ label: '修改时间', value: modified.value })
+    items.push({ label: t('file.details.modifiedTime'), value: modified.value })
   }
   if (props.file.content) {
-    items.push({ label: '行数', value: lineCount.value })
-    items.push({ label: '字符数', value: charCount.value })
+    items.push({ label: t('file.details.lineCount'), value: lineCount.value })
+    items.push({ label: t('file.details.charCount'), value: charCount.value })
   }
-  items.push({ label: '编码', value: 'UTF-8' })
+  items.push({ label: t('file.details.encoding'), value: 'UTF-8' })
   return items
 })
 </script>

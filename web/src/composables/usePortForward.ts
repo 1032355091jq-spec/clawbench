@@ -1,6 +1,7 @@
 import { ref } from 'vue'
 import { apiGet, apiPost, apiDelete } from '@/utils/api.ts'
 import { useAppMode } from './useAppMode.ts'
+import { gt } from '@/composables/useLocale'
 
 interface ForwardedPort {
   port: number
@@ -137,7 +138,7 @@ export function usePortForward() {
       const anyActive = ports.value.some(p => p.active)
       if (hasPorts && !anyActive) {
         tunnelStatus.value = 'degraded'
-        tunnelMessage.value = 'SSH 隧道已连接，但所有转发端口均无服务响应'
+        tunnelMessage.value = gt('portForward.tunnelDegraded')
         tunnelChecking.value = false
         startTunnelPoll()
         return
@@ -148,7 +149,7 @@ export function usePortForward() {
       return
     } else if (nativeConnected === false) {
       tunnelStatus.value = 'disconnected'
-      tunnelMessage.value = 'SSH 隧道未连接，端口转发将无法使用'
+      tunnelMessage.value = gt('portForward.tunnelDisconnected')
       tunnelChecking.value = false
       startTunnelPoll()
       return
@@ -172,7 +173,7 @@ export function usePortForward() {
         return
       }
       tunnelStatus.value = 'disconnected'
-      tunnelMessage.value = 'SSH 隧道未连接，端口转发将无法使用'
+      tunnelMessage.value = gt('portForward.tunnelDisconnected')
       tunnelChecking.value = false
       startTunnelPoll()
       return
@@ -184,7 +185,7 @@ export function usePortForward() {
 
     if (hasPorts && !anyActive) {
       tunnelStatus.value = 'degraded'
-      tunnelMessage.value = 'SSH 隧道已连接，但所有转发端口均无服务响应'
+      tunnelMessage.value = gt('portForward.tunnelDegraded')
       tunnelChecking.value = false
       startTunnelPoll()
       return
@@ -228,7 +229,7 @@ export function usePortForward() {
           stopTunnelPoll()
         } else {
           tunnelStatus.value = 'degraded'
-          tunnelMessage.value = 'SSH 隧道已连接，但所有转发端口均无服务响应'
+          tunnelMessage.value = gt('portForward.tunnelDegraded')
         }
         return
       }
@@ -248,7 +249,7 @@ export function usePortForward() {
           stopTunnelPoll()
         } else {
           tunnelStatus.value = 'degraded'
-          tunnelMessage.value = 'SSH 隧道已连接，但所有转发端口均无服务响应'
+          tunnelMessage.value = gt('portForward.tunnelDegraded')
         }
       } else {
         // Server says disconnected — still check if ports are actually active

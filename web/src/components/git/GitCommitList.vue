@@ -5,14 +5,14 @@
         <span v-if="commits.length > 0" class="drilldown-count">
           <template v-if="searchLoading">
             <span class="spinner" style="width:10px;height:10px;border-width:1.5px;margin-right:4px;display:inline-block;vertical-align:middle;" />
-            加载全部…
+            {{ t('git.commitList.loadingAll') }}
           </template>
           <template v-else>
-            {{ filteredCommits.length + (hasMore && !commitSearch ? '+' : '') + ' 条' + countLabel }}
+            {{ filteredCommits.length + (hasMore && !commitSearch ? '+' : '') + t('git.commitList.countUnit') + countLabel }}
           </template>
         </span>
-        <span v-else-if="!isGit" class="drilldown-count">未初始化</span>
-        <span v-else-if="!untracked" class="drilldown-count">加载中…</span>
+        <span v-else-if="!isGit" class="drilldown-count">{{ t('git.commitList.notInitialized') }}</span>
+        <span v-else-if="!untracked" class="drilldown-count">{{ t('git.commitList.loading') }}</span>
       </div>
       <SearchInput v-if="commits.length > 0" v-model="commitSearch" :placeholder="searchPlaceholder" />
     </div>
@@ -24,24 +24,24 @@
       <div v-else-if="!isGit" class="git-history-empty">
         <div class="init-git-prompt">
           <CirclePlus :size="40" style="color:#ccc;margin-bottom:12px;" />
-          <div style="font-size:14px;color:var(--text-muted,#999);margin-bottom:12px;">尚未初始化 Git 仓库</div>
+          <div style="font-size:14px;color:var(--text-muted,#999);margin-bottom:12px;">{{ t('git.commitList.notGitRepo') }}</div>
           <button class="init-git-btn" @click.stop="$emit('init-git')" :disabled="initLoading">
             <span v-if="initLoading" class="spinner" style="width:14px;height:14px;border-width:2px;" />
-            <span v-else>初始化 Git</span>
+            <span v-else>{{ t('git.commitList.initGit') }}</span>
           </button>
         </div>
       </div>
       <div v-else-if="commits.length === 0 && untracked" class="git-history-empty">
         <div class="empty-state-card">
           <FileText :size="36" :stroke-width="1.5" style="color:var(--text-muted);" />
-          <div class="empty-state-title">此文件未被 Git 跟踪</div>
-          <div class="empty-state-desc">文件尚未纳入版本控制，无历史记录</div>
+          <div class="empty-state-title">{{ t('git.commitList.untrackedFile') }}</div>
+          <div class="empty-state-desc">{{ t('git.commitList.untrackedDesc') }}</div>
           <div class="empty-state-hint">
-            <code>git add {{ '&lt;文件名&gt;' }}</code> 可将其添加到跟踪
+            <code>git add &lt;filename&gt;</code> {{ t('git.commitList.untrackedHint') }}
           </div>
         </div>
       </div>
-      <div v-else-if="commits.length === 0" class="git-history-empty">暂无提交记录</div>
+      <div v-else-if="commits.length === 0" class="git-history-empty">{{ t('git.commitList.noCommits') }}</div>
       <div v-else class="commit-list-container">
         <!-- Graph SVG - hidden during search because filtering breaks lane continuity -->
         <GitGraph
@@ -91,10 +91,12 @@
 <script setup>
 import { CirclePlus, FileText, Info, ChevronRight } from 'lucide-vue-next'
 import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
+import { useI18n } from 'vue-i18n'
 import GitGraph from './GitGraph.vue'
 import SearchInput from '@/components/common/SearchInput.vue'
 import { refLabelText } from '@/utils/gitGraph'
 import { formatRelativeTime, formatDateTime } from '@/utils/format'
+const { t } = useI18n()
 
 const props = defineProps({
   commits: { type: Array, default: () => [] },
@@ -106,8 +108,8 @@ const props = defineProps({
   loading: { type: Boolean, default: false },
   error: { type: String, default: '' },
   untracked: { type: Boolean, default: false },
-  countLabel: { type: String, default: '提交记录' },
-  searchPlaceholder: { type: String, default: '搜索提交信息…' },
+  countLabel: { type: String, default: '' },
+  searchPlaceholder: { type: String, default: '' },
   selectedSHA: { type: String, default: null },
 })
 

@@ -3,67 +3,67 @@
     <div v-if="show" class="metadata-modal-overlay" @click="$emit('close')">
       <div class="metadata-modal" @click.stop>
         <div class="metadata-modal-header">
-          <h3>消息详情</h3>
+          <h3>{{ t('chat.metadata.title') }}</h3>
           <button class="metadata-close-btn" @click="$emit('close')">×</button>
         </div>
         <div class="metadata-content">
           <div v-if="messageId" class="metadata-item metadata-copyable" @click="copyValue(String(messageId), $event)">
-            <span class="metadata-label">消息ID:</span>
+            <span class="metadata-label">{{ t('chat.metadata.messageId') }}</span>
             <div class="metadata-value-wrap">
               <span class="metadata-value metadata-session-id metadata-value-copyable">{{ messageId }}</span>
-              <button class="metadata-copy-btn" @click.stop="copyValue(String(messageId), $event)" title="复制">
+              <button class="metadata-copy-btn" @click.stop="copyValue(String(messageId), $event)" :title="t('chat.metadata.copy')">
                 <Copy :size="13" />
               </button>
             </div>
           </div>
           <div v-if="createdAt" class="metadata-item">
-            <span class="metadata-label">时间:</span>
+            <span class="metadata-label">{{ t('chat.metadata.time') }}</span>
             <span class="metadata-value">{{ formatDetailTime(createdAt) }}</span>
           </div>
           <div v-if="filePath" class="metadata-item">
-            <span class="metadata-label">关联文件:</span>
+            <span class="metadata-label">{{ t('chat.metadata.relatedFile') }}</span>
             <span class="metadata-value metadata-value-copyable" @click="copyValue(filePath, $event)">{{ filePath }}</span>
           </div>
           <div v-if="backend" class="metadata-item">
-            <span class="metadata-label">后端:</span>
+            <span class="metadata-label">{{ t('chat.metadata.backend') }}</span>
             <span class="metadata-value">{{ backend }}</span>
           </div>
           <div v-if="data.model" class="metadata-item">
-            <span class="metadata-label">模型:</span>
+            <span class="metadata-label">{{ t('chat.metadata.model') }}</span>
             <span class="metadata-value">{{ data.model }}</span>
           </div>
           <div v-if="data.inputTokens" class="metadata-item">
-            <span class="metadata-label">输入Token:</span>
+            <span class="metadata-label">{{ t('chat.metadata.inputTokens') }}</span>
             <span class="metadata-value">{{ data.inputTokens.toLocaleString() }}</span>
           </div>
           <div v-if="data.outputTokens" class="metadata-item">
-            <span class="metadata-label">输出Token:</span>
+            <span class="metadata-label">{{ t('chat.metadata.outputTokens') }}</span>
             <span class="metadata-value">{{ data.outputTokens.toLocaleString() }}</span>
           </div>
           <div v-if="data.durationMs" class="metadata-item">
-            <span class="metadata-label">耗时:</span>
+            <span class="metadata-label">{{ t('chat.metadata.duration') }}</span>
             <span class="metadata-value">{{ (data.durationMs / 1000).toFixed(2) }}s</span>
           </div>
           <div v-if="data.costUsd" class="metadata-item">
-            <span class="metadata-label">成本:</span>
+            <span class="metadata-label">{{ t('chat.metadata.cost') }}</span>
             <span class="metadata-value">${{ data.costUsd.toFixed(6) }}</span>
           </div>
           <div v-if="data.sessionId" class="metadata-item metadata-copyable" @click="copyValue(data.sessionId, $event)">
-            <span class="metadata-label">会话ID:</span>
+            <span class="metadata-label">{{ t('chat.metadata.sessionId') }}</span>
             <div class="metadata-value-wrap">
               <span class="metadata-value metadata-session-id metadata-value-copyable">{{ data.sessionId }}</span>
-              <button class="metadata-copy-btn" @click.stop="copyValue(data.sessionId, $event)" title="复制">
+              <button class="metadata-copy-btn" @click.stop="copyValue(data.sessionId, $event)" :title="t('chat.metadata.copy')">
                 <Copy :size="13" />
               </button>
             </div>
           </div>
           <div v-if="data.stopReason" class="metadata-item">
-            <span class="metadata-label">停止原因:</span>
+            <span class="metadata-label">{{ t('chat.metadata.stopReason') }}</span>
             <span class="metadata-value">{{ data.stopReason }}</span>
           </div>
           <div v-if="data.isError" class="metadata-item">
-            <span class="metadata-label">错误:</span>
-            <span class="metadata-value metadata-error">{{ data.errorMessage || '未知错误' }}</span>
+            <span class="metadata-label">{{ t('chat.metadata.error') }}</span>
+            <span class="metadata-value metadata-error">{{ data.errorMessage || t('chat.metadata.unknownError') }}</span>
           </div>
         </div>
       </div>
@@ -73,7 +73,10 @@
 
 <script setup>
 import { Copy } from 'lucide-vue-next'
+import { useI18n } from 'vue-i18n'
 import { useToast } from '@/composables/useToast.ts'
+
+const { t } = useI18n()
 
 const props = defineProps({
   show: Boolean,
@@ -96,7 +99,7 @@ function copyValue(value, event) {
   const doCopy = () => {
     if (btn) { btn.classList.add('copied'); setTimeout(() => btn.classList.remove('copied'), 800) }
     if (txt) { txt.classList.add('copied'); setTimeout(() => txt.classList.remove('copied'), 800) }
-    toast.show('已复制', { icon: '📋', type: 'success', duration: 1500 })
+    toast.show(t('chat.metadata.copied'), { icon: '📋', type: 'success', duration: 1500 })
   }
   if (navigator.clipboard?.writeText) {
     navigator.clipboard.writeText(value).then(doCopy).catch(() => {

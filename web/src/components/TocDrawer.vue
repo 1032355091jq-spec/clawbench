@@ -1,16 +1,16 @@
 <template>
-  <BottomSheet :open="open" title="目录" @close="$emit('close')">
+  <BottomSheet :open="open" :title="t('toc.title')" @close="$emit('close')">
     <template #header>
       <List :size="16" class="bs-header-icon" />
-      <span class="bs-header-title">目录</span>
+      <span class="bs-header-title">{{ t('toc.title') }}</span>
       <div v-if="file?.path" class="bs-header-description">
         <HeaderMarquee :text="file.path">{{ file.path }}</HeaderMarquee>
       </div>
     </template>
 
     <div class="toc-body">
-      <SearchInput v-model="searchQuery" placeholder="搜索目录..." @dblclick="clearSearch" />
-      <div v-if="filteredToc.length === 0" class="toc-empty">{{ searchQuery ? '无匹配结果' : '无标题' }}</div>
+      <SearchInput v-model="searchQuery" :placeholder="t('toc.searchPlaceholder')" @dblclick="clearSearch" />
+      <div v-if="filteredToc.length === 0" class="toc-empty">{{ searchQuery ? t('toc.noMatch') : t('toc.noHeadings') }}</div>
       <a
         v-for="item in filteredToc"
         :key="item.id"
@@ -27,10 +27,13 @@
 <script setup>
 import { List } from 'lucide-vue-next'
 import { ref, watch, nextTick } from 'vue'
+import { useI18n } from 'vue-i18n'
 import BottomSheet from '@/components/common/BottomSheet.vue'
 import HeaderMarquee from '@/components/common/HeaderMarquee.vue'
 import SearchInput from '@/components/common/SearchInput.vue'
 import { extractToc, getFileType } from '@/utils/helpers.ts'
+
+const { t } = useI18n()
 
 const props = defineProps({
     file: Object,

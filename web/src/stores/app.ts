@@ -2,6 +2,7 @@
 import { reactive } from 'vue'
 import { apiGet, apiPost } from '@/utils/api.ts'
 import { baseName, dirName } from '@/utils/helpers.ts'
+import { gt } from '@/composables/useLocale'
 
 interface DirEntry {
     name: string
@@ -291,7 +292,7 @@ async function selectFile(path: string, isImageFile = false, isAudioFile = false
 }
 
 async function deleteFile(filePath: string): Promise<void> {
-    if (!confirm(`确定要删除"${baseName(filePath)}"吗？`)) return
+    if (!confirm(gt('file.header.confirmDelete', { name: baseName(filePath) }))) return
     await apiPost('/api/file/delete', { path: filePath })
     if (state.currentFile?.path === filePath) {
         state.currentFile = null

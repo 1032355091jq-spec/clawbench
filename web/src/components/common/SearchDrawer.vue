@@ -2,7 +2,7 @@
   <BottomSheet :open="open" compact @close="handleClose">
     <template #header>
       <Search :size="16" class="bs-header-icon" />
-      <span class="bs-header-title">搜索文件</span>
+      <span class="bs-header-title">{{ t('search.title') }}</span>
       <div v-if="file?.path" class="bs-header-description">
         <HeaderMarquee :text="file.path">{{ file.path }}</HeaderMarquee>
       </div>
@@ -10,15 +10,15 @@
 
     <div class="search-body">
       <div class="search-input-row">
-        <SearchInput ref="inputRef" v-model="query" placeholder="输入关键字搜索…" @enter="jumpToFirst" @dblclick="query = ''" />
+        <SearchInput ref="inputRef" v-model="query" :placeholder="t('search.placeholder')" @enter="jumpToFirst" @dblclick="query = ''" />
       </div>
 
       <div class="search-content">
-        <div v-if="!file?.content" class="search-empty">无文件内容</div>
-        <div v-else-if="!query.trim()" class="search-empty">输入关键字搜索</div>
-        <div v-else-if="results.length === 0" class="search-empty">未找到 "{{ query }}"</div>
+        <div v-if="!file?.content" class="search-empty">{{ t('search.noContent') }}</div>
+        <div v-else-if="!query.trim()" class="search-empty">{{ t('search.enterKeyword') }}</div>
+        <div v-else-if="results.length === 0" class="search-empty">{{ t('search.notFound', { query }) }}</div>
         <div v-else class="search-results">
-          <div class="search-results-count">{{ results.length }} 处匹配</div>
+          <div class="search-results-count">{{ t('search.matchCount', { count: results.length }) }}</div>
           <div
             v-for="(r, idx) in results"
             :key="viewMode === 'rendered' ? idx : r.line"
@@ -37,11 +37,14 @@
 <script setup>
 import { Search } from 'lucide-vue-next'
 import { ref, computed, watch, nextTick } from 'vue'
+import { useI18n } from 'vue-i18n'
 import BottomSheet from './BottomSheet.vue'
 import HeaderMarquee from './HeaderMarquee.vue'
 import SearchInput from './SearchInput.vue'
 import { escapeHtml, getFileType } from '@/utils/helpers.ts'
 import { hljs } from '@/utils/globals.ts'
+
+const { t } = useI18n()
 
 const props = defineProps({
   file: Object,

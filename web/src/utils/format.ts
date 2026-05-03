@@ -1,6 +1,7 @@
 // Time and task formatting utilities
+import i18n from '@/i18n'
 
-/** Format a date as relative time (Chinese locale) */
+/** Format a date as relative time */
 export function formatRelativeTime(date: string | Date): string {
     if (!date) return ''
     const d = new Date(date)
@@ -10,18 +11,18 @@ export function formatRelativeTime(date: string | Date): string {
     const hours = Math.floor(diff / 3600000)
     const days = Math.floor(diff / 86400000)
 
-    if (minutes < 1) return '刚刚'
-    if (minutes < 60) return `${minutes}分钟前`
-    if (hours < 24) return `${hours}小时前`
-    if (days < 7) return `${days}天前`
-    return d.toLocaleDateString('zh-CN')
+    if (minutes < 1) return i18n.global.t('time.justNow')
+    if (minutes < 60) return i18n.global.t('time.minutesAgo', { count: minutes })
+    if (hours < 24) return i18n.global.t('time.hoursAgo', { count: hours })
+    if (days < 7) return i18n.global.t('time.daysAgo', { count: days })
+    return d.toLocaleDateString(i18n.global.locale.value === 'zh' ? 'zh-CN' : 'en-US')
 }
 
-/** Format a date as a localized datetime string (zh-CN) */
+/** Format a date as a localized datetime string */
 export function formatDateTime(date: string | Date): string {
     if (!date) return ''
     const d = new Date(date)
-    return d.toLocaleString('zh-CN', {
+    return d.toLocaleString(i18n.global.locale.value === 'zh' ? 'zh-CN' : 'en-US', {
         month: '2-digit',
         day: '2-digit',
         hour: '2-digit',
@@ -29,7 +30,7 @@ export function formatDateTime(date: string | Date): string {
     })
 }
 
-/** Humanize a cron expression into Chinese description */
+/** Humanize a cron expression into localized description */
 export function humanizeCron(expr: string): string {
     const parts = expr.split(' ')
     if (parts.length !== 5) return expr
@@ -37,45 +38,45 @@ export function humanizeCron(expr: string): string {
     const isNumeric = (s: string) => /^\d+$/.test(s)
 
     // Every N minutes: */N * * * *
-    if (min.startsWith('*/') && hour === '*') return `每 ${min.slice(2)} 分钟`
+    if (min.startsWith('*/') && hour === '*') return i18n.global.t('cron.everyMinutes', { count: min.slice(2) })
     // Every N hours: 0 */N * * *
-    if (hour.startsWith('*/') && day === '*' && month === '*' && weekday === '*') return `每 ${hour.slice(2)} 小时`
+    if (hour.startsWith('*/') && day === '*' && month === '*' && weekday === '*') return i18n.global.t('cron.everyHours', { count: hour.slice(2) })
 
     const timeStr = isNumeric(hour) ? `${hour}:${min.padStart(2, '0')}` : ''
 
     // Hourly at minute M: M * * * *
     if (isNumeric(min) && hour === '*' && day === '*' && month === '*' && weekday === '*') {
-        return `每小时 :${min.padStart(2, '0')}`
+        return i18n.global.t('cron.hourly', { minute: min.padStart(2, '0') })
     }
     // Daily: M H * * *
     if (isNumeric(min) && isNumeric(hour) && day === '*' && month === '*' && weekday === '*') {
-        return `每天 ${timeStr}`
+        return i18n.global.t('cron.daily', { time: timeStr })
     }
     // Weekly: M H * * DOW
-    const weekdayNames = ['日', '一', '二', '三', '四', '五', '六']
+    const weekdayNames = i18n.global.t('cron.weekdayNames') as unknown as string[]
     if (isNumeric(min) && isNumeric(hour) && day === '*' && month === '*') {
-        if (weekday === '1-5') return `工作日 ${timeStr}`
-        if (isNumeric(weekday)) return `每周${weekdayNames[parseInt(weekday)]} ${timeStr}`
+        if (weekday === '1-5') return i18n.global.t('cron.weekdays', { time: timeStr })
+        if (isNumeric(weekday)) return i18n.global.t('cron.weekly', { day: weekdayNames[parseInt(weekday)], time: timeStr })
     }
     // Monthly: M H D * *
     if (isNumeric(min) && isNumeric(hour) && isNumeric(day) && month === '*' && weekday === '*') {
-        return `每月${day}日 ${timeStr}`
+        return i18n.global.t('cron.monthly', { day, time: timeStr })
     }
 
     return expr
 }
 
-/** Get a Chinese label for task repeat mode */
+/** Get a label for task repeat mode */
 export function repeatLabel(mode: string, maxRuns: number): string {
-    if (mode === 'once') return '单次'
-    if (mode === 'limited') return `${maxRuns}次`
-    return '不限'
+    if (mode === 'once') return i18n.global.t('task.repeat.once')
+    if (mode === 'limited') return i18n.global.t('task.repeat.times', { count: maxRuns })
+    return i18n.global.t('task.repeat.unlimited')
 }
 
-/** Get a Chinese label for task status */
+/** Get a label for task status */
 export function statusLabel(status: string): string {
-    if (status === 'active') return '运行中'
-    if (status === 'paused') return '已暂停'
-    if (status === 'completed') return '已完成'
+    if (status === 'active') return i18n.global.t('task.status.active')
+    if (status === 'paused') return i18n.global.t('task.status.paused')
+    if (status === 'completed') return i18n.global.t('task.status.completed')
     return status
 }

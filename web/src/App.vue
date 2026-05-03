@@ -147,25 +147,25 @@
             class="dock-nav-btn"
             :class="{ disabled: !canGoBack }"
             @click.stop="handleGoBack"
-            title="上一个文件"
+            :title="t('nav.prevFile')"
           >
             <ChevronLeft />
           </button>
 
           <div class="dock-center">
-            <button class="dock-btn" :class="{ active: chatOpen, 'has-unread': (store.state.chatUnread || store.state.taskUnread) && !chatOpen, 'has-running': store.state.chatRunning && !chatOpen && !store.state.chatUnread && !store.state.taskUnread }" @click.stop="openDrawer('chat')" title="会话">
+            <button class="dock-btn" :class="{ active: chatOpen, 'has-unread': (store.state.chatUnread || store.state.taskUnread) && !chatOpen, 'has-running': store.state.chatRunning && !chatOpen && !store.state.chatUnread && !store.state.taskUnread }" @click.stop="openDrawer('chat')" :title="t('nav.chat')">
               <MessageSquare />
             </button>
-            <button class="dock-btn" :class="{ active: fileManagerOpen }" @click.stop="openDrawer('fileManager')" title="文件管理器">
+            <button class="dock-btn" :class="{ active: fileManagerOpen }" @click.stop="openDrawer('fileManager')" :title="t('nav.fileManager')">
               <Folder />
             </button>
-            <button class="dock-btn" :class="{ active: projectHistoryOpen || fileHistoryOpen }" @click.stop="toggleHistoryDrawer" title="历史">
+            <button class="dock-btn" :class="{ active: projectHistoryOpen || fileHistoryOpen }" @click.stop="toggleHistoryDrawer" :title="t('nav.history')">
               <GitBranch />
             </button>
-            <button class="dock-btn" :class="{ active: proxyOpen, disabled: !isAppMode }" @click.stop="isAppMode ? openDrawer('proxy') : toast.show('端口转发仅在移动端APP支持', { type: 'info' })" title="端口转发">
+            <button class="dock-btn" :class="{ active: proxyOpen, disabled: !isAppMode }" @click.stop="isAppMode ? openDrawer('proxy') : toast.show(t('toast.portForwardAppOnly'), { type: 'info' })" :title="t('nav.portForward')">
               <Waypoints />
             </button>
-            <button class="dock-btn" @click.stop="handleRefresh" title="刷新">
+            <button class="dock-btn" @click.stop="handleRefresh" :title="t('nav.refresh')">
               <RotateCw />
             </button>
           </div>
@@ -174,7 +174,7 @@
             class="dock-nav-btn"
             :class="{ disabled: !canGoForward }"
             @click.stop="handleGoForward"
-            title="下一个文件"
+            :title="t('nav.nextFile')"
           >
             <ChevronRight />
           </button>
@@ -190,6 +190,7 @@
 
 <script setup>
 import { ref, computed, watch, onMounted, onUnmounted, provide, nextTick } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { ChevronLeft, ChevronRight, MessageSquare, Folder, GitBranch, Waypoints, RotateCw } from 'lucide-vue-next'
 import AppHeader from './components/common/AppHeader.vue'
 import FileManager from './components/file/FileManager.vue'
@@ -221,6 +222,7 @@ import './assets/hljs-light-override.css'
 
 // Auth
 const isAuthenticated = ref(null)
+const { t } = useI18n()
 
 
 // Git history drawers
@@ -479,12 +481,12 @@ onMounted(async () => {
     } catch (_) {
         isAuthenticated.value = false
         if (isAppMode.value && window.AndroidNative?.showServerDialog) {
-            toast.show('无法连接到服务器，点击重新配置', {
+            toast.show(t('toast.serverUnreachableApp'), {
                 icon: '⚠️', type: 'error', duration: 0,
                 onClick: () => window.AndroidNative.showServerDialog()
             })
         } else {
-            toast.show('无法连接到服务器，请检查后端服务是否启动', { icon: '⚠️', type: 'error', duration: 0, onClick: () => location.reload() })
+            toast.show(t('toast.serverUnreachableWeb'), { icon: '⚠️', type: 'error', duration: 0, onClick: () => location.reload() })
         }
         return
     }
@@ -527,7 +529,7 @@ onMounted(async () => {
         }
     } else {
         isAuthenticated.value = false
-        toast.show('服务器响应异常，后端服务可能未正确启动', { icon: '⚠️', type: 'error', duration: 0, onClick: () => location.reload() })
+        toast.show(t('toast.serverError'), { icon: '⚠️', type: 'error', duration: 0, onClick: () => location.reload() })
         return
     }
     initMermaid()
@@ -561,13 +563,13 @@ onMounted(async () => {
     try {
         await store.loadProject()
     } catch (_) {
-        toast.show('项目加载失败，后端服务可能未正确启动', { icon: '⚠️', type: 'error', duration: 0, onClick: () => location.reload() })
+        toast.show(t('toast.projectLoadFailed'), { icon: '⚠️', type: 'error', duration: 0, onClick: () => location.reload() })
         return
     }
     try {
         await store.loadFiles('')
     } catch (_) {
-        toast.show('文件列表加载失败', { icon: '⚠️', type: 'error', duration: 6000 })
+        toast.show(t('toast.fileListLoadFailed'), { icon: '⚠️', type: 'error', duration: 6000 })
     }
     const lastFile = localStorage.getItem('clawbenchLastFile_' + store.state.projectRoot)
     if (lastFile && lastFile !== store.state.currentFile?.path) {

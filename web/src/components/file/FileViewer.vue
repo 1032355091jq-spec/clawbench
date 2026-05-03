@@ -50,14 +50,14 @@
         <div class="unsupported-file">
           <FileText />
           <div class="unsupported-title">{{ file.name }}</div>
-          <div class="unsupported-desc">文件过大，无法在浏览器中预览 {{ file.size ? '(' + formatSize(file.size) + ')' : '' }}</div>
+          <div class="unsupported-desc">{{ t('file.viewer.fileTooLarge') }} {{ file.size ? '(' + formatSize(file.size) + ')' : '' }}</div>
           <a v-if="!isAppMode" :href="'/api/local-file/' + encodeURIComponent(file.path)" class="download-btn" download>
             <Download :size="14" color="#fff" />
-            下载
+            {{ t('common.download') }}
           </a>
           <button v-else class="download-btn" @click="handleDownload(file.path)">
             <Download :size="14" color="#fff" />
-            下载
+            {{ t('common.download') }}
           </button>
         </div>
       </div>
@@ -67,14 +67,14 @@
         <div class="unsupported-file">
           <FileText />
           <div class="unsupported-title">{{ file.name }}</div>
-          <div class="unsupported-desc">二进制文件，无法在浏览器中预览 {{ file.size ? '(' + formatSize(file.size) + ')' : '' }}</div>
+          <div class="unsupported-desc">{{ t('file.viewer.binaryFile') }} {{ file.size ? '(' + formatSize(file.size) + ')' : '' }}</div>
           <a v-if="!isAppMode" :href="'/api/local-file/' + encodeURIComponent(file.path)" class="download-btn" download>
             <Download :size="14" color="#fff" />
-            下载
+            {{ t('common.download') }}
           </a>
           <button v-else class="download-btn" @click="handleDownload(file.path)">
             <Download :size="14" color="#fff" />
-            下载
+            {{ t('common.download') }}
           </button>
         </div>
       </div>
@@ -103,6 +103,7 @@
 
 <script setup>
 import { ref, computed, watch, onBeforeUnmount } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { FileText, Download } from 'lucide-vue-next'
 import ImagePreview from '@/components/media/ImagePreview.vue'
 import AudioPreview from '@/components/media/AudioPreview.vue'
@@ -114,6 +115,7 @@ import { getFileType, formatFileSize } from '@/utils/helpers.ts'
 import { store } from '@/stores/app.ts'
 import { useAppMode } from '@/composables/useAppMode.ts'
 
+const { t } = useI18n()
 const { isAppMode } = useAppMode()
 
 const props = defineProps({

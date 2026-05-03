@@ -2,11 +2,14 @@
   <div v-if="loading" class="git-diff-loading">
     <div class="spinner" style="width:24px;height:24px;border-width:2px;margin:0 auto;" />
   </div>
-  <div v-else-if="empty" class="git-diff-empty">无变更</div>
+  <div v-else-if="empty" class="git-diff-empty">{{ t('git.diffView.noChanges') }}</div>
   <div v-else :class="['git-diff-scroll', { 'no-wrap': noWrap }]" v-html="html" />
 </template>
 
 <script setup>
+import { useI18n } from 'vue-i18n'
+const { t } = useI18n()
+
 defineProps({
   loading: Boolean,
   empty: Boolean,

@@ -2,12 +2,12 @@
   <div v-if="open" class="session-overlay" @click="close">
     <div class="session-drawer" @click.stop>
       <div class="session-header" @click="close">
-        <span class="session-title">选择会话</span>
+        <span class="session-title">{{ t('sessionSelector.title') }}</span>
       </div>
 
       <div class="session-list">
-        <div v-if="loading" class="session-empty">加载中...</div>
-        <div v-else-if="sessions.length === 0" class="session-empty">暂无会话</div>
+        <div v-if="loading" class="session-empty">{{ t('common.loading') }}</div>
+        <div v-else-if="sessions.length === 0" class="session-empty">{{ t('sessionSelector.noSessions') }}</div>
         <div
           v-for="session in sessions"
           :key="session.id"
@@ -25,7 +25,7 @@
       <div class="session-footer">
         <button class="session-create-btn" @click="createSession">
           <Plus :size="16" />
-          新会话
+          {{ t('sessionSelector.newSession') }}
         </button>
       </div>
     </div>
@@ -35,6 +35,10 @@
 <script setup>
 import { ref, watch } from 'vue'
 import { Plus } from 'lucide-vue-next'
+import { useI18n } from 'vue-i18n'
+import { formatRelativeTime } from '@/utils/format'
+
+const { t } = useI18n()
 
 const props = defineProps({
   open: Boolean,
@@ -75,19 +79,7 @@ async function createSession() {
 }
 
 function formatTime(date) {
-  if (!date) return ''
-  const d = new Date(date)
-  const now = new Date()
-  const diff = now - d
-  const minutes = Math.floor(diff / 60000)
-  const hours = Math.floor(diff / 3600000)
-  const days = Math.floor(diff / 86400000)
-
-  if (minutes < 1) return '刚刚'
-  if (minutes < 60) return `${minutes}分钟前`
-  if (hours < 24) return `${hours}小时前`
-  if (days < 7) return `${days}天前`
-  return d.toLocaleDateString('zh-CN')
+  return formatRelativeTime(date)
 }
 
 watch(() => props.open, async (val) => {

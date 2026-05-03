@@ -5,14 +5,14 @@
       ref="inputRef"
       type="text"
       :value="modelValue"
-      :placeholder="placeholder"
+      :placeholder="placeholder || t('search.defaultPlaceholder')"
       @input="$emit('update:modelValue', $event.target.value)"
       @focus="focused = true"
       @blur="focused = false"
       @keydown.enter="$emit('enter')"
       @dblclick="$emit('dblclick')"
     />
-    <button v-if="modelValue" class="search-pill-clear" @click="$emit('update:modelValue', '')" title="清除">
+    <button v-if="modelValue" class="search-pill-clear" @click="$emit('update:modelValue', '')" :title="t('search.clear')">
       <X :size="12" />
     </button>
   </div>
@@ -21,10 +21,13 @@
 <script setup>
 import { Search, X } from 'lucide-vue-next'
 import { ref } from 'vue'
+import { useI18n } from 'vue-i18n'
+
+const { t } = useI18n()
 
 defineProps({
   modelValue: { type: String, default: '' },
-  placeholder: { type: String, default: '搜索...' },
+  placeholder: { type: String, default: '' },
 })
 
 defineEmits(['update:modelValue', 'enter', 'dblclick'])

@@ -2,7 +2,7 @@
   <BottomSheet ref="bottomSheetRef" :open="open" @close="handleClose">
     <template #header>
       <GitBranch :size="16" class="bs-header-icon" />
-      <span class="bs-header-title">{{ mode === 'file' ? '文件历史' : '项目历史' }}</span>
+      <span class="bs-header-title">{{ mode === 'file' ? t('git.history.fileHistory') : t('git.history.projectHistory') }}</span>
       <div v-if="mode === 'project' && store.state.projectRoot" class="bs-header-description">
         <HeaderMarquee :text="store.state.projectRoot">{{ store.state.projectRoot }}</HeaderMarquee>
       </div>
@@ -34,7 +34,7 @@
       :loading="false"
       :error="''"
       :untracked="untracked"
-      :count-label="mode === 'file' ? '记录' : '提交记录'"
+      :count-label="mode === 'file' ? t('git.history.records') : t('git.history.commitRecords')"
       :selected-s-h-a="selectedSHA"
       @select="onCommitSelect"
       @search="onSearch"
@@ -51,17 +51,17 @@
           :selected-commit="selectedCommit"
           @navigate="drillBack"
         />
-        <span class="drilldown-count">{{ files.length }} 个文件</span>
+        <span class="drilldown-count">{{ t('git.history.fileCount', { count: files.length }) }}</span>
       </div>
       <GitCommitMeta :commit="selectedCommit" :is-working-tree="isWorkingTree" />
       <div class="drilldown-body">
         <div v-if="filesLoading" class="git-history-loading">
           <div class="spinner" style="width:24px;height:24px;border-width:2px;" />
         </div>
-        <div v-else-if="files.length === 0" class="git-history-empty">此提交无文件变更</div>
+        <div v-else-if="files.length === 0" class="git-history-empty">{{ t('git.history.noFileChanges') }}</div>
         <div v-else class="drilldown-list">
           <template v-if="hasStaged">
-            <div class="file-group-label">已暂存</div>
+            <div class="file-group-label">{{ t('git.history.staged') }}</div>
             <div
               v-for="f in stagedFiles"
               :key="f.path + '-' + f.type + '-s'"
@@ -78,7 +78,7 @@
             </div>
           </template>
           <template v-if="hasUnstaged">
-            <div v-if="hasStaged" class="file-group-label">未暂存</div>
+            <div v-if="hasStaged" class="file-group-label">{{ t('git.history.unstaged') }}</div>
             <div
               v-for="f in unstagedFiles"
               :key="f.path + '-' + f.type"
@@ -126,6 +126,7 @@
 <script setup>
 import { GitBranch, Plus, Minus, FileText } from 'lucide-vue-next'
 import { ref, computed, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
 import BottomSheet from '@/components/common/BottomSheet.vue'
 import HeaderMarquee from '@/components/common/HeaderMarquee.vue'
 import GitCommitList from './GitCommitList.vue'
@@ -134,6 +135,7 @@ import GitDiffView from './GitDiffView.vue'
 import GitBreadcrumb from './GitBreadcrumb.vue'
 import { renderDiff } from '@/utils/diff.ts'
 import { store } from '@/stores/app.ts'
+const { t } = useI18n()
 
 const props = defineProps({
   open: Boolean,
@@ -199,10 +201,10 @@ const hasUnstaged = computed(() => unstagedFiles.value.length > 0)
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
-function fileTypeLabel(t, staged) {
-  const labels = { A: '新增', M: '修改', D: '删除', R: '重命名', '?': '未跟踪' }
-  const base = labels[t] || t
-  return staged ? '已暂存·' + base : base
+function fileTypeLabel(type, staged) {
+  const keys = { A: 'git.fileType.added', M: 'git.fileType.modified', D: 'git.fileType.deleted', R: 'git.fileType.renamed', '?': 'git.fileType.untracked' }
+  const base = t(keys[type] || type)
+  return staged ? t('git.fileType.stagedPrefix') + base : base
 }
 
 function badgeClass(f) {
@@ -248,7 +250,7 @@ async function loadProjectHistory() {
     const resp = await fetch('/api/git/project-history')
     if (!resp.ok) {
       const data = await resp.json()
-      error.value = data.error || '加载历史记录失败'
+      error.value = data.error || t('git.history.loadError')
       return
     }
     const data = await resp.json()
@@ -273,13 +275,13 @@ async function loadProjectHistory() {
 
     // Prepend working tree entry if there are uncommitted changes
     if (loadedWtFiles.length > 0) {
-      commits.value = [{ sha: 'HEAD', msg: '工作区变更', date: '', author: '', isWT: true }, ...histCommits]
+      commits.value = [{ sha: 'HEAD', msg: t('git.history.workingTreeChanges'), date: '', author: '', isWT: true }, ...histCommits]
     } else {
       commits.value = histCommits
     }
     hasMore.value = data.hasMore
   } catch {
-    error.value = '加载历史记录失败'
+    error.value = t('git.history.loadError')
   } finally {
     loading.value = false
   }
@@ -297,7 +299,7 @@ async function loadFileHistory(filePath) {
     const resp = await fetch(`/api/git/history?path=${encodeURIComponent(filePath)}`)
     if (!resp.ok) {
       const data = await resp.json()
-      error.value = data.error || '加载历史记录失败'
+      error.value = data.error || t('git.history.loadError')
       return
     }
     const hist = await resp.json()
@@ -310,7 +312,7 @@ async function loadFileHistory(filePath) {
     untracked.value = !!hist.untracked
     commits.value = hist.commits || []
   } catch {
-    error.value = '加载历史记录失败'
+    error.value = t('git.history.loadError')
   } finally {
     loading.value = false
   }

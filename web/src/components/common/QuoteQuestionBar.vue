@@ -9,7 +9,7 @@
           <span class="qq-quoted-text qq-quoted-text--single">{{ fullQuoteText }}</span>
         </div>
         <button class="quote-bar-btn" @click.stop="expand">
-          对话
+          {{ t('quoteBar.chat') }}
         </button>
       </div>
 
@@ -18,7 +18,7 @@
         <!-- Top: session selector -->
         <div class="qq-top-row">
           <div class="qq-session" @click="openSessionDrawer">
-            <span class="qq-session-label">{{ sessionLabel }}</span>
+            <span class="qq-session-label">{{ displaySessionLabel }}</span>
             <div class="qq-session-title">
               <HeaderMarquee :text="displaySessionTitle">{{ displaySessionTitle }}</HeaderMarquee>
             </div>
@@ -35,7 +35,7 @@
         <!-- Input -->
         <div class="qq-input-container">
           <div class="qq-input-row">
-            <button v-if="inputText" class="qq-clear-btn" @click="inputText = ''; collapseTextarea()" title="清空">
+            <button v-if="inputText" class="qq-clear-btn" @click="inputText = ''; collapseTextarea()" :title="t('quoteBar.clear')">
               <XCircle :size="16" />
             </button>
             <textarea
@@ -43,11 +43,11 @@
               v-model="inputText"
               class="qq-textarea"
               rows="1"
-              placeholder="输入你的问题..."
+              :placeholder="t('quoteBar.placeholder')"
               @keydown.enter.exact.prevent="handleSend"
               @input="autoResizeTextarea"
             />
-            <button class="qq-send-btn" :class="{ disabled: !canSend }" @click="handleSend" title="发送">
+            <button class="qq-send-btn" :class="{ disabled: !canSend }" @click="handleSend" :title="t('quoteBar.send')">
               <Send :size="14" />
             </button>
           </div>
@@ -61,12 +61,15 @@
 <script setup>
 import { MessageSquare, ChevronDown, XCircle, Send } from 'lucide-vue-next'
 import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue'
+import { useI18n } from 'vue-i18n'
 import HeaderMarquee from '@/components/common/HeaderMarquee.vue'
+
+const { t } = useI18n()
 
 const props = defineProps({
   visible: Boolean,
   quoteData: Object,
-  sessionLabel: { type: String, default: 'AI 对话' },
+  sessionLabel: { type: String, default: '' },
   sessionTitle: { type: String, default: '' },
   currentSessionId: { type: String, default: '' },
 })
@@ -86,7 +89,9 @@ const fullQuoteText = computed(() => {
 
 const canSend = computed(() => inputText.value.trim().length > 0)
 
-const displaySessionTitle = computed(() => props.sessionTitle || '新会话')
+const displaySessionTitle = computed(() => props.sessionTitle || t('quoteBar.newSession'))
+
+const displaySessionLabel = computed(() => props.sessionLabel || t('quoteBar.aiChat'))
 
 // Reset when bar hides
 watch(() => props.visible, (val) => {

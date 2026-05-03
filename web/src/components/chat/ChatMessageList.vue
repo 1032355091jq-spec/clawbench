@@ -5,14 +5,14 @@
       <Transition name="load-hint-fade">
         <div v-if="loadingMore" class="chat-load-more">
           <span class="chat-load-spinner"></span>
-          <span>加载中...</span>
+          <span>{{ t('chat.messageList.loadingMore') }}</span>
         </div>
         <div v-else-if="hasMore && remainingCount > 0" class="chat-load-hint" @click="emit('load-more')">
           <ChevronUp :size="14" />
-          <span>还有 {{ remainingCount }} 条更早消息</span>
+          <span>{{ t('chat.messageList.moreOlderMessages', { count: remainingCount }) }}</span>
         </div>
         <div v-else-if="showAllLoaded" class="chat-load-done">
-          <span>已加载全部消息</span>
+          <span>{{ t('chat.messageList.allMessagesLoaded') }}</span>
         </div>
       </Transition>
     </div>
@@ -31,9 +31,9 @@
             </div>
           </div>
         </div>
-        <span class="agent-welcome-hint">发送消息开始对话</span>
+        <span class="agent-welcome-hint">{{ t('chat.messageList.startConversation') }}</span>
       </template>
-      <span v-else>发送消息开始与 AI 对话</span>
+      <span v-else>{{ t('chat.messageList.startConversationAI') }}</span>
     </div>
 
     <ChatMessageItem
@@ -71,11 +71,14 @@
 
 <script setup>
 import { ref, nextTick, inject, computed, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { ChevronUp } from 'lucide-vue-next'
 import ChatMessageItem from './ChatMessageItem.vue'
 import PendingMessageItem from './PendingMessageItem.vue'
 import { useDoubleClickCopy } from '@/composables/useDoubleClickCopy.ts'
 import { useFilePathAnnotation } from '@/composables/useFilePathAnnotation.ts'
+
+const { t } = useI18n()
 
 const props = defineProps({
   messages: Array,

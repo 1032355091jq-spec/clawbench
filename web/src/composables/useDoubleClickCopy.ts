@@ -1,5 +1,6 @@
 import { inject } from 'vue'
 import { copyText } from '@/utils/helpers.ts'
+import { gt } from '@/composables/useLocale'
 
 const BLOCK_SELECTORS = 'p, h1, h2, h3, h4, h5, h6, li, pre, blockquote, table, .mermaid'
 
@@ -40,7 +41,7 @@ export function useDoubleClickCopy() {
 
             // 显示 toast 提示
             if (toast) {
-                toast.show('已复制', { icon: '📋', type: 'success', duration: 1500 })
+                toast.show(gt('common.copied'), { icon: '📋', type: 'success', duration: 1500 })
             }
         })
 

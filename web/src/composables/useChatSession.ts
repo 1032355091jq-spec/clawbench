@@ -1,4 +1,5 @@
 import { ref, computed, type Ref } from 'vue'
+import { gt } from '@/composables/useLocale'
 import { useToast } from '@/composables/useToast.ts'
 import { useNotification } from '@/composables/useNotification.ts'
 import { useSessionIdentity } from '@/composables/useSessionIdentity.ts'
@@ -78,7 +79,7 @@ export function useChatSession(options: UseChatSessionOptions) {
   const agentHeaderTitle = computed(() => {
     const agent = agents.value.find(a => a.id === currentAgentId.value)
     if (agent) return `${agent.icon} ${agent.name}`
-    return 'AI 对话'
+    return gt('chat.session.aiDialog')
   })
 
   // Guard against concurrent switchSession calls — only the last one wins
@@ -115,7 +116,7 @@ export function useChatSession(options: UseChatSessionOptions) {
       const resp = await fetch(url)
       if (!resp.ok) {
         const errData = await resp.json().catch(() => ({}))
-        throw new Error(errData.error || `请求失败 (${resp.status})`)
+        throw new Error(errData.error || gt('chat.session.requestFailed', { status: resp.status }))
       }
       const data = await resp.json()
       messages.value = parseMessages(data.messages || [])
@@ -139,7 +140,7 @@ export function useChatSession(options: UseChatSessionOptions) {
       switching.value = false
     } catch (err) {
       console.error('Failed to load chat history:', err)
-      toast.show(err.message || '加载聊天记录失败', { icon: '⚠️', type: 'error' })
+      toast.show(err.message || gt('chat.session.loadHistoryFailed'), { icon: '⚠️', type: 'error' })
       switching.value = false
     }
   }
@@ -191,7 +192,7 @@ export function useChatSession(options: UseChatSessionOptions) {
       const limit = store.state.chatInitialMessages
       const resp = await fetch(`/api/ai/chat?session_id=${encodeURIComponent(sessionId)}&limit=${limit}`)
       if (!resp.ok) {
-        toast.show('切换会话失败', { icon: '⚠️', type: 'error' })
+        toast.show(gt('chat.session.switchFailed'), { icon: '⚠️', type: 'error' })
         return
       }
       const data = await resp.json()
@@ -221,7 +222,7 @@ export function useChatSession(options: UseChatSessionOptions) {
       // If another switch happened, don't touch state
       if (switchSessionSeq !== mySeq) return
       console.error('Failed to switch session:', err)
-      toast.show('切换会话失败', { icon: '⚠️' })
+      toast.show(gt('chat.session.switchFailed'), { icon: '⚠️' })
     } finally {
       // Always restore input — switchSession is the only place that locks it,
       // so it must always unlock regardless of success/failure/race.
@@ -243,7 +244,7 @@ export function useChatSession(options: UseChatSessionOptions) {
       })
       const data = await resp.json()
       if (!resp.ok || !data.ok) {
-        throw new Error(data.error || `创建失败 (${resp.status})`)
+        throw new Error(data.error || gt('chat.session.createFailed', { status: resp.status }))
       }
       currentSessionId.value = data.sessionId
       currentSessionTitle.value = data.title || ''
@@ -255,10 +256,10 @@ export function useChatSession(options: UseChatSessionOptions) {
       Object.keys(blockProposals).forEach(k => delete blockProposals[k])
       loading.value = false
       const maxCount = store.state.sessionMaxCount
-      toast.show(`已创建新会话 (${data.sessionCount ?? ''}/${maxCount})`, { icon: '✨', type: 'success', duration: 1500 })
+      toast.show(gt('chat.session.created', { count: data.sessionCount ?? '', max: maxCount }), { icon: '✨', type: 'success', duration: 1500 })
     } catch (err) {
       console.error('Failed to create session:', err)
-      toast.show(err.message || '创建会话失败', { icon: '⚠️', type: 'error' })
+      toast.show(err.message || gt('chat.session.createSessionFailed'), { icon: '⚠️', type: 'error' })
     }
   }
 
@@ -281,11 +282,11 @@ export function useChatSession(options: UseChatSessionOptions) {
           }
         }
         const maxCount = store.state.sessionMaxCount
-        toast.show(`会话已删除 (${data.sessionCount ?? ''}/${maxCount})`, { icon: '🗑️', type: 'success', duration: 2000 })
+        toast.show(gt('chat.session.deleted', { count: data.sessionCount ?? '', max: maxCount }), { icon: '🗑️', type: 'success', duration: 2000 })
       }
     } catch (err) {
       console.error('Failed to delete session:', err)
-      toast.show('删除会话失败', { icon: '⚠️', type: 'error' })
+      toast.show(gt('chat.session.deleteFailed'), { icon: '⚠️', type: 'error' })
     }
   }
 
@@ -390,7 +391,7 @@ export function useChatSession(options: UseChatSessionOptions) {
             const session = sessions.find(s => s.id === sessionId)
             if (session) {
               onStreamDone?.()
-              toast.show('会话已完成', {
+              toast.show(gt('chat.session.completed'), {
                 icon: '✅',
                 type: 'success',
                 duration: 5000,
@@ -401,8 +402,8 @@ export function useChatSession(options: UseChatSessionOptions) {
               })
               // Also show browser notification for completed session
               try {
-                notification.show('会话已完成', {
-                  body: '点击查看详情',
+                notification.show(gt('chat.session.completed'), {
+                  body: gt('chat.session.clickToViewDetails'),
                   onClick: () => {
                     switchSession(sessionId, session.backend)
                     onOpen()

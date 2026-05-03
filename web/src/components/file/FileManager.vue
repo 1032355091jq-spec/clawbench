@@ -1,8 +1,8 @@
 <template>
-  <BottomSheet :open="open" title="文件管理器" @close="$emit('close')">
+  <BottomSheet :open="open" :title="t('file.manager')" @close="$emit('close')">
     <template #header>
       <Folder :size="16" class="bs-header-icon" />
-      <span class="bs-header-title">文件管理器</span>
+      <span class="bs-header-title">{{ t('file.manager') }}</span>
       <div v-if="projectPath" class="bs-header-description">
         <HeaderMarquee :text="projectPath">{{ projectPath }}</HeaderMarquee>
       </div>
@@ -11,28 +11,28 @@
     <!-- Dir nav -->
     <div id="dirNav" class="dir-nav">
       <div class="dir-toolbar">
-        <button class="toolbar-btn" :class="{ active: sortField === 'name' }" @click="$emit('toggleSort', 'name')" :title="sortField === 'name' ? '按名称排序 (' + (sortDir === 'asc' ? '升序)' : '降序)') : '按名称排序'">
+        <button class="toolbar-btn" :class="{ active: sortField === 'name' }" @click="$emit('toggleSort', 'name')" :title="sortField === 'name' ? t('file.sortByName') + ' (' + (sortDir === 'asc' ? t('file.sortAsc') + ')' : t('file.sortDesc') + ')') : t('file.sortByName')">
           <ArrowDownAz :size="14" />
           <ChevronDown v-if="sortField === 'name' && sortDir === 'desc'" :size="8" :stroke-width="3" class="sort-arrow" />
           <ChevronUp v-else :size="8" :stroke-width="3" class="sort-arrow" />
         </button>
-        <button class="toolbar-btn" :class="{ active: sortField === 'time' }" @click="$emit('toggleSort', 'time')" :title="sortField === 'time' ? '按时间排序 (' + (sortDir === 'asc' ? '升序)' : '降序)') : '按时间排序'">
+        <button class="toolbar-btn" :class="{ active: sortField === 'time' }" @click="$emit('toggleSort', 'time')" :title="sortField === 'time' ? t('file.sortByTime') + ' (' + (sortDir === 'asc' ? t('file.sortAsc') + ')' : t('file.sortDesc') + ')') : t('file.sortByTime')">
           <Clock :size="14" />
           <ChevronDown v-if="sortField === 'time' && sortDir === 'desc'" :size="8" :stroke-width="3" class="sort-arrow" />
           <ChevronUp v-else :size="8" :stroke-width="3" class="sort-arrow" />
         </button>
-        <button class="toolbar-btn" :class="{ active: sortField === 'type' }" @click="$emit('toggleSort', 'type')" :title="sortField === 'type' ? '按后缀排序 (' + (sortDir === 'asc' ? '升序)' : '降序)') : '按后缀排序'">
+        <button class="toolbar-btn" :class="{ active: sortField === 'type' }" @click="$emit('toggleSort', 'type')" :title="sortField === 'type' ? t('file.sortByType') + ' (' + (sortDir === 'asc' ? t('file.sortAsc') + ')' : t('file.sortDesc') + ')') : t('file.sortByType')">
           <FileText :size="14" />
           <ChevronDown v-if="sortField === 'type' && sortDir === 'desc'" :size="8" :stroke-width="3" class="sort-arrow" />
           <ChevronUp v-else :size="8" :stroke-width="3" class="sort-arrow" />
         </button>
-        <button class="toolbar-btn" :class="{ active: !showHidden }" @click="$emit('toggleHidden')" title="隐藏隐藏文件">
+        <button class="toolbar-btn" :class="{ active: !showHidden }" @click="$emit('toggleHidden')" :title="t('file.hideHiddenFiles')">
           <EyeOff :size="14" />
         </button>
-        <button class="toolbar-btn" :class="{ active: isInSync }" :disabled="!currentFile?.path" @click="syncToCurrentFile" title="同步到当前文件目录">
+        <button class="toolbar-btn" :class="{ active: isInSync }" :disabled="!currentFile?.path" @click="syncToCurrentFile" :title="t('file.syncToCurrentDir')">
           <ArrowRightLeft :size="14" />
         </button>
-        <SearchInput v-model="searchQuery" placeholder="Filter files..." @dblclick="searchQuery = ''" />
+        <SearchInput v-model="searchQuery" :placeholder="t('search.defaultPlaceholder')" @dblclick="searchQuery = ''" />
       </div>
       <DirBreadcrumb :path="currentDir" @navigate="$emit('navigateDir', $event)" />
     </div>
@@ -48,12 +48,12 @@
     >
       <div v-if="dirLoading" class="dir-loading-overlay">
         <Loader :size="24" class="dir-loading-spinner" />
-        <span>加载中…</span>
+        <span>{{ t('common.loading') }}</span>
       </div>
       <template v-else>
       <div v-if="filteredEntries.length === 0" class="empty-state">
         <Folder :size="48" />
-        <p>{{ currentDir ? 'This directory is empty.' : 'No supported files found.' }}</p>
+        <p>{{ currentDir ? t('file.emptyDir') : t('file.noFiles') }}</p>
       </div>
 
       <template v-for="entry in visibleEntries" :key="entry.name">
@@ -84,7 +84,7 @@
         </div>
       </template>
       <div v-if="hasMoreEntries" class="truncate-hint">
-        仅展示前 {{ MAX_VISIBLE_ENTRIES }} 项（共 {{ filteredEntries.length }} 项），请使用搜索精确定位
+        {{ t('file.truncateHint', { max: MAX_VISIBLE_ENTRIES, total: filteredEntries.length }) }}
       </div>
       </template>
     </div>
@@ -94,43 +94,43 @@
       <div v-if="ctxMenu.visible" class="context-menu visible" :style="{ left: ctxMenu.x + 'px', top: ctxMenu.y + 'px' }" @click.stop>
         <div class="context-menu-item" @click.stop="doCopy">
           <Copy :size="14" />
-          复制
+          {{ t('file.context.copy') }}
         </div>
         <div class="context-menu-item" @click.stop="doCut">
           <Scissors :size="14" />
-          剪切
+          {{ t('file.context.cut') }}
         </div>
         <div class="context-menu-item" :class="{ disabled: !clipboard.entry }" @click.stop="clipboard.entry && doPaste()">
           <ClipboardPaste :size="14" />
-          粘贴
+          {{ t('file.context.paste') }}
         </div>
         <div class="context-menu-divider" />
         <div class="context-menu-item" @click.stop="doNewFile">
           <FilePlus :size="14" />
-          新建文件
+          {{ t('file.context.newFile') }}
         </div>
         <div class="context-menu-item" @click.stop="doNewFolder">
           <FolderPlus :size="14" />
-          新建文件夹
+          {{ t('file.context.newFolder') }}
         </div>
         <div class="context-menu-divider" v-if="ctxMenu.entry" />
         <div class="context-menu-item" v-if="ctxMenu.entry" @click.stop="doRename">
           <Pencil :size="14" />
-          重命名
+          {{ t('common.rename') }}
         </div>
         <div class="context-menu-item" v-if="ctxMenu.entry && ctxMenu.entry.type !== 'dir'" @click.stop="doDownload">
           <Download :size="14" />
-          下载
+          {{ t('common.download') }}
         </div>
         <div class="context-menu-item danger" v-if="ctxMenu.entry" @click.stop="doDelete">
           <Trash2 :size="14" />
-          删除
+          {{ t('common.delete') }}
         </div>
         <template v-if="ctxMenu.entry && ctxMenu.entry.type === 'dir'">
           <div class="context-menu-divider" />
           <div class="context-menu-item" @click.stop="doOpenAsProject">
             <FolderOpen :size="14" />
-            打开为项目
+            {{ t('file.context.openAsProject') }}
           </div>
         </template>
       </div>
@@ -141,6 +141,7 @@
 
 <script setup>
 import { ref, computed, reactive, inject, nextTick, Teleport, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { Folder, ArrowDownAz, ChevronDown, ChevronUp, Clock, FileText, EyeOff, ArrowRightLeft, Loader, FileImage, FileMusic, ChevronRight, Copy, Scissors, ClipboardPaste, FilePlus, FolderPlus, Pencil, Download, Trash2, FolderOpen } from 'lucide-vue-next'
 import BottomSheet from '@/components/common/BottomSheet.vue'
 import HeaderMarquee from '@/components/common/HeaderMarquee.vue'
@@ -153,6 +154,7 @@ import DirBreadcrumb from './DirBreadcrumb.vue'
 
 const toast = inject('toast', null)
 const { isAppMode } = useAppMode()
+const { t } = useI18n()
 
 const props = defineProps({
     entries: Array,
@@ -186,7 +188,7 @@ function copyProjectPath() {
     ta.select()
     document.execCommand('copy')
     document.body.removeChild(ta)
-    if (toast) toast.show('已复制', { icon: '📋', type: 'success', duration: 1500 })
+    if (toast) toast.show(t('common.copied'), { icon: '📋', type: 'success', duration: 1500 })
 }
 
 const searchQuery = ref('')
@@ -201,7 +203,7 @@ function syncToCurrentFile() {
     if (!props.currentFile?.path) return
     const targetDir = dirName(props.currentFile.path)
     if (targetDir === props.currentDir) {
-        if (toast) toast.show('已在当前文件目录', { icon: '📍', type: 'success', duration: 1500 })
+        if (toast) toast.show(t('file.alreadyInDir'), { icon: '📍', type: 'success', duration: 1500 })
         return
     }
     emit('navigateDir', targetDir)
@@ -259,7 +261,7 @@ async function doCopy() {
     clipboard.entry = ctxMenu.entry
     clipboard.isCut = false
     ctxMenu.visible = false
-    if (toast) toast.show('已复制', { icon: '📋', type: 'success', duration: 1500 })
+    if (toast) toast.show(t('common.copied'), { icon: '📋', type: 'success', duration: 1500 })
 }
 
 async function doCut() {
@@ -267,7 +269,7 @@ async function doCut() {
     clipboard.entry = ctxMenu.entry
     clipboard.isCut = true
     ctxMenu.visible = false
-    if (toast) toast.show('已剪切', { icon: '✂️', type: 'success', duration: 1500 })
+    if (toast) toast.show(t('file.toast.cutDone'), { icon: '✂️', type: 'success', duration: 1500 })
 }
 
 async function doPaste() {
@@ -288,19 +290,19 @@ async function doPaste() {
                 clipboard.entry = null
             }
             emit('refresh')
-            if (toast) toast.show(clipboard.isCut ? '已移动' : '已复制', { icon: '✅', type: 'success', duration: 1500 })
+            if (toast) toast.show(clipboard.isCut ? t('file.toast.moved') : t('common.copied'), { icon: '✅', type: 'success', duration: 1500 })
         } else {
             const err = await resp.json()
-            if (toast) toast.show('操作失败: ' + (err.error || ''), { icon: '❌', type: 'error', duration: 2000 })
+            if (toast) toast.show(t('file.toast.operationFailedDetail', { error: err.error || '' }), { icon: '❌', type: 'error', duration: 2000 })
         }
     } catch (err) {
-        if (toast) toast.show('操作失败', { icon: '❌', type: 'error', duration: 2000 })
+        if (toast) toast.show(t('common.operationFailed'), { icon: '❌', type: 'error', duration: 2000 })
     }
 }
 
 async function doNewFile() {
     ctxMenu.visible = false
-    const name = prompt('输入文件名：')
+    const name = prompt(t('file.prompt.fileName'))
     if (!name || !name.trim()) return
     const dir = getDestDir(ctxMenu.entry)
     try {
@@ -311,19 +313,19 @@ async function doNewFile() {
         })
         if (resp.ok) {
             emit('refresh')
-            if (toast) toast.show('文件已创建', { icon: '📄', type: 'success', duration: 1500 })
+            if (toast) toast.show(t('file.toast.fileCreated'), { icon: '📄', type: 'success', duration: 1500 })
         } else {
             const err = await resp.json()
-            if (toast) toast.show('创建失败: ' + (err.error || ''), { icon: '❌', type: 'error', duration: 2000 })
+            if (toast) toast.show(t('file.toast.createFailedDetail', { error: err.error || '' }), { icon: '❌', type: 'error', duration: 2000 })
         }
     } catch (err) {
-        if (toast) toast.show('创建失败', { icon: '❌', type: 'error', duration: 2000 })
+        if (toast) toast.show(t('file.toast.createFailed'), { icon: '❌', type: 'error', duration: 2000 })
     }
 }
 
 async function doNewFolder() {
     ctxMenu.visible = false
-    const name = prompt('输入文件夹名：')
+    const name = prompt(t('file.prompt.folderName'))
     if (!name || !name.trim()) return
     const dir = getDestDir(ctxMenu.entry)
     try {
@@ -334,13 +336,13 @@ async function doNewFolder() {
         })
         if (resp.ok) {
             emit('refresh')
-            if (toast) toast.show('文件夹已创建', { icon: '📁', type: 'success', duration: 1500 })
+            if (toast) toast.show(t('file.toast.folderCreated'), { icon: '📁', type: 'success', duration: 1500 })
         } else {
             const err = await resp.json()
-            if (toast) toast.show('创建失败: ' + (err.error || ''), { icon: '❌', type: 'error', duration: 2000 })
+            if (toast) toast.show(t('file.toast.createFailedDetail', { error: err.error || '' }), { icon: '❌', type: 'error', duration: 2000 })
         }
     } catch (err) {
-        if (toast) toast.show('创建失败', { icon: '❌', type: 'error', duration: 2000 })
+        if (toast) toast.show(t('file.toast.createFailed'), { icon: '❌', type: 'error', duration: 2000 })
     }
 }
 
@@ -451,17 +453,17 @@ function doOpenAsProject() {
             resp.text().then(text => {
                 let msg = text
                 try { msg = JSON.parse(text).error || msg } catch (_) {}
-                if (toast) toast.show('切换项目失败: ' + msg, { icon: '❌', type: 'error', duration: 2000 })
+                if (toast) toast.show(t('file.toast.switchProjectFailed', { error: msg }), { icon: '❌', type: 'error', duration: 2000 })
             })
         }
     }).catch(() => {
-        if (toast) toast.show('切换项目失败', { icon: '❌', type: 'error', duration: 2000 })
+        if (toast) toast.show(t('file.toast.switchProjectFailedShort'), { icon: '❌', type: 'error', duration: 2000 })
     })
 }
 
 function doRename() {
     if (!ctxMenu.entry) return
-    const newName = prompt('输入新名称：', ctxMenu.entry.name)
+    const newName = prompt(t('file.prompt.newName'), ctxMenu.entry.name)
     if (!newName || newName === ctxMenu.entry.name) { ctxMenu.visible = false; return }
     emit('rename', { path: ctxMenu.entry.path, name: newName })
     ctxMenu.visible = false

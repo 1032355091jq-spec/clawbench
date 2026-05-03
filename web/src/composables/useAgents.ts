@@ -1,5 +1,6 @@
 import { ref } from 'vue'
 import { apiGet } from '@/utils/api.ts'
+import { gt } from '@/composables/useLocale'
 
 // Singleton state — shared across the whole app
 const agents = ref<any[]>([])
@@ -29,7 +30,7 @@ function getAgentIcon(agentId: string): string {
 
 function getAgentName(agentId: string): string {
     const agent = agents.value.find(a => a.id === agentId)
-    return agent ? agent.name : (agentId || '全能助手')
+    return agent ? agent.name : (agentId || gt('agents.defaultAssistant'))
 }
 
 export function useAgents() {

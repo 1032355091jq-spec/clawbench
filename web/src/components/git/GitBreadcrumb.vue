@@ -5,7 +5,7 @@
       class="git-crumb"
       :class="{ current: currentView === 'commits' }"
       @click="currentView !== 'commits' && $emit('navigate', 'commits')"
-    >{{ mode === 'file' ? '文件历史' : '提交列表' }}</span>
+    >{{ mode === 'file' ? t('git.breadcrumb.fileHistory') : t('git.breadcrumb.commitList') }}</span>
 
     <!-- Commit crumb (shown when a commit is selected) -->
     <template v-if="selectedCommit">
@@ -21,15 +21,17 @@
     <template v-if="selectedFilePath && mode === 'project' && currentView === 'diff'">
       <span class="git-crumb-sep">›</span>
       <span class="git-crumb current">{{ fileName }}</span>
-      <button class="git-file-open-btn" @click.stop="$emit('open-file', selectedFilePath)" title="打开文件" v-html="FILE_OPEN_ICON_SVG"></button>
+      <button class="git-file-open-btn" @click.stop="$emit('open-file', selectedFilePath)" :title="t('git.breadcrumb.openFile')" v-html="FILE_OPEN_ICON_SVG"></button>
     </template>
   </div>
 </template>
 
 <script setup>
 import { computed } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { baseName } from '@/utils/helpers.ts'
 import { FILE_OPEN_ICON_SVG } from '@/composables/useFilePathAnnotation.ts'
+const { t } = useI18n()
 
 const props = defineProps({
   mode: { type: String, default: 'project' },
@@ -42,7 +44,7 @@ defineEmits(['navigate', 'open-file'])
 
 const commitLabel = computed(() => {
   if (!props.selectedCommit) return ''
-  if (props.selectedCommit.isWT) return '工作区'
+  if (props.selectedCommit.isWT) return t('git.breadcrumb.workingTree')
   return props.selectedCommit.sha.slice(0, 7)
 })
 

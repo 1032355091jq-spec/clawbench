@@ -5,12 +5,12 @@
         <img src="/assets/logo-180.png" alt="ClawBench" />
       </div>
       <div class="prompt-text">
-        <h3>安装 ClawBench</h3>
-        <p>添加到主屏幕，享受更好的体验</p>
+        <h3>{{ t('pwa.installTitle') }}</h3>
+        <p>{{ t('pwa.installDescription') }}</p>
       </div>
       <div class="prompt-actions">
-        <button class="btn-install" @click="handleInstall">安装</button>
-        <button class="btn-dismiss" @click="dismissPrompt">稍后</button>
+        <button class="btn-install" @click="handleInstall">{{ t('pwa.install') }}</button>
+        <button class="btn-dismiss" @click="dismissPrompt">{{ t('pwa.later') }}</button>
       </div>
     </div>
   </div>
@@ -18,20 +18,23 @@
   <!-- iOS 安装提示 -->
   <div v-if="showIOSPrompt" class="ios-install-guide">
     <div class="guide-content">
-      <h3>安装到主屏幕</h3>
+      <h3>{{ t('pwa.iosInstallTitle') }}</h3>
       <ol>
-        <li>点击底部的<span class="icon-share">↑</span>分享按钮</li>
-        <li>向下滚动，点击"添加到主屏幕"</li>
-        <li>点击右上角"添加"</li>
+        <li>{{ t('pwa.iosStep1Part1') }}<span class="icon-share">↑</span>{{ t('pwa.iosStep1Part2') }}</li>
+        <li>{{ t('pwa.iosStep2') }}</li>
+        <li>{{ t('pwa.iosStep3') }}</li>
       </ol>
-      <button @click="closeIOSGuide">知道了</button>
+      <button @click="closeIOSGuide">{{ t('pwa.gotIt') }}</button>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { pwaInstallManager } from '@/utils/pwa-install'
+
+const { t } = useI18n()
 
 const showPrompt = ref(false)
 const showIOSPrompt = ref(false)

@@ -1,5 +1,6 @@
 import { ref, computed } from 'vue'
 import { useAgents } from '@/composables/useAgents.ts'
+import { gt } from '@/composables/useLocale'
 
 // ───────────────────────────────────────────────────────────
 // Module-level singleton state — shared across the whole app.
@@ -85,7 +86,7 @@ const agentHeaderTitle = computed(() => {
   const { agents, getAgentName } = useAgents()
   const agent = agents.value.find(a => a.id === currentAgentId.value)
   if (agent) return `${agent.icon} ${agent.name}`
-  return currentAgentId.value ? `${getAgentName(currentAgentId.value)}` : 'AI 对话'
+  return currentAgentId.value ? `${getAgentName(currentAgentId.value)}` : gt('chat.session.aiDialog')
 })
 
 // ───────────────────────────────────────────────────────────

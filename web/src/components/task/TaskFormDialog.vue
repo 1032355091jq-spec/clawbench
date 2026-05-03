@@ -1,29 +1,29 @@
 <template>
-  <ModalDialog :open="open" :title="mode === 'create' ? '新建定时任务' : '编辑定时任务'" @close="$emit('close')">
+  <ModalDialog :open="open" :title="mode === 'create' ? t('task.form.createTitle') : t('task.form.editTitle')" @close="$emit('close')">
     <template #header>
       <Clock :size="16" class="modal-header-icon" />
-      <span class="modal-title">{{ mode === 'create' ? '新建定时任务' : '编辑定时任务' }}</span>
+      <span class="modal-title">{{ mode === 'create' ? t('task.form.createTitle') : t('task.form.editTitle') }}</span>
     </template>
 
     <div class="details-content">
-      <div v-if="saving" class="saving-indicator">保存中...</div>
+      <div v-if="saving" class="saving-indicator">{{ t('task.form.saving') }}</div>
 
       <!-- Task name -->
       <div class="form-group">
-        <label class="form-label">任务名称 <span class="required">*</span></label>
-        <input type="text" class="form-input" v-model="form.name" placeholder="任务名称" />
+        <label class="form-label">{{ t('task.form.taskName') }} <span class="required">*</span></label>
+        <input type="text" class="form-input" v-model="form.name" :placeholder="t('task.form.taskNamePlaceholder')" />
         <div v-if="errors.name" class="form-error">{{ errors.name }}</div>
       </div>
 
       <!-- Frequency preset -->
       <div class="form-group">
-        <label class="form-label">执行频率</label>
+        <label class="form-label">{{ t('task.form.frequency') }}</label>
         <div class="preset-buttons">
           <button v-for="p in presets" :key="p.value" class="preset-btn" :class="{ active: preset === p.value }" @click="setPreset(p.value)">
             {{ p.label }}
           </button>
           <button class="preset-btn" :class="{ active: preset === 'custom' }" @click="setPreset('custom')">
-            自定义
+            {{ t('task.form.custom') }}
           </button>
         </div>
       </div>
@@ -32,7 +32,7 @@
       <div v-if="preset !== 'custom'" class="form-group time-selectors">
         <!-- Hourly: minute only -->
         <div v-if="preset === 'hourly'" class="time-row">
-          <span class="time-label">分钟</span>
+          <span class="time-label">{{ t('task.form.minute') }}</span>
           <select class="form-select time-select" v-model.number="minute">
             <option v-for="m in 60" :key="m - 1" :value="m - 1">{{ String(m - 1).padStart(2, '0') }}</option>
           </select>
@@ -70,12 +70,12 @@
         <!-- Monthly: month day + hour + minute -->
         <div v-if="preset === 'monthly'" class="time-column">
           <div class="time-row">
-            <span class="time-label">日期</span>
+            <span class="time-label">{{ t('task.form.date') }}</span>
             <select class="form-select time-select" v-model.number="monthDay">
               <option v-for="d in 31" :key="d" :value="d">{{ d }}</option>
             </select>
           </div>
-          <div v-if="monthDay >= 29" class="form-hint warning">该月无此日期时将跳过本次执行</div>
+          <div v-if="monthDay >= 29" class="form-hint warning">{{ t('task.form.monthDaySkipHint') }}</div>
           <div class="time-row">
             <select class="form-select time-select" v-model.number="hour">
               <option v-for="h in 24" :key="h - 1" :value="h - 1">{{ String(h - 1).padStart(2, '0') }}</option>
@@ -90,7 +90,7 @@
 
       <!-- Generated cron expression -->
       <div class="form-group">
-        <label class="form-label">Cron 表达式</label>
+        <label class="form-label">{{ t('task.form.cronExpression') }}</label>
         <input
           v-if="preset === 'custom'"
           type="text"
@@ -102,15 +102,15 @@
           <code>{{ generatedCron }}</code>
           <span class="cron-humanize">{{ humanizeCron(generatedCron) }}</span>
         </div>
-        <div v-if="preset === 'custom'" class="form-hint">标准 5 字段: 分 时 日 月 周</div>
+        <div v-if="preset === 'custom'" class="form-hint">{{ t('task.form.cronHint') }}</div>
         <div v-if="errors.cronExpr" class="form-error">{{ errors.cronExpr }}</div>
       </div>
 
       <!-- Agent -->
       <div class="form-group">
-        <label class="form-label">执行 Agent <span class="required">*</span></label>
+        <label class="form-label">{{ t('task.form.executeAgent') }} <span class="required">*</span></label>
         <select class="form-select" v-model="form.agentId">
-          <option value="" disabled>选择 Agent</option>
+          <option value="" disabled>{{ t('task.form.selectAgent') }}</option>
           <option v-for="agent in agents" :key="agent.id" :value="agent.id">
             {{ agent.icon }} {{ agent.name }}
           </option>
@@ -120,52 +120,55 @@
 
       <!-- Repeat mode -->
       <div class="form-group">
-        <label class="form-label">执行模式</label>
+        <label class="form-label">{{ t('task.form.repeatMode') }}</label>
         <div class="radio-group">
           <label class="radio-label">
             <input type="radio" v-model="form.repeatMode" value="once" />
-            <span>单次执行</span>
+            <span>{{ t('task.form.repeatOnce') }}</span>
           </label>
           <label class="radio-label">
             <input type="radio" v-model="form.repeatMode" value="limited" />
-            <span>限制次数</span>
+            <span>{{ t('task.form.repeatLimited') }}</span>
           </label>
           <label class="radio-label">
             <input type="radio" v-model="form.repeatMode" value="unlimited" />
-            <span>不限次数</span>
+            <span>{{ t('task.form.repeatUnlimited') }}</span>
           </label>
         </div>
       </div>
 
       <!-- Max runs (limited mode) -->
       <div v-if="form.repeatMode === 'limited'" class="form-group">
-        <label class="form-label">最大执行次数</label>
+        <label class="form-label">{{ t('task.form.maxRuns') }}</label>
         <input type="number" class="form-input" v-model.number="form.maxRuns" min="1" />
       </div>
 
       <!-- Prompt -->
       <div class="form-group">
-        <label class="form-label">提示词 (Prompt) <span class="required">*</span></label>
-        <textarea class="form-textarea" v-model="form.prompt" rows="10" placeholder="输入要发送给AI的提示词..."></textarea>
+        <label class="form-label">{{ t('task.form.prompt') }} <span class="required">*</span></label>
+        <textarea class="form-textarea" v-model="form.prompt" rows="10" :placeholder="t('task.form.promptPlaceholder')"></textarea>
         <div v-if="errors.prompt" class="form-error">{{ errors.prompt }}</div>
       </div>
     </div>
 
     <template #footer>
       <button class="btn btn-primary" :disabled="saving" @click="submit">
-        {{ mode === 'create' ? '创建' : '保存' }}
+        {{ mode === 'create' ? t('task.form.create') : t('task.form.save') }}
       </button>
-      <button class="btn btn-secondary" @click="$emit('close')">取消</button>
+      <button class="btn btn-secondary" @click="$emit('close')">{{ t('common.cancel') }}</button>
     </template>
   </ModalDialog>
 </template>
 
 <script setup>
 import { ref, computed, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { Clock } from 'lucide-vue-next'
 import ModalDialog from '@/components/common/ModalDialog.vue'
 import { useAgents } from '@/composables/useAgents.ts'
 import { humanizeCron } from '@/utils/helpers.ts'
+
+const { t } = useI18n()
 
 const props = defineProps({
   open: Boolean,
@@ -179,14 +182,14 @@ const saving = ref(false)
 const { agents, loadAgents } = useAgents()
 
 // Frequency preset
-const presets = [
-  { value: 'hourly', label: '每小时' },
-  { value: 'daily', label: '每天' },
-  { value: 'weekly', label: '每周' },
-  { value: 'monthly', label: '每月' },
-]
+const presets = computed(() => [
+  { value: 'hourly', label: t('task.form.presets.hourly') },
+  { value: 'daily', label: t('task.form.presets.daily') },
+  { value: 'weekly', label: t('task.form.presets.weekly') },
+  { value: 'monthly', label: t('task.form.presets.monthly') },
+])
 
-const weekdayLabels = ['日', '一', '二', '三', '四', '五', '六']
+const weekdayLabels = computed(() => t('task.form.weekdays'))
 
 const preset = ref('daily')
 const minute = ref(0)
@@ -277,11 +280,11 @@ function detectPreset(cron) {
 // Validate form
 function validate() {
   const e = {}
-  if (!form.value.name.trim()) e.name = '请输入任务名称'
-  if (!form.value.agentId) e.agentId = '请选择执行 Agent'
-  if (!form.value.prompt.trim()) e.prompt = '请输入提示词'
+  if (!form.value.name.trim()) e.name = t('task.form.nameRequired')
+  if (!form.value.agentId) e.agentId = t('task.form.agentRequired')
+  if (!form.value.prompt.trim()) e.prompt = t('task.form.promptRequired')
   if (preset.value === 'custom' && !customCron.value.trim()) {
-    e.cronExpr = '请输入 Cron 表达式'
+    e.cronExpr = t('task.form.cronRequired')
   }
   errors.value = e
   return Object.keys(e).length === 0
@@ -320,13 +323,13 @@ async function submit() {
 
     if (!resp.ok) {
       const err = await resp.json()
-      errors.value = { cronExpr: err.error || '操作失败' }
+      errors.value = { cronExpr: err.error || t('task.form.operationFailed') }
       return
     }
 
     emit('saved')
   } catch (err) {
-    errors.value = { cronExpr: err.message || '网络错误' }
+    errors.value = { cronExpr: err.message || t('common.networkError') }
   } finally {
     saving.value = false
   }

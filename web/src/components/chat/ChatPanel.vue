@@ -1,5 +1,5 @@
 <template>
-  <BottomSheet ref="bottomSheetRef" :open="open" title="AI 对话" @close="$emit('close')">
+  <BottomSheet ref="bottomSheetRef" :open="open" :title="t('chat.title')" @close="$emit('close')">
     <template #header>
       <MessageSquare :size="16" class="bs-header-icon" />
       <span class="bs-header-title">{{ session.agentHeaderTitle.value }}</span>
@@ -136,6 +136,7 @@
 
 <script setup>
 import { ref, computed, watch, onUnmounted, onMounted, inject, provide, toRef, nextTick } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { MessageSquare } from 'lucide-vue-next'
 import BottomSheet from '@/components/common/BottomSheet.vue'
 import HeaderMarquee from '@/components/common/HeaderMarquee.vue'
@@ -159,6 +160,8 @@ import { playNotificationSound } from '@/composables/useNotificationSound.ts'
 import { useAutoSpeech } from '@/composables/useAutoSpeech.ts'
 import { useSwipeSession } from '@/composables/useSwipeSession.ts'
 import { store } from '@/stores/app.ts'
+
+const { t } = useI18n()
 
 const props = defineProps({
     open: Boolean,
@@ -450,9 +453,9 @@ async function sendMessageNow(text, filePaths, files) {
     } catch (err) {
         stream.stopPolling()
         stream.disconnectStream()
-        messages.value.push({ role: 'assistant', content: `错误: ${err.message}`, file_path: '' })
+        messages.value.push({ role: 'assistant', content: t('chat.sendError', { error: err.message }), file_path: '' })
         loading.value = false
-        toast.show('发送失败，请重试', { icon: '⚠️', type: 'error' })
+        toast.show(t('toast.sendFailed'), { icon: '⚠️', type: 'error' })
         // Clear session ID on error to prevent using invalid session
         if (err.message?.includes('Session backend not found') || err.message?.includes('session not found')) {
             identity.currentSessionId.value = ''

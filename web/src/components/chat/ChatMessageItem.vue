@@ -5,12 +5,12 @@
     <div ref="wrapperRef" class="msg-content-wrapper" :class="{ collapsed }" :style="collapsed ? { maxHeight: store.state.chatCollapsedHeight + 'px' } : {}">
       <div v-if="msg.role === 'user' && msg.files && msg.files.length > 0 && !hasImagesInContent(msg.content)" class="chat-files">
         <template v-for="(f, idx) in msg.files" :key="idx">
-          <span v-if="isUploadPath(normalizeFileEntry(f).path)" class="chat-file-attachment attachment-upload" @click="$emit('file-tag-click', normalizeFileEntry(f).path)" title="打开文件">
+          <span v-if="isUploadPath(normalizeFileEntry(f).path)" class="chat-file-attachment attachment-upload" @click="$emit('file-tag-click', normalizeFileEntry(f).path)" :title="t('chat.attach.openFile')">
             <FileImage v-if="isImageFile(normalizeFileEntry(f).path)" :size="12" :stroke-width="1.5" />
             <FileText v-else :size="12" :stroke-width="1.5" />
             <span class="chat-file-name">{{ getFileName(normalizeFileEntry(f).path) }}</span>
           </span>
-          <span v-else class="chat-file-attachment attachment-ref" @click="$emit('file-tag-click', normalizeFileEntry(f).path)" title="打开文件">
+          <span v-else class="chat-file-attachment attachment-ref" @click="$emit('file-tag-click', normalizeFileEntry(f).path)" :title="t('chat.attach.openFile')">
             <Paperclip :size="12" :stroke-width="1.5" />
             <span class="chat-file-name">{{ getFileName(normalizeFileEntry(f).path) }}</span>
           </span>
@@ -49,7 +49,7 @@
       <div class="msg-collapse-gradient"></div>
       <button class="msg-expand-btn">
         <ChevronDown :size="14" />
-        展开全文
+        {{ t('chat.message.expandFull') }}
       </button>
     </div>
 
@@ -57,7 +57,7 @@
     <div v-if="!collapsed && canCollapse" class="msg-collapse-action">
       <button class="msg-collapse-btn" @click="handleCollapse">
         <ChevronUp :size="14" />
-        收起
+        {{ t('chat.message.collapse') }}
       </button>
     </div>
 
@@ -73,20 +73,20 @@
           <!-- Generating states: summarizing / synthesizing -->
           <template v-if="autoSpeech.isGeneratingText(msg.id)">
             <Clock :size="14" class="speak-spinner" />
-            <span>{{ autoSpeech.getPhaseLabel(msg.id) }}</span>
+            <span>{{ autoSpeech.getPhaseLabel(msg.id) ? t('chat.speech.' + autoSpeech.getPhaseLabel(msg.id)) : '' }}</span>
           </template>
           <!-- Playing state -->
           <template v-else-if="autoSpeech.isPlayingAudio(msg.id)">
             <Pause :size="14" />
-            <span>朗读中</span>
+            <span>{{ t('chat.message.speaking') }}</span>
           </template>
           <!-- Default idle state -->
           <template v-else>
             <Volume2 :size="14" />
-            <span>朗读</span>
+            <span>{{ t('chat.message.readAloud') }}</span>
           </template>
         </button>
-        <button v-if="!msg.streaming" class="chat-info-btn" @click="$emit('show-metadata', msg)" title="查看详情">
+        <button v-if="!msg.streaming" class="chat-info-btn" @click="$emit('show-metadata', msg)" :title="t('chat.message.viewDetails')">
           <Info :size="14" />
         </button>
       </div>
@@ -96,7 +96,7 @@
       <span class="chat-meta-info">
         <span v-if="msg.createdAt">{{ formatMessageTime(msg.createdAt) }}</span>
       </span>
-      <button class="chat-info-btn chat-info-btn-user" @click="$emit('show-metadata', msg)" title="查看详情">
+      <button class="chat-info-btn chat-info-btn-user" @click="$emit('show-metadata', msg)" :title="t('chat.message.viewDetails')">
         <Info :size="14" />
       </button>
     </div>
@@ -106,11 +106,14 @@
 
 <script setup>
 import { ref, inject, computed, watch, nextTick, onMounted } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { FileImage, FileText, Paperclip, ChevronDown, ChevronUp, Clock, Pause, Volume2, Info } from 'lucide-vue-next'
 import { baseName } from '@/utils/helpers.ts'
 import { store } from '@/stores/app.ts'
 import ContentBlocks from './ContentBlocks.vue'
 
+
+const { t } = useI18n()
 
 const props = defineProps({
   msg: Object,

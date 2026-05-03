@@ -5,9 +5,9 @@
       <div class="chat-action-group">
         <button class="chat-action-btn" :class="{ 'has-unread': chatUnread, 'has-running': chatRunning && !chatUnread }"
           @click="$emit('open-session-tab', 'sessions')"
-          title="会话">
+          :title="t('chat.actions.session')">
           <MessageSquare :size="14" />
-          <span class="chat-action-label">会话</span>
+          <span class="chat-action-label">{{ t('chat.actions.session') }}</span>
         </button>
         <button class="chat-action-btn"
           @click="handleCreateClick"
@@ -16,28 +16,28 @@
           @touchend="onCreateTouchEnd"
           @touchcancel="onCreateTouchCancel"
           @contextmenu.prevent="onCreateContextMenu"
-          title="选择智能体（长按直接新建）">
+          :title="t('chat.create.selectAgentOrLongPress')">
           <Plus :size="14" />
-          <span class="chat-action-label">新建</span>
+          <span class="chat-action-label">{{ t('chat.actions.newSession') }}</span>
         </button>
         <button class="chat-action-btn chat-action-btn-delete" :class="{ disabled: !currentSessionId }"
           @click="handleDelete"
-          :title="currentSessionId ? '删除当前会话' : '无会话可删除'">
+          :title="currentSessionId ? t('chat.actions.deleteCurrentSession') : t('chat.actions.noSessionToDelete')">
           <Trash2 :size="14" />
-          <span class="chat-action-label">删除</span>
+          <span class="chat-action-label">{{ t('chat.actions.deleteSession') }}</span>
         </button>
       </div>
       <button class="chat-action-btn" :class="{ 'has-unread': taskUnread }"
         @click="$emit('open-session-tab', 'tasks')"
-        title="定时任务">
+        :title="t('chat.actions.scheduledTasks')">
         <Clock :size="14" />
-        <span class="chat-action-label">定时</span>
+        <span class="chat-action-label">{{ t('chat.actions.scheduled') }}</span>
       </button>
       <button class="chat-action-btn" :class="{ active: autoSpeechEnabled }"
         @click="$emit('toggle-auto-speech')"
-        title="自动朗读">
+        :title="t('chat.actions.autoSpeech')">
         <Volume2 :size="14" />
-        <span class="chat-action-label">朗读</span>
+        <span class="chat-action-label">{{ t('chat.actions.readAloud') }}</span>
       </button>
     </div>
     <!-- Input container -->
@@ -50,7 +50,7 @@
       <!-- Drop overlay -->
       <div v-if="isDragOver" class="drop-overlay">
         <Upload :size="24" :stroke-width="1.5" />
-        <span>松开上传文件</span>
+        <span>{{ t('chat.attach.dropToUpload') }}</span>
       </div>
       <!-- Upload progress bars -->
       <div v-if="uploadingFiles.length > 0" class="chat-upload-progress">
@@ -60,45 +60,45 @@
       </div>
       <!-- Attachment tags -->
       <div v-if="attachedFiles.length > 0 || pendingFiles.length > 0" class="chat-attachment-tags">
-        <span v-for="(filePath, idx) in attachedFiles" :key="'att-' + filePath" class="chat-file-attachment attachment-ref" @click="$emit('file-tag-click', filePath)" title="打开文件">
+        <span v-for="(filePath, idx) in attachedFiles" :key="'att-' + filePath" class="chat-file-attachment attachment-ref" @click="$emit('file-tag-click', filePath)" :title="t('chat.attach.openFile')">
           <Paperclip :size="12" :stroke-width="1.5" />
           <span class="chat-file-name">{{ getFileName(filePath) }}</span>
-          <button class="attachment-tag-remove" @click.stop="$emit('remove-attached', idx)" title="移除">×</button>
+          <button class="attachment-tag-remove" @click.stop="$emit('remove-attached', idx)" :title="t('common.remove')">×</button>
         </span>
         <span v-for="(f, idx) in pendingFiles" :key="'upload-' + idx" class="chat-file-attachment attachment-upload" :class="{ 'is-uploading': f.uploading }">
           <FileImage v-if="f.isImage" :size="12" :stroke-width="1.5" />
           <FileText v-else :size="12" :stroke-width="1.5" />
-          <span class="chat-file-name">{{ getFileName(f.path) || '上传中...' }}</span>
+          <span class="chat-file-name">{{ getFileName(f.path) || t('chat.attach.uploading') }}</span>
           <span v-if="f.uploading" class="attachment-progress-pct">{{ f.progress }}%</span>
-          <button class="attachment-tag-remove" @click.stop="$emit('remove-file', idx)" title="移除">×</button>
+          <button class="attachment-tag-remove" @click.stop="$emit('remove-file', idx)" :title="t('common.remove')">×</button>
         </span>
       </div>
       <!-- Input row: attach + clear + textarea + stop + send -->
       <div class="chat-input-row">
         <div class="attach-menu-wrapper" ref="attachMenuRef">
-          <button class="chat-attach-btn" @click.stop="toggleAttachMenu" :disabled="inputDisabled" title="附件">
+          <button class="chat-attach-btn" @click.stop="toggleAttachMenu" :disabled="inputDisabled" :title="t('chat.actions.attachment')">
             <Paperclip :size="16" />
           </button>
         </div>
-        <button v-if="inputText && !loading" class="chat-clear-btn" @click="inputText = ''; collapseTextarea()" title="清空输入">
+        <button v-if="inputText && !loading" class="chat-clear-btn" @click="inputText = ''; collapseTextarea()" :title="t('chat.input.clearInput')">
           <XCircle :size="16" />
         </button>
         <textarea class="chat-textarea"
           ref="textareaRef"
           v-model="inputText"
           :disabled="inputDisabled"
-          :placeholder="pendingFiles.length > 0 ? '添加描述（可选）...' : loading ? '输入消息加入队列...' : '输入消息...'"
+          :placeholder="pendingFiles.length > 0 ? t('chat.input.placeholderOptional') : loading ? t('chat.input.placeholderQueue') : t('chat.input.placeholder')"
           rows="1"
           @keydown.enter.exact.prevent="$emit('send', inputText.trim())"
           @input="autoResizeTextarea"
           @blur="collapseTextarea"></textarea>
-        <button v-if="!stopPrimed" class="chat-send-btn" :class="{ disabled: !hasInputContent && !hasQuickSend, queued: loading }" @click.stop="handleSendClick" :title="loading ? '加入队列' : '发送'">
+        <button v-if="!stopPrimed" class="chat-send-btn" :class="{ disabled: !hasInputContent && !hasQuickSend, queued: loading }" @click.stop="handleSendClick" :title="loading ? t('chat.input.enqueue') : t('chat.input.send')">
           <!-- Queue mode: inbox with down arrow (enqueue) -->
           <Inbox v-if="loading" :size="16" />
           <!-- Normal mode: paper plane (send) -->
           <Send v-else :size="16" />
         </button>
-        <button v-if="loading" class="chat-stop-btn" :class="{ primed: stopPrimed }" @click="handleStopClick" :title="stopPrimed ? '确认停止' : '停止生成'">
+        <button v-if="loading" class="chat-stop-btn" :class="{ primed: stopPrimed }" @click="handleStopClick" :title="stopPrimed ? t('chat.input.confirmStop') : t('chat.input.stopGenerating')">
           <Square :size="16" fill="currentColor" />
         </button>
       </div>
@@ -107,7 +107,7 @@
         <div v-if="showAttachMenu" class="attach-menu" :style="menuStyle" @click.stop>
           <!-- Current file group -->
           <template v-if="currentFile?.path && !attachedFiles.includes(currentFile.path)">
-            <div class="attach-menu-group-title">当前文件</div>
+            <div class="attach-menu-group-title">{{ t('chat.attach.currentFile') }}</div>
             <button class="attach-menu-item" @click="handleAttachFile(currentFile.path)">
               <FileText :size="14" :stroke-width="1.5" />
               <span class="attach-menu-item-name">{{ getFileName(currentFile.path) }}</span>
@@ -115,7 +115,7 @@
           </template>
           <!-- Recently referenced group -->
           <template v-if="recentReferencedFiles.length > 0">
-            <div class="attach-menu-group-title">最近引用</div>
+            <div class="attach-menu-group-title">{{ t('chat.attach.recentReferences') }}</div>
             <button v-for="item in recentReferencedFiles" :key="item.path" class="attach-menu-item" @click="handleAttachFile(item.path)">
               <FileText :size="14" :stroke-width="1.5" />
               <span class="attach-menu-item-name">{{ getFileName(item.path) }}</span>
@@ -126,14 +126,14 @@
           <div v-if="hasFileGroups" class="attach-menu-separator"></div>
           <button class="attach-menu-item" @click="handleUploadClick">
             <Upload :size="14" :stroke-width="1.5" />
-            <span>上传文件</span>
+            <span>{{ t('chat.attach.uploadFile') }}</span>
           </button>
         </div>
       </Teleport>
       <!-- Teleported quick-send menu -->
       <Teleport to="body">
         <div v-if="showQuickMenu" class="quick-send-menu" :style="quickMenuStyle" @click.stop>
-          <div class="quick-send-title">快捷发送</div>
+          <div class="quick-send-title">{{ t('chat.quickSend.title') }}</div>
           <button v-for="(value, key) in quickSend" :key="key" class="quick-send-item" @click="handleQuickSend(value)">
             {{ key }}
           </button>
@@ -145,8 +145,11 @@
 
 <script setup>
 import { ref, computed, nextTick, watch, onMounted, onBeforeUnmount } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { MessageSquare, Plus, Trash2, Clock, Volume2, Upload, Paperclip, FileImage, FileText, XCircle, Inbox, Send, Square } from 'lucide-vue-next'
 import { baseName } from '@/utils/helpers.ts'
+
+const { t } = useI18n()
 
 const props = defineProps({
   inputDisabled: Boolean,
@@ -336,7 +339,7 @@ function handleCreateClick(e) {
 
 function handleDelete() {
   if (!props.currentSessionId) return
-  if (confirm('确认删除当前会话？此操作不可撤销。')) {
+  if (confirm(t('chat.delete.confirm'))) {
     emit('delete-session')
   }
 }

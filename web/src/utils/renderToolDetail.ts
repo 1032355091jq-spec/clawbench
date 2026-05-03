@@ -6,6 +6,7 @@ import { hljs } from './globals.ts'
 import { escapeHtml } from './html.ts'
 import { detectLang, highlightLine } from './diff.ts'
 import { resolveFilePath, fileOpenButtonHtml } from '@/composables/useFilePathAnnotation.ts'
+import { gt } from '@/composables/useLocale'
 import { store } from '@/stores/app.ts'
 
 // ────────────────────────────────────────────────────────────
@@ -139,10 +140,10 @@ function renderReadPreview(input: Record<string, any>): string {
   } else {
     // No content field — show offset/limit info if present
     const parts: string[] = []
-    if (input.offset) parts.push(`从第 ${input.offset} 行`)
-    if (input.limit) parts.push(`读取 ${input.limit} 行`)
+    if (input.offset) parts.push(gt('tool.read.fromLine', { offset: input.offset }))
+    if (input.limit) parts.push(gt('tool.read.readLines', { limit: input.limit }))
     if (parts.length > 0) {
-      html += `<div class="file-preview-meta">${parts.join('，')}</div>`
+      html += `<div class="file-preview-meta">${parts.join(gt('common.listSeparator'))}</div>`
     }
   }
   html += '</div></div>'
@@ -159,7 +160,7 @@ function renderWritePreview(input: Record<string, any>): string {
   const lang = detectLang(filePath)
 
   let html = '<div class="file-write-view">'
-  html += filePathHeader(input, '<span class="file-write-badge">写入</span>')
+  html += filePathHeader(input, `<span class="file-write-badge">${gt('tool.write.badge')}</span>`)
 
   html += '<div class="file-write-body">'
   const content = input.content || ''
@@ -183,7 +184,7 @@ function renderWritePreview(input: Record<string, any>): string {
 function renderAskUserQuestion(input: Record<string, any>): string {
   const questions = input.questions
   if (!Array.isArray(questions) || questions.length === 0) {
-    return '<div class="ask-question-view"><div class="ask-question-empty">（无问题）</div></div>'
+    return `<div class="ask-question-view"><div class="ask-question-empty">${gt('tool.askUser.noQuestions')}</div></div>`
   }
 
   let html = '<div class="ask-question-view">'
@@ -226,7 +227,7 @@ function renderAskUserQuestion(input: Record<string, any>): string {
     html += '</div>'
   }
 
-  html += '<button class="ask-question-submit" disabled>提交</button>'
+  html += `<button class="ask-question-submit" disabled>${gt('tool.askUser.submit')}</button>`
   html += '</div>'
 
   return html
@@ -602,7 +603,7 @@ registerToolActionHandler('AskUserQuestion', (event, emit) => {
           ;(opt as HTMLElement).style.opacity = '0.4'
         }
       }
-      submitBtn.textContent = '已提交'
+      submitBtn.textContent = gt('tool.askUser.submitted')
       ;(submitBtn as HTMLButtonElement).disabled = true
 
       emit('send-message', answers.join('\n'))
