@@ -83,6 +83,7 @@ func setupTestEnv(t *testing.T) (*testEnv, func()) {
 			backend TEXT NOT NULL,
 			title TEXT NOT NULL,
 			agent_id TEXT DEFAULT '',
+			agent_source TEXT DEFAULT 'default',
 			model TEXT DEFAULT '',
 			created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
 			updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,

@@ -35,6 +35,7 @@ CREATE TABLE IF NOT EXISTS chat_sessions (
 	backend TEXT NOT NULL,
 	title TEXT NOT NULL,
 	agent_id TEXT DEFAULT '',
+	agent_source TEXT DEFAULT 'default',
 	model TEXT DEFAULT '',
 	created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
 	updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
@@ -95,7 +96,7 @@ func setupDB(t *testing.T) *sql.DB {
 // helperCreateSession creates a session and asserts success, returning the session ID.
 func helperCreateSession(t *testing.T, projectPath, backend, title string) string {
 	t.Helper()
-	id, err := service.CreateSession(projectPath, backend, title, "", "")
+	id, err := service.CreateSession(projectPath, backend, title, "", "", "default")
 	assert.NoError(t, err)
 	assert.NotEmpty(t, id)
 	t.Cleanup(func() {
@@ -262,7 +263,7 @@ func TestAddChatMessage_AssistantDoesNotAutoTitle(t *testing.T) {
 func TestCreateSession_UUIDFormat(t *testing.T) {
 	setupDB(t)
 
-	id, err := service.CreateSession("/project", "claude", "Test", "", "")
+	id, err := service.CreateSession("/project", "claude", "Test", "", "", "default")
 	assert.NoError(t, err)
 	assert.NotEmpty(t, id)
 
@@ -279,9 +280,9 @@ func TestCreateSession_UUIDFormat(t *testing.T) {
 func TestCreateSession_UniqueIDs(t *testing.T) {
 	setupDB(t)
 
-	id1, err := service.CreateSession("/project", "claude", "Session 1", "", "")
+	id1, err := service.CreateSession("/project", "claude", "Session 1", "", "", "default")
 	assert.NoError(t, err)
-	id2, err := service.CreateSession("/project", "claude", "Session 2", "", "")
+	id2, err := service.CreateSession("/project", "claude", "Session 2", "", "", "default")
 	assert.NoError(t, err)
 	assert.NotEqual(t, id1, id2)
 }
@@ -818,7 +819,7 @@ func TestUpdateLastRead(t *testing.T) {
 func TestGetSessionAgentID(t *testing.T) {
 	setupDB(t)
 	// Create session with agent ID
-	sid, err := service.CreateSession("/project", "claude", "Test", "my-agent", "gpt-4")
+	sid, err := service.CreateSession("/project", "claude", "Test", "my-agent", "gpt-4", "user")
 	assert.NoError(t, err)
 	assert.Equal(t, "my-agent", service.GetSessionAgentID(sid))
 }

@@ -95,7 +95,7 @@ func AIChat(w http.ResponseWriter, r *http.Request) {
 					model.WriteErrorf(w, http.StatusServiceUnavailable, "no agents available")
 					return
 				}
-				sessionID, err = service.CreateSession(projectPath, sessionBackend2, "新会话", agentID, defaultModel)
+				sessionID, err = service.CreateSession(projectPath, sessionBackend2, "新会话", agentID, defaultModel, "default")
 				if err != nil {
 					model.WriteError(w, model.Internal(fmt.Errorf("failed to create session")))
 					return
@@ -170,7 +170,7 @@ func AIChat(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		var err error
-		sessionID, err = service.CreateSession(projectPath, sessionBackend2, "新会话", agentID2, defaultModel2)
+		sessionID, err = service.CreateSession(projectPath, sessionBackend2, "新会话", agentID2, defaultModel2, "default")
 		if err != nil {
 			model.WriteError(w, model.Internal(fmt.Errorf("failed to create session")))
 			return

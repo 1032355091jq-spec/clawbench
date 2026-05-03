@@ -72,6 +72,7 @@ func InitDB() error {
 			backend TEXT NOT NULL,
 			title TEXT NOT NULL,
 			agent_id TEXT DEFAULT '',
+			agent_source TEXT DEFAULT 'default',
 			model TEXT DEFAULT '',
 			last_read_at DATETIME,
 			created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
@@ -153,6 +154,18 @@ func InitDB() error {
 	if hasExternalSessionID == 0 {
 		if _, err := DB.Exec("ALTER TABLE chat_sessions ADD COLUMN external_session_id TEXT DEFAULT ''"); err != nil {
 			return fmt.Errorf("failed to add external_session_id column: %w", err)
+		}
+	}
+
+	// Add agent_source column if it doesn't exist (tracks whether agent was default or user-selected)
+	var hasAgentSource int
+	row = DB.QueryRow("SELECT COUNT(*) FROM pragma_table_info('chat_sessions') WHERE name = 'agent_source'")
+	if err := row.Scan(&hasAgentSource); err != nil {
+		return fmt.Errorf("failed to check agent_source column: %w", err)
+	}
+	if hasAgentSource == 0 {
+		if _, err := DB.Exec("ALTER TABLE chat_sessions ADD COLUMN agent_source TEXT DEFAULT 'default'"); err != nil {
+			return fmt.Errorf("failed to add agent_source column: %w", err)
 		}
 	}
 

@@ -59,7 +59,10 @@
       >
         <span class="agent-option-icon">{{ agent.icon }}</span>
         <div class="agent-option-detail">
-          <span class="agent-option-name">{{ agent.name }}</span>
+          <span class="agent-option-name">
+            {{ agent.name }}
+            <span v-if="isDefaultAgent(agent.id)" class="agent-default-badge">⭐</span>
+          </span>
           <span class="agent-option-specialty">{{ agent.specialty }}</span>
           <div class="agent-option-tags">
             <span class="agent-tag backend-tag">{{ agent.backend }}</span>
@@ -95,7 +98,7 @@ const emit = defineEmits(['close', 'select', 'create', 'delete'])
 const bottomSheetRef = ref(null)
 const sessions = ref([])
 const loading = ref(false)
-const { agents, loadAgents, getAgentIcon, getAgentName } = useAgents()
+const { agents, loadAgents, getAgentIcon, getAgentName, isDefaultAgent } = useAgents()
 const selectedAgentId = ref('')
 const showAgentSelector = ref(false)
 // Guard against accidental clicks right after opening the agent selector
@@ -426,6 +429,12 @@ watch(() => props.open, async (val) => {
   font-size: 13px;
   color: var(--text-primary, #1a1a1a);
   font-weight: 500;
+}
+
+.agent-default-badge {
+  font-size: 10px;
+  margin-left: 2px;
+  vertical-align: middle;
 }
 
 .agent-option-specialty {

@@ -337,8 +337,14 @@ func main() {
 		if _, ok := model.Agents[cfg.DefaultAgent]; ok {
 			model.DefaultAgentID = cfg.DefaultAgent
 		} else {
+			// List available agent IDs to help the user fix the config
+			availableIDs := make([]string, 0, len(model.AgentList))
+			for _, a := range model.AgentList {
+				availableIDs = append(availableIDs, a.ID)
+			}
 			slog.Warn("configured default_agent not found, using first agent",
-				slog.String("configured", cfg.DefaultAgent))
+				slog.String("configured", cfg.DefaultAgent),
+				slog.Any("available", availableIDs))
 		}
 	}
 	if model.DefaultAgentID == "" && len(model.AgentList) > 0 {

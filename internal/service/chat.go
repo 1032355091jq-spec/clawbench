@@ -202,7 +202,7 @@ func generateSessionID() string {
 // If backend is non-empty, filters by backend; otherwise returns all backends.
 func GetSessions(projectPath, backend string) ([]model.ChatSession, error) {
 	sessions := []model.ChatSession{}
-	query := `SELECT s.id, s.title, s.backend, s.agent_id, s.model, s.created_at, s.updated_at, s.last_read_at,
+	query := `SELECT s.id, s.title, s.backend, s.agent_id, s.agent_source, s.model, s.created_at, s.updated_at, s.last_read_at,
 		(SELECT COUNT(*) FROM chat_history h WHERE h.session_id = s.id AND h.role = 'assistant' AND h.streaming = 0
 		 AND (s.last_read_at IS NULL OR h.created_at > s.last_read_at)) AS unread_count
 		FROM chat_sessions s WHERE s.project_path = ?`
@@ -222,7 +222,7 @@ func GetSessions(projectPath, backend string) ([]model.ChatSession, error) {
 	for rows.Next() {
 		var s model.ChatSession
 		var lastRead sql.NullTime
-		if err := rows.Scan(&s.ID, &s.Title, &s.Backend, &s.AgentID, &s.Model, &s.CreatedAt, &s.UpdatedAt, &lastRead, &s.UnreadCount); err != nil {
+		if err := rows.Scan(&s.ID, &s.Title, &s.Backend, &s.AgentID, &s.AgentSource, &s.Model, &s.CreatedAt, &s.UpdatedAt, &lastRead, &s.UnreadCount); err != nil {
 			return nil, err
 		}
 		if lastRead.Valid {
@@ -249,14 +249,15 @@ func GetSessionBackend(sessionID string) string {
 }
 
 // CreateSession creates a new chat session and returns its ID.
-func CreateSession(projectPath, backend, title, agentID, modelName string) (string, error) {
+// agentSource tracks how the agent was chosen: "default" (auto-assigned) or "user" (manually selected).
+func CreateSession(projectPath, backend, title, agentID, modelName, agentSource string) (string, error) {
 	sessionID := generateSessionID()
 	if sessionID == "" {
 		return "", fmt.Errorf("failed to generate unique session ID after 10 attempts")
 	}
 	_, err := DB.Exec(
-		"INSERT INTO chat_sessions (id, project_path, backend, title, agent_id, model) VALUES (?, ?, ?, ?, ?, ?)",
-		sessionID, projectPath, backend, title, agentID, modelName,
+		"INSERT INTO chat_sessions (id, project_path, backend, title, agent_id, agent_source, model) VALUES (?, ?, ?, ?, ?, ?, ?)",
+		sessionID, projectPath, backend, title, agentID, agentSource, modelName,
 	)
 	if err != nil {
 		return "", err

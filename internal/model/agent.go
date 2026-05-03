@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"gopkg.in/yaml.v3"
@@ -82,12 +83,14 @@ func LoadAgents(dir string) error {
 		AgentList = append(AgentList, &agent)
 	}
 
-	// Build available agent list for {{AVAILABLE_AGENTS}} placeholder
+	// Sort AgentList by ID for deterministic ordering (filesystem iteration order is not guaranteed)
+	sort.Slice(AgentList, func(i, j int) bool {
+		return AgentList[i].ID < AgentList[j].ID
+	})
+
+	// Build available agent list for {{AVAILABLE_AGENTS}} placeholder (include all agents)
 	var agentLines []string
 	for _, a := range AgentList {
-	if a.ID == DefaultAgentID {
-		continue
-	}
 		agentLines = append(agentLines, fmt.Sprintf("    - %s：%s", a.ID, a.Specialty))
 	}
 	agentListReplacement := strings.Join(agentLines, "\n")

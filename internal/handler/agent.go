@@ -12,6 +12,7 @@ func ServeAgents(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
-		"agents": model.AgentList,
+		"agents":       model.AgentList,
+		"defaultAgent": model.GetDefaultAgentID(),
 	})
 }

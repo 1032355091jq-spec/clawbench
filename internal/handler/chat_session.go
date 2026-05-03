@@ -49,6 +49,7 @@ func ServeSessions(w http.ResponseWriter, r *http.Request) {
 		agentModel := ""
 		agentID := req.AgentID
 		resolvedAgentID := agentID
+		agentSource := "default"
 		backend2, model2, _, _, ok := resolveAgentConfig(agentID)
 		if !ok {
 			model.WriteErrorf(w, http.StatusServiceUnavailable, "no agents available")
@@ -60,6 +61,10 @@ func ServeSessions(w http.ResponseWriter, r *http.Request) {
 		agentModel = model2
 		if resolvedAgentID == "" {
 			resolvedAgentID = model.GetDefaultAgentID()
+		}
+		// If user explicitly specified an agent, mark source as "user"
+		if agentID != "" {
+			agentSource = "user"
 		}
 		if backend == "" {
 			backend = "codebuddy"
@@ -73,7 +78,7 @@ func ServeSessions(w http.ResponseWriter, r *http.Request) {
 				title = "新会话"
 			}
 		}
-		sessionID, err := service.CreateSession(projectPath, backend, title, resolvedAgentID, agentModel)
+		sessionID, err := service.CreateSession(projectPath, backend, title, resolvedAgentID, agentModel, agentSource)
 		if err != nil {
 			model.WriteError(w, model.Internal(fmt.Errorf("failed to create session")))
 			return

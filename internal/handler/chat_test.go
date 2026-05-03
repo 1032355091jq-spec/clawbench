@@ -432,7 +432,7 @@ func TestServeChatHistory_Get_WithExistingSession(t *testing.T) {
 	defer teardown()
 
 	// Create a session first
-	sessionID, err := service.CreateSession(env.ProjectDir, "codebuddy", "test session", "", "")
+	sessionID, err := service.CreateSession(env.ProjectDir, "codebuddy", "test session", "", "", "default")
 	assert.NoError(t, err)
 
 	// Add a message to that session
@@ -460,7 +460,7 @@ func TestServeChatHistory_Post_AddMessage(t *testing.T) {
 	defer teardown()
 
 	// Create a session first
-	sessionID, err := service.CreateSession(env.ProjectDir, "codebuddy", "test session", "", "")
+	sessionID, err := service.CreateSession(env.ProjectDir, "codebuddy", "test session", "", "", "default")
 	assert.NoError(t, err)
 
 	body := map[string]string{
@@ -541,9 +541,9 @@ func TestServeSessions_Get_WithExistingSessions(t *testing.T) {
 	defer teardown()
 
 	// Create some sessions
-	_, err := service.CreateSession(env.ProjectDir, "codebuddy", "session 1", "", "")
+	_, err := service.CreateSession(env.ProjectDir, "codebuddy", "session 1", "", "", "default")
 	assert.NoError(t, err)
-	_, err = service.CreateSession(env.ProjectDir, "codebuddy", "session 2", "", "")
+	_, err = service.CreateSession(env.ProjectDir, "codebuddy", "session 2", "", "", "default")
 	assert.NoError(t, err)
 
 	req := newRequest(t, http.MethodGet, "/api/ai/sessions", nil)
@@ -633,7 +633,7 @@ func TestDeleteSession_ExistingSession(t *testing.T) {
 	env, teardown := setupTestEnv(t)
 	defer teardown()
 
-	sessionID, err := service.CreateSession(env.ProjectDir, "codebuddy", "to delete", "", "")
+	sessionID, err := service.CreateSession(env.ProjectDir, "codebuddy", "to delete", "", "", "default")
 	assert.NoError(t, err)
 
 	req := newRequest(t, http.MethodDelete, "/api/ai/session/delete?session_id="+sessionID, nil)
