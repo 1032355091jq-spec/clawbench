@@ -18,6 +18,16 @@ export function useSwipeSession(options: UseSwipeSessionOptions) {
   const indicatorDirection = ref<'left' | 'right' | null>(null)
   let indicatorTimer: ReturnType<typeof setTimeout> | null = null
 
+  // Position indicator state
+  const sessionIndex = ref(-1)
+  const sessionTotal = ref(0)
+
+  function updatePosition(sessions: { id: string; title: string }[]) {
+    sessionTotal.value = sessions.length
+    const idx = sessions.findIndex(s => s.id === currentSessionId.value)
+    sessionIndex.value = idx
+  }
+
   async function fetchSessions() {
     const now = Date.now()
     if (sessionCache.length > 0 && now - sessionCacheTime < CACHE_TTL) {
@@ -32,6 +42,7 @@ export function useSwipeSession(options: UseSwipeSessionOptions) {
         title: s.title || '未命名会话',
       }))
       sessionCacheTime = now
+      updatePosition(sessionCache)
       return sessionCache
     } catch {
       return sessionCache
@@ -57,7 +68,8 @@ export function useSwipeSession(options: UseSwipeSessionOptions) {
     const nextIdx = idx > 0 ? idx - 1 : sessions.length - 1
     if (nextIdx === idx) return
     showIndicator(sessions[nextIdx].title, 'left')
-    switchSession(sessions[nextIdx].id)
+    await switchSession(sessions[nextIdx].id)
+    sessionIndex.value = nextIdx
   }
 
   async function swipeToPrev() {
@@ -69,7 +81,8 @@ export function useSwipeSession(options: UseSwipeSessionOptions) {
     const prevIdx = idx < sessions.length - 1 ? idx + 1 : 0
     if (prevIdx === idx) return
     showIndicator(sessions[prevIdx].title, 'right')
-    switchSession(sessions[prevIdx].id)
+    await switchSession(sessions[prevIdx].id)
+    sessionIndex.value = prevIdx
   }
 
   // Touch state
@@ -136,5 +149,7 @@ export function useSwipeSession(options: UseSwipeSessionOptions) {
     onTouchEnd,
     indicatorText,
     indicatorDirection,
+    sessionIndex,
+    sessionTotal,
   }
 }

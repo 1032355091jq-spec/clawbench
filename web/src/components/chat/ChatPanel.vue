@@ -43,15 +43,21 @@
     <!-- Session swipe indicator — floats above the message area -->
     <Transition name="session-indicator">
       <div v-if="swipeSession.indicatorText.value" class="session-switch-indicator" :class="swipeSession.indicatorDirection.value">
-        <div class="session-indicator-arrow">
-          <svg v-if="swipeSession.indicatorDirection.value === 'left'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
-            <polyline points="9 18 15 12 9 6"/>
-          </svg>
-          <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
-            <polyline points="15 18 9 12 15 6"/>
-          </svg>
+        <div class="session-indicator-row">
+          <span class="session-indicator-text">{{ swipeSession.indicatorText.value }}</span>
         </div>
-        <span class="session-indicator-text">{{ swipeSession.indicatorText.value }}</span>
+        <div v-if="showPositionIndicator" class="session-indicator-position">
+          <div v-if="swipeSession.sessionTotal.value <= 15" class="session-dots">
+            <span v-for="i in swipeSession.sessionTotal.value" :key="i"
+                  class="session-dot" :class="{ active: i - 1 === swipeSession.sessionIndex.value }" />
+          </div>
+          <div v-else class="session-capsule">
+            <div class="session-capsule-track">
+              <div class="session-capsule-slider" :style="capsuleSliderStyle" />
+            </div>
+          </div>
+          <span class="session-position-count">{{ swipeSession.sessionIndex.value + 1 }}/{{ swipeSession.sessionTotal.value }}</span>
+        </div>
       </div>
     </Transition>
 
@@ -245,6 +251,24 @@ const session = useChatSession({
 const swipeSession = useSwipeSession({
   currentSessionId: identity.currentSessionId,
   switchSession: session.switchSession,
+})
+
+const showPositionIndicator = computed(() =>
+  swipeSession.sessionIndex.value >= 0 && swipeSession.sessionTotal.value > 1
+)
+
+const capsuleSliderStyle = computed(() => {
+  const total = swipeSession.sessionTotal.value
+  const idx = swipeSession.sessionIndex.value
+  if (total <= 1 || idx < 0) return {}
+  const trackWidth = 80
+  const sliderWidth = Math.max(6, trackWidth / total)
+  const maxOffset = trackWidth - sliderWidth
+  const left = total > 1 ? (idx / (total - 1)) * maxOffset : 0
+  return {
+    width: `${sliderWidth}px`,
+    left: `${left}px`,
+  }
 })
 
 // onStreamDone: fires when current session stream completes
@@ -557,10 +581,10 @@ onUnmounted(() => {
 /* Session swipe indicator — floats at top of message area */
 .session-switch-indicator {
   display: flex;
+  flex-direction: column;
   align-items: center;
-  justify-content: center;
-  gap: 10px;
-  padding: 10px 20px;
+  gap: 6px;
+  padding: 10px 20px 8px;
   background: var(--bg-primary);
   color: var(--text-primary);
   border-radius: 24px;
@@ -577,44 +601,78 @@ onUnmounted(() => {
   box-shadow: var(--shadow-md);
 }
 
-.session-indicator-arrow {
+.session-indicator-row {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 24px;
-  height: 24px;
-  background: var(--accent-color);
-  color: #fff;
-  border-radius: 50%;
-  flex-shrink: 0;
-}
-
-.session-switch-indicator.left .session-indicator-arrow {
-  animation: arrow-bounce-left 0.4s ease-out;
-}
-
-.session-switch-indicator.right .session-indicator-arrow {
-  animation: arrow-bounce-right 0.4s ease-out;
 }
 
 .session-indicator-text {
-  max-width: 180px;
+  max-width: 220px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
   color: var(--text-secondary);
 }
 
-@keyframes arrow-bounce-left {
-  0% { transform: translateX(-8px); opacity: 0; }
-  60% { transform: translateX(4px); }
-  100% { transform: translateX(0); opacity: 1; }
+/* Position indicator — row 2 */
+.session-indicator-position {
+  display: flex;
+  align-items: center;
+  gap: 6px;
 }
 
-@keyframes arrow-bounce-right {
-  0% { transform: translateX(8px); opacity: 0; }
-  60% { transform: translateX(-4px); }
-  100% { transform: translateX(0); opacity: 1; }
+/* Dots bar (<=15 sessions) */
+.session-dots {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.session-dot {
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: var(--text-tertiary, rgba(128, 128, 128, 0.4));
+  transition: all 0.15s ease-out;
+}
+
+.session-dot.active {
+  width: 6px;
+  height: 6px;
+  background: var(--accent-color);
+}
+
+/* Capsule progress bar (>15 sessions) */
+.session-capsule {
+  display: flex;
+  align-items: center;
+}
+
+.session-capsule-track {
+  width: 80px;
+  height: 3px;
+  border-radius: 2px;
+  background: var(--text-tertiary, rgba(128, 128, 128, 0.3));
+  position: relative;
+}
+
+.session-capsule-slider {
+  position: absolute;
+  top: 0;
+  height: 3px;
+  border-radius: 2px;
+  background: var(--accent-color);
+  transition: left 0.2s ease-out;
+}
+
+/* Numeric label */
+.session-position-count {
+  font-size: 10px;
+  color: var(--text-tertiary, rgba(128, 128, 128, 0.6));
+  white-space: nowrap;
+  min-width: 24px;
+  text-align: center;
 }
 
 .session-switch-indicator.left {
