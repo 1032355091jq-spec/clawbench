@@ -1,5 +1,5 @@
 <template>
-  <pre class="raw-content-pre" ref="codeRef" :data-file-path="filePath" :data-language="language">
+  <pre class="raw-content-pre" ref="codeRef" :data-file-path="filePath" :data-language="language" @click="handleClick">
     <code v-html="codeHtml" />
   </pre>
 </template>
@@ -8,6 +8,8 @@
 import { ref, watch } from 'vue'
 import { hljs } from '@/utils/globals.ts'
 import { escapeHtml } from '@/utils/helpers.ts'
+import { useDoubleClickCopy } from '@/composables/useDoubleClickCopy.ts'
+import { useQuoteQuestion } from '@/composables/useQuoteQuestion.ts'
 
 const props = defineProps({
     /** Raw file content */
@@ -20,6 +22,32 @@ const props = defineProps({
 
 const codeHtml = ref('')
 const codeRef = ref(null)
+
+const quoteQuestion = useQuoteQuestion()
+
+const { handleDblClick } = useDoubleClickCopy({
+    lineSelector: '.code-line',
+    onCopy(target, text) {
+        // 从 DOM 读取文件信息和行号
+        const lineEl = target && 'closest' in target ? target.closest('.code-line') : null
+        const preEl = lineEl?.closest('.raw-content-pre')
+        const filePath = preEl?.getAttribute('data-file-path') || ''
+        const language = preEl?.getAttribute('data-language') || ''
+        const lineNum = lineEl ? parseInt(lineEl.getAttribute('data-line') || '0') : 0
+
+        quoteQuestion.showBar({
+            text,
+            filePath,
+            language,
+            startLine: lineNum,
+            endLine: lineNum,
+        })
+    },
+})
+
+function handleClick(event) {
+    handleDblClick(event)
+}
 
 function renderCode(content, lang) {
     return content.split('\n').map((rawLine, i) => {

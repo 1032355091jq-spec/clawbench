@@ -141,6 +141,17 @@ export function useQuoteQuestion() {
     barPinned.value = false
   }
 
+  /**
+   * 编程式显示引用问答栏（供双击复制后调用，不依赖 selectionchange 事件）
+   * 延迟 400ms 显示，避免双击的 pointerdown 事件触发"点击外部关闭"
+   */
+  function showBar(data: QuoteData) {
+    setTimeout(() => {
+      quoteData.value = data
+      barVisible.value = true
+    }, 400)
+  }
+
   async function sendMessage(userMessage: string, sessionId?: string) {
     if (!quoteData.value || !userMessage.trim()) return
 
@@ -180,6 +191,7 @@ export function useQuoteQuestion() {
     closeSheet,
     pinBar,
     unpinBar,
+    showBar,
     sendMessage,
   }
 }

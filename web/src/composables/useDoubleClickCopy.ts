@@ -12,11 +12,18 @@ export interface LinkHandler {
     (path: string): void
 }
 
+export interface DoubleClickCopyOptions {
+    /** 行级选择器（如 '.code-line'），设置后双击查找行级元素而非块级元素 */
+    lineSelector?: string
+    /** 复制成功后的回调，接收 (target元素, 复制的文本) */
+    onCopy?: (target: EventTarget | null, text: string) => void
+}
+
 /**
- * 双击复制块级元素的文本
+ * 双击复制块级或行级元素的文本
  * 使用 click 事件手动判断双击，确保两次点击的是同一个元素
  */
-export function useDoubleClickCopy() {
+export function useDoubleClickCopy(options?: DoubleClickCopyOptions) {
     const toast = inject<ToastShow | null>('toast', null)
     let lastTarget: EventTarget | null = null
     let lastTime = 0
@@ -26,17 +33,25 @@ export function useDoubleClickCopy() {
      * 执行复制操作
      */
     function doCopy(target: EventTarget | null): boolean {
-        const block = (target as HTMLElement | null)?.closest<HTMLElement>(BLOCK_SELECTORS)
-        if (!block) return false
+        const selector = options?.lineSelector || BLOCK_SELECTORS
+        const element = (target as HTMLElement | null)?.closest<HTMLElement>(selector)
+        if (!element) return false
 
-        const text = block.textContent?.trim()
+        // 行级模式：只取 .code-text 的文本（不含行号）
+        let text: string
+        if (options?.lineSelector) {
+            const codeText = element.querySelector('.code-text')
+            text = (codeText?.textContent ?? element.textContent)?.trim() || ''
+        } else {
+            text = element.textContent?.trim() || ''
+        }
         if (!text) return false
 
         copyText(text, () => {
             // 触发闪烁动画
-            block.classList.add('copy-flash')
-            block.addEventListener('animationend', () => {
-                block.classList.remove('copy-flash')
+            element.classList.add('copy-flash')
+            element.addEventListener('animationend', () => {
+                element.classList.remove('copy-flash')
             }, { once: true })
 
             // 显示 toast 提示
@@ -44,6 +59,11 @@ export function useDoubleClickCopy() {
                 toast.show(gt('common.copied'), { icon: '📋', type: 'success', duration: 1500 })
             }
         })
+
+        // 复制成功后调用回调
+        if (options?.onCopy) {
+            options.onCopy(target, text)
+        }
 
         return true
     }

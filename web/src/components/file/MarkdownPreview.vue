@@ -18,6 +18,7 @@ import { ref, watch, nextTick } from 'vue'
 import CodePreview from './CodePreview.vue'
 import { useMarkdownRenderer } from '@/composables/useMarkdownRenderer.ts'
 import { useDoubleClickCopy } from '@/composables/useDoubleClickCopy.ts'
+import { useQuoteQuestion } from '@/composables/useQuoteQuestion.ts'
 import { useFilePathAnnotation } from '@/composables/useFilePathAnnotation.ts'
 import { store } from '@/stores/app.ts'
 import { dirName, splitPath } from '@/utils/helpers.ts'
@@ -30,7 +31,23 @@ const props = defineProps({
 const renderedHtml = ref('')
 const bodyRef = ref(null)
 let currentRenderId = 0
-const { handleDblClick } = useDoubleClickCopy()
+
+const quoteQuestion = useQuoteQuestion()
+
+const { handleDblClick } = useDoubleClickCopy({
+    onCopy(target, text) {
+        // 从 .markdown-body[data-file-path] 读取文件路径
+        const block = target && 'closest' in target ? target.closest('.markdown-body') : null
+        const filePath = block?.getAttribute('data-file-path') || props.file?.path || ''
+        quoteQuestion.showBar({
+            text,
+            filePath,
+            language: '',
+            startLine: 0,
+            endLine: 0,
+        })
+    },
+})
 const { renderMarkdown, renderMermaidInElement } = useMarkdownRenderer()
 const { annotateFilePaths, verifyFilePaths, resolveRelativePath, openFilePath } = useFilePathAnnotation()
 
