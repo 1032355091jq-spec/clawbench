@@ -105,7 +105,7 @@ func (r *ProxyRegistry) RegisterPort(port int, name string, protocol string) err
 		Name:       name,
 		Protocol:   protocol,
 		AutoDetect: false,
-		Active:     false, // will be updated by health check
+		Active:     checkPortActive(port),
 	}
 
 	// Persist to database

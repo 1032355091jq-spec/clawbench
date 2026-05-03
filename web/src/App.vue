@@ -110,7 +110,6 @@
       />
 
       <ProxyPanel
-        v-if="isAppMode"
         :open="proxyOpen"
         @close="proxyOpen = false"
       />
@@ -162,7 +161,7 @@
             <button class="dock-btn" :class="{ active: projectHistoryOpen || fileHistoryOpen }" @click.stop="toggleHistoryDrawer" :title="t('nav.history')">
               <GitBranch />
             </button>
-            <button class="dock-btn" :class="{ active: proxyOpen, disabled: !isAppMode }" @click.stop="isAppMode ? openDrawer('proxy') : toast.show(t('toast.portForwardAppOnly'), { type: 'info' })" :title="t('nav.portForward')">
+            <button class="dock-btn" :class="{ active: proxyOpen }" @click.stop="openDrawer('proxy')" :title="t('nav.portForward')">
               <EthernetPort />
             </button>
             <button class="dock-btn" @click.stop="handleRefresh" :title="t('nav.refresh')">

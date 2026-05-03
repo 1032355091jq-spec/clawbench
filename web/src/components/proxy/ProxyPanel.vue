@@ -6,33 +6,82 @@
     </template>
 
     <div class="proxy-panel">
-      <!-- Tunnel status banner -->
-      <div v-if="tunnelStatus === 'disconnected'" class="tunnel-banner error">
-        <XCircle :size="16" />
-        <div class="tunnel-banner-content">
-          <span class="tunnel-banner-title">{{ t('proxy.tunnelDisconnected') }}</span>
-          <span class="tunnel-banner-detail">{{ t('proxy.tunnelDisconnectedDetail') }}</span>
+      <!-- App mode: tunnel status banners -->
+      <template v-if="isAppMode">
+        <div v-if="tunnelStatus === 'disconnected'" class="tunnel-banner error">
+          <XCircle :size="16" />
+          <div class="tunnel-banner-content">
+            <span class="tunnel-banner-title">{{ t('proxy.tunnelDisconnected') }}</span>
+            <span class="tunnel-banner-detail">{{ t('proxy.tunnelDisconnectedDetail') }}</span>
+          </div>
+          <button class="tunnel-retry-btn" :class="{ spinning: tunnelChecking }" @click="handleRetryTunnel" :title="t('proxy.retryCheck')">
+            <RotateCcw :size="14" />
+          </button>
         </div>
-        <button class="tunnel-retry-btn" :class="{ spinning: tunnelChecking }" @click="handleRetryTunnel" :title="t('proxy.retryCheck')">
-          <RotateCcw :size="14" />
-        </button>
-      </div>
-      <div v-else-if="tunnelStatus === 'degraded'" class="tunnel-banner warning">
-        <AlertTriangle :size="16" />
-        <div class="tunnel-banner-content">
-          <span class="tunnel-banner-title">{{ t('proxy.portsNoResponse') }}</span>
-          <span class="tunnel-banner-detail">{{ t('proxy.tunnelConnectedButNoResponse') }}</span>
+        <div v-else-if="tunnelStatus === 'degraded'" class="tunnel-banner warning">
+          <AlertTriangle :size="16" />
+          <div class="tunnel-banner-content">
+            <span class="tunnel-banner-title">{{ t('proxy.portsNoResponse') }}</span>
+            <span class="tunnel-banner-detail">{{ t('proxy.tunnelConnectedButNoResponse') }}</span>
+          </div>
+          <button class="tunnel-retry-btn" :class="{ spinning: tunnelChecking }" @click="handleRetryTunnel" :title="t('proxy.retryCheck')">
+            <RotateCcw :size="14" />
+          </button>
         </div>
-        <button class="tunnel-retry-btn" :class="{ spinning: tunnelChecking }" @click="handleRetryTunnel" :title="t('proxy.retryCheck')">
-          <RotateCcw :size="14" />
-        </button>
+
+        <!-- App mode: background service tip -->
+        <div v-if="tunnelStatus === 'ok'" class="tunnel-banner tip">
+          <Info :size="16" />
+          <div class="tunnel-banner-content">
+            <span class="tunnel-banner-detail">{{ t('proxy.backgroundTip') }}</span>
+          </div>
+        </div>
+      </template>
+
+      <!-- Web mode: app recommendation banner -->
+      <div v-if="!isAppMode" class="tunnel-banner tip">
+        <Smartphone :size="16" />
+        <div class="tunnel-banner-content">
+          <span class="tunnel-banner-detail">{{ t('proxy.appRecommendation') }}</span>
+        </div>
       </div>
 
-      <!-- App mode: background service tip -->
-      <div v-if="isAppMode && tunnelStatus === 'ok'" class="tunnel-banner tip">
-        <Info :size="16" />
+      <!-- Web mode: manual SSH tunnel guide -->
+      <div v-if="!isAppMode && sshInfo && sshInfo.enabled" class="tunnel-guide">
+        <div class="tunnel-guide-header" @click="tunnelGuideExpanded = !tunnelGuideExpanded">
+          <Lock :size="14" />
+          <span>{{ t('proxy.tunnelGuide') }}</span>
+          <ChevronDown :size="14" class="tunnel-guide-chevron" :class="{ expanded: tunnelGuideExpanded }" />
+        </div>
+        <div v-if="tunnelGuideExpanded" class="tunnel-guide-body">
+          <template v-if="sshInfo.command">
+            <div class="tunnel-guide-intro">{{ t('proxy.tunnelGuideIntro') }}</div>
+            <div class="tunnel-guide-steps">
+              <div class="tunnel-guide-step">{{ t('proxy.tunnelGuideStep1') }}</div>
+              <div class="tunnel-guide-step">{{ t('proxy.tunnelGuideStep2') }}</div>
+              <div class="tunnel-guide-step">{{ t('proxy.tunnelGuideStep3') }}</div>
+            </div>
+            <div class="tunnel-guide-command">
+              <code>{{ sshInfo.command }}</code>
+              <button class="tunnel-guide-copy" @click="copySSHCommand" :title="t('proxy.copyCommand')">
+                <Copy :size="12" />
+                {{ sshCopied ? t('common.copied') : t('proxy.copyCommand') }}
+              </button>
+            </div>
+            <div v-if="sshInfo.fingerprint" class="tunnel-guide-fingerprint">
+              <span class="fingerprint-label">Fingerprint:</span>
+              <span class="fingerprint-value">{{ sshInfo.fingerprint }}</span>
+            </div>
+          </template>
+          <div v-else class="tunnel-guide-intro">{{ t('proxy.tunnelNoCommand') }}</div>
+        </div>
+      </div>
+
+      <!-- Web mode: SSH not enabled -->
+      <div v-if="!isAppMode && sshInfo && !sshInfo.enabled" class="tunnel-banner warning">
+        <AlertTriangle :size="16" />
         <div class="tunnel-banner-content">
-          <span class="tunnel-banner-detail">{{ t('proxy.backgroundTip') }}</span>
+          <span class="tunnel-banner-detail">{{ t('proxy.tunnelNoSsh') }}</span>
         </div>
       </div>
 
@@ -121,30 +170,12 @@
         </div>
       </div>
 
-      <!-- SSH tunnel info (desktop only: shows command for manual tunnel setup) -->
-      <div v-if="sshInfo && sshInfo.enabled && !isAppMode" class="proxy-ssh-section">
-        <div class="proxy-ssh-divider"></div>
-        <div class="proxy-ssh-header">
-          <Lock :size="14" />
-          <span>{{ t('proxy.sshTunnel') }}</span>
-        </div>
-        <div class="proxy-ssh-meta">
-          <span class="ssh-label">{{ sshInfo.username }}@{{ sshInfo.host }}:{{ sshInfo.port }}</span>
-          <button class="ssh-copy-btn" @click="copySSHCommand" :title="t('proxy.copyCommand')">
-            <Copy :size="12" />
-            {{ sshCopied ? t('common.copied') : t('proxy.copyCommand') }}
-          </button>
-        </div>
-        <div v-if="sshInfo.fingerprint" class="ssh-fingerprint">
-          {{ sshInfo.fingerprint }}
-        </div>
-      </div>
     </div>
   </BottomSheet>
 </template>
 
 <script setup>
-import { Waypoints, XCircle, RotateCcw, AlertTriangle, Info, Plus, Search, Lock, Copy } from 'lucide-vue-next'
+import { Waypoints, XCircle, RotateCcw, AlertTriangle, Info, Plus, Search, Lock, Copy, Smartphone, ChevronDown } from 'lucide-vue-next'
 import { ref, computed, watch, nextTick } from 'vue'
 import { useI18n } from 'vue-i18n'
 import BottomSheet from '@/components/common/BottomSheet.vue'
@@ -164,6 +195,7 @@ const newName = ref('')
 const newProtocol = ref('http')
 const detecting = ref(false)
 const portInputRef = ref(null)
+const tunnelGuideExpanded = ref(false)
 
 const { ports, detectedPorts, loading, isAppMode, sshInfo, tunnelStatus, tunnelMessage, tunnelChecking, registerPort, unregisterPort, detectPorts, checkTunnelHealth, openPort } = usePortForward()
 const toast = useToast()
@@ -627,40 +659,91 @@ watch(() => props.open, async (val) => {
   }
 }
 
-/* SSH tunnel section */
-.proxy-ssh-section {
-  margin-top: 4px;
+/* Tunnel guide (web mode) */
+.tunnel-guide {
+  border: 1px solid var(--border-color, #e5e5e5);
+  border-radius: 6px;
+  overflow: hidden;
+  flex-shrink: 0;
 }
 
-.proxy-ssh-divider {
-  height: 1px;
-  background: var(--border-color, #e5e5e5);
-  margin: 8px 0;
-}
-
-.proxy-ssh-header {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--text-secondary, #666);
-  margin-bottom: 4px;
-}
-
-.proxy-ssh-meta {
+.tunnel-guide-header {
   display: flex;
   align-items: center;
   gap: 6px;
+  padding: 8px 10px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary, #666);
+  cursor: pointer;
+  transition: background 0.15s;
+  user-select: none;
 }
 
-.ssh-label {
-  font-family: monospace;
+.tunnel-guide-header:hover {
+  background: var(--bg-tertiary, #f5f5f5);
+}
+
+.tunnel-guide-header:active {
+  background: var(--bg-secondary, #eee);
+}
+
+.tunnel-guide-chevron {
+  margin-left: auto;
+  transition: transform 0.2s;
+}
+
+.tunnel-guide-chevron.expanded {
+  transform: rotate(180deg);
+}
+
+.tunnel-guide-body {
+  padding: 0 10px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.tunnel-guide-intro {
   font-size: 11px;
   color: var(--text-secondary, #666);
+  line-height: 1.4;
 }
 
-.ssh-copy-btn {
+.tunnel-guide-steps {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.tunnel-guide-step {
+  font-size: 11px;
+  color: var(--text-secondary, #666);
+  line-height: 1.4;
+}
+
+.tunnel-guide-command {
+  background: var(--bg-tertiary, #f5f5f5);
+  border: 1px solid var(--border-color, #e5e5e5);
+  border-radius: 4px;
+  padding: 6px 8px;
+  margin-top: 2px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.tunnel-guide-command code {
+  font-family: monospace;
+  font-size: 10px;
+  color: var(--text-primary, #1a1a1a);
+  word-break: break-all;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  display: block;
+}
+
+.tunnel-guide-copy {
   display: inline-flex;
   align-items: center;
   gap: 3px;
@@ -672,18 +755,30 @@ watch(() => props.open, async (val) => {
   font-size: 10px;
   cursor: pointer;
   transition: all 0.15s;
+  align-self: flex-end;
 }
 
-.ssh-copy-btn:hover {
+.tunnel-guide-copy:hover {
   border-color: var(--accent-color, #0066cc);
   color: var(--accent-color, #0066cc);
 }
 
-.ssh-fingerprint {
-  font-family: monospace;
+.tunnel-guide-fingerprint {
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
   font-size: 9px;
-  color: var(--text-muted, #999);
   margin-top: 2px;
+}
+
+.fingerprint-label {
+  color: var(--text-muted, #999);
+  flex-shrink: 0;
+}
+
+.fingerprint-value {
+  font-family: monospace;
+  color: var(--text-muted, #999);
   word-break: break-all;
 }
 </style>

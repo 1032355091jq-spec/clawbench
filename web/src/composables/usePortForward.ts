@@ -64,13 +64,13 @@ export function setOpenPortBrowser(fn: (port: number, protocol?: string) => void
 export function usePortForward() {
   const { isAppMode } = useAppMode()
 
-  async function loadPorts() {
-    loading.value = true
+  async function loadPorts(silent = false) {
+    if (!silent) loading.value = true
     try {
       const data = await apiGet<{ ports: ForwardedPort[] }>('/api/proxy/ports')
       ports.value = data.ports || []
     } finally {
-      loading.value = false
+      if (!silent) loading.value = false
     }
   }
 
@@ -80,7 +80,8 @@ export function usePortForward() {
     if (isAppMode.value) {
       ;(window as any).AndroidNative?.addForwardedPort(port)
     }
-    await loadPorts()
+    // Silent refresh: don't flicker the port list with loading state
+    await Promise.all([loadPorts(true), loadSSHInfo()])
   }
 
   async function unregisterPort(port: number) {
@@ -88,7 +89,7 @@ export function usePortForward() {
     if (isAppMode.value) {
       ;(window as any).AndroidNative?.removeForwardedPort(port)
     }
-    await loadPorts()
+    await Promise.all([loadPorts(true), loadSSHInfo()])
   }
 
   async function detectPorts() {
@@ -124,35 +125,37 @@ export function usePortForward() {
     await Promise.all([loadPorts(), loadSSHInfo()])
 
     const info = sshInfo.value
-    // No SSH or not in app mode — skip tunnel check
-    if (!info?.enabled || !isAppMode.value) {
+    // No SSH configured — skip tunnel check (web mode without SSH)
+    if (!info?.enabled) {
       tunnelChecking.value = false
       return
     }
 
-    // Prefer native SSH tunnel status (Android PortForwardService knows its own connection)
-    const nativeConnected = getNativeTunnelStatus()
-    if (nativeConnected === true) {
-      // Native says connected — trust it regardless of server-side connCount
-      const hasPorts = ports.value.length > 0
-      const anyActive = ports.value.some(p => p.active)
-      if (hasPorts && !anyActive) {
-        tunnelStatus.value = 'degraded'
-        tunnelMessage.value = gt('portForward.tunnelDegraded')
+    // In app mode: prefer native SSH tunnel status
+    if (isAppMode.value) {
+      const nativeConnected = getNativeTunnelStatus()
+      if (nativeConnected === true) {
+        // Native says connected — trust it regardless of server-side connCount
+        const hasPorts = ports.value.length > 0
+        const anyActive = ports.value.some(p => p.active)
+        if (hasPorts && !anyActive) {
+          tunnelStatus.value = 'degraded'
+          tunnelMessage.value = gt('portForward.tunnelDegraded')
+          tunnelChecking.value = false
+          startTunnelPoll()
+          return
+        }
+        tunnelStatus.value = 'ok'
+        tunnelChecking.value = false
+        stopTunnelPoll()
+        return
+      } else if (nativeConnected === false) {
+        tunnelStatus.value = 'disconnected'
+        tunnelMessage.value = gt('portForward.tunnelDisconnected')
         tunnelChecking.value = false
         startTunnelPoll()
         return
       }
-      tunnelStatus.value = 'ok'
-      tunnelChecking.value = false
-      stopTunnelPoll()
-      return
-    } else if (nativeConnected === false) {
-      tunnelStatus.value = 'disconnected'
-      tunnelMessage.value = gt('portForward.tunnelDisconnected')
-      tunnelChecking.value = false
-      startTunnelPoll()
-      return
     }
 
     // Native status unavailable — fall back to server-side connection stats
