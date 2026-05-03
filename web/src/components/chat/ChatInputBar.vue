@@ -350,6 +350,9 @@ function onCreateTouchEnd(e) {
     clearTimeout(createPressTimer)
     createPressTimer = null
     // Short tap: show agent selector
+    // Prevent synthesized click event to avoid it landing on the
+    // agent selector dialog that appears at the same screen position
+    e.preventDefault()
     lastCreateEmitTime = Date.now()
     emit('show-agent-selector')
   }

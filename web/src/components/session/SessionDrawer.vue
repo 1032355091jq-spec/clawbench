@@ -104,6 +104,9 @@ const loading = ref(false)
 const { agents, loadAgents, getAgentIcon, getAgentName } = useAgents()
 const selectedAgentId = ref('')
 const showAgentSelector = ref(false)
+// Guard against accidental clicks right after opening the agent selector
+// (touch event propagation race: dialog appears under finger → click lands on option)
+let agentSelectorOpenTime = 0
 
 const sessionsWithStatus = computed(() => {
   return sessions.value.map(s => ({
@@ -116,6 +119,7 @@ defineExpose({ loadSessions, openAgentSelector })
 
 function openAgentSelector() {
   showAgentSelector.value = true
+  agentSelectorOpenTime = Date.now()
 }
 
 async function loadSessions() {
@@ -145,6 +149,9 @@ function selectSession(sessionId, backend) {
 }
 
 function createSession(agentId) {
+  // Ignore clicks within 400ms of opening — prevents accidental session creation
+  // from touch events that propagate to the newly rendered dialog
+  if (Date.now() - agentSelectorOpenTime < 400) return
   showAgentSelector.value = false
   emit('create', agentId)
   bottomSheetRef.value?.close()
