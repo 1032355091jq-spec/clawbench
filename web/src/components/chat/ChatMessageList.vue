@@ -43,6 +43,7 @@
       :index="i"
       :expandedTools="expandedTools"
       :blockProposals="blockProposals"
+      :blockAskQuestions="blockAskQuestions"
       :agents="agents"
       :renderedContent="renderedContents[i]"
       :shouldCollapse="isCollapsed(i, msg)"
@@ -84,6 +85,7 @@ const props = defineProps({
   messages: Array,
   expandedTools: Object,
   blockProposals: Object,
+  blockAskQuestions: Object,
   agents: Array,
   currentAgent: Object,
   currentSessionId: String,

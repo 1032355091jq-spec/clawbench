@@ -13,6 +13,7 @@ export interface UseChatSessionOptions {
   inputDisabled: Ref<boolean>
   renderedContents: Ref<string[]>
   blockProposals: Record<string, any>
+  blockAskQuestions: Record<string, any>
   expandedTools: Ref<Record<string, boolean>>
   switching?: Ref<boolean>
   onParseAssistantContent: (content: string) => any
@@ -36,6 +37,7 @@ export function useChatSession(options: UseChatSessionOptions) {
     inputDisabled,
     renderedContents,
     blockProposals,
+    blockAskQuestions,
     expandedTools,
     onParseAssistantContent,
     onExtractScheduleProposals,
@@ -254,6 +256,7 @@ export function useChatSession(options: UseChatSessionOptions) {
       renderedContents.value = []
       totalMessages.value = 0
       Object.keys(blockProposals).forEach(k => delete blockProposals[k])
+      Object.keys(blockAskQuestions).forEach(k => delete blockAskQuestions[k])
       loading.value = false
       const maxCount = store.state.sessionMaxCount
       toast.show(gt('chat.session.created', { count: data.sessionCount ?? '', max: maxCount }), { icon: '✨', type: 'success', duration: 1500 })

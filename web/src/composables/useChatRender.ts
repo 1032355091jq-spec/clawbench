@@ -18,6 +18,7 @@ export function useChatRender(options) {
   const renderCache = new Map()
   const RENDER_CACHE_MAX = 200
   const blockProposals = reactive({})
+  const blockAskQuestions = reactive({})
   const expandedTools = ref({})
 
   function trimRenderCache() {
@@ -77,6 +78,23 @@ export function useChatRender(options) {
         }
       }
       const cleanText = text.replace(/<schedule-proposal>[\s\S]*?<\/schedule-proposal>/, '').trim()
+      return cleanText ? renderMarkdown(cleanText) : ''
+    }
+    // Detect <ask-question> tags — strip from text and store for interactive rendering
+    const askMatch = text.match(/<ask-question\b[^>]*>([\s\S]*?)<\/ask-question>/)
+    if (askMatch) {
+      const askKey = `${msgId}-${blockIdx}`
+      if (!blockAskQuestions[askKey]) {
+        try {
+          const questions = JSON.parse(askMatch[1].trim())
+          if (questions.questions && Array.isArray(questions.questions)) {
+            blockAskQuestions[askKey] = questions
+          }
+        } catch (e) {
+          console.error('Failed to parse ask-question:', e)
+        }
+      }
+      const cleanText = text.replace(/<ask-question\b[^>]*>[\s\S]*?<\/ask-question>/, '').trim()
       return cleanText ? renderMarkdown(cleanText) : ''
     }
     return renderMarkdown(text)
@@ -153,6 +171,21 @@ export function useChatRender(options) {
                 blockProposals[proposalKey] = { proposal }
               } catch (e) {
                 console.error('Failed to parse schedule proposal:', e)
+              }
+            }
+            // Also extract <ask-question> tags for interactive rendering
+            const askKey = `${msg.id}-${bi}`
+            if (!blockAskQuestions[askKey]) {
+              const askMatch = block.text.match(/<ask-question\b[^>]*>([\s\S]*?)<\/ask-question>/)
+              if (askMatch) {
+                try {
+                  const questions = JSON.parse(askMatch[1].trim())
+                  if (questions.questions && Array.isArray(questions.questions)) {
+                    blockAskQuestions[askKey] = questions
+                  }
+                } catch (e) {
+                  console.error('Failed to parse ask-question:', e)
+                }
               }
             }
           }
@@ -327,6 +360,7 @@ export function useChatRender(options) {
   return {
     renderedContents,
     blockProposals,
+    blockAskQuestions,
     expandedTools,
     renderMarkdown,
     renderTextBlock,

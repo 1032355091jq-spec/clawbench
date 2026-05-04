@@ -55,6 +55,18 @@
           </div>
         </div>
       </template>
+      <!-- Ask question card (from <ask-question> XML tag in text) — must come before generic text block -->
+      <template v-else-if="block.type === 'text' && blockAskQuestions[blockProposalsKey(bi)]">
+        <!-- Surrounding text (with ask-question tag stripped) -->
+        <div v-if="getBlockHtml(bi, block)" v-html="getBlockHtml(bi, block)"></div>
+        <div class="chat-tool-call done" data-category="ask" @click.stop="$emit('toggle-tool', key(bi))">
+          <component :is="getToolIcon('AskUserQuestion').icon" :size="12" class="tool-icon" />
+          <span class="tool-name">AskUserQuestion</span>
+          <span class="tool-summary">{{ askQuestionSummary(blockAskQuestions[blockProposalsKey(bi)]) }}</span>
+          <CheckCircle2 :size="14" color="#f59e0b" class="tool-warn" />
+        </div>
+        <div v-if="expandedTools[key(bi)] || true" class="tool-detail" data-tool-name="AskUserQuestion" @click="handleToolDetailClick" v-html="formatToolInput(blockAskQuestions[blockProposalsKey(bi)], 'AskUserQuestion')"></div>
+      </template>
       <!-- Text block: streaming uses throttled render to avoid UI freeze -->
       <div v-else-if="block.type === 'text'" v-html="getBlockHtml(bi, block)"></div>
     </template>
@@ -91,6 +103,7 @@ const props = defineProps({
   msgIndex: { type: Number, default: 0 },
   expandedTools: { type: Object, default: () => ({}) },
   blockProposals: { type: Object, default: () => ({}) },
+  blockAskQuestions: { type: Object, default: () => ({}) },
   streaming: { type: Boolean, default: false },
   cancelled: { type: Boolean, default: false },
   // Render functions
@@ -120,6 +133,17 @@ const thinkingExpanded = ref({})
 
 function toggleThinking(k) {
   thinkingExpanded.value = { ...thinkingExpanded.value, [k]: !thinkingExpanded.value[k] }
+}
+
+/** Generate a short summary for an ask-question block (from <ask-question> tag). */
+function askQuestionSummary(input) {
+  if (!input || !Array.isArray(input.questions) || input.questions.length === 0) return ''
+  const q = input.questions[0]
+  const header = q.header || ''
+  const question = q.question || ''
+  if (header) return header
+  if (question) return question.length > 60 ? question.slice(0, 57) + '...' : question
+  return ''
 }
 
 /** Click inside expanded tool-detail: dispatch to tool action handlers first, then fall through to generic behavior. */

@@ -14,6 +14,7 @@
       :messages="messages"
       :expandedTools="render.expandedTools.value"
       :blockProposals="render.blockProposals"
+      :blockAskQuestions="render.blockAskQuestions"
       :agents="agentsList"
       :currentAgent="currentAgent"
       :currentSessionId="identity.currentSessionId.value"
@@ -239,6 +240,7 @@ const session = useChatSession({
   inputDisabled,
   renderedContents: render.renderedContents,
   blockProposals: render.blockProposals,
+  blockAskQuestions: render.blockAskQuestions,
   expandedTools: render.expandedTools,
   onParseAssistantContent: (content) => render.parseAssistantContent(content),
   onExtractScheduleProposals: (msgs) => render.extractScheduleProposals(msgs),

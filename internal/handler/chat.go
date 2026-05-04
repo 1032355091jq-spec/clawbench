@@ -600,6 +600,15 @@ func finalizeStreamRun(
 	rawOutput string,
 	eventCh <-chan ai.StreamEvent,
 ) streamRunResult {
+	// Detect <ask-question> in the fully accumulated text blocks and convert to tool_use blocks.
+	// This enables all backends (not just Claude/Codebuddy) to produce interactive question cards.
+	if stringsContainsAnyBlock(blocks, "<ask-question") {
+		slog.Info("detected ask-question tag(s) in accumulated text blocks",
+			slog.String("session", sessionID),
+		)
+		blocks = convertAskQuestionBlocks(blocks)
+	}
+
 	// Detect <schedule-proposal> in the fully accumulated text blocks.
 	if !chatReq.ScheduledExecution {
 		for i := range blocks {
@@ -910,6 +919,90 @@ func injectTaskIDIntoProposal(text, taskID string) string {
 	return re.ReplaceAllString(text, "<schedule-proposal>"+string(updatedJSON)+"</schedule-proposal>")
 }
 
+// stringsContainsAnyBlock checks if any text ContentBlock contains the given substring.
+func stringsContainsAnyBlock(blocks []model.ContentBlock, substr string) bool {
+	for _, b := range blocks {
+		if b.Type == "text" && strings.Contains(b.Text, substr) {
+			return true
+		}
+	}
+	return false
+}
+
+// convertAskQuestionBlocks detects <ask-question> tags in text ContentBlocks,
+// parses the JSON content, and converts them into tool_use ContentBlocks with
+// name="AskUserQuestion". Tags are stripped from text; if no text remains the
+// block is replaced entirely, otherwise a new tool_use block is appended.
+// Returns the updated blocks slice.
+func convertAskQuestionBlocks(blocks []model.ContentBlock) []model.ContentBlock {
+	re := regexp.MustCompile(`<ask-question\b[^>]*>([\s\S]*?)</ask-question>`)
+
+	// First pass: collect all conversions needed
+	type conversion struct {
+		index     int
+		input     map[string]any
+		cleanText string
+	}
+	var conversions []conversion
+
+	for i, block := range blocks {
+		if block.Type != "text" {
+			continue
+		}
+		if !strings.Contains(block.Text, "<ask-question") {
+			continue
+		}
+		matches := re.FindStringSubmatch(block.Text)
+		if len(matches) < 2 {
+			continue
+		}
+
+		var input map[string]any
+		if err := json.Unmarshal([]byte(strings.TrimSpace(matches[1])), &input); err != nil {
+			slog.Error("failed to parse ask-question JSON", slog.String("error", err.Error()))
+			continue
+		}
+
+		questions, ok := input["questions"]
+		if !ok {
+			slog.Error("ask-question missing 'questions' field")
+			continue
+		}
+		questionsArr, ok := questions.([]any)
+		if !ok || len(questionsArr) == 0 {
+			slog.Error("ask-question 'questions' must be a non-empty array")
+			continue
+		}
+
+		cleanText := strings.TrimSpace(re.ReplaceAllString(block.Text, ""))
+		conversions = append(conversions, conversion{index: i, input: input, cleanText: cleanText})
+	}
+
+	// Apply conversions in reverse order so index shifts don't affect earlier entries
+	for i := len(conversions) - 1; i >= 0; i-- {
+		c := conversions[i]
+		toolBlock := model.ContentBlock{
+			Type:  "tool_use",
+			Name:  "AskUserQuestion",
+			ID:    fmt.Sprintf("ask-%d", time.Now().UnixNano()%1000000),
+			Input: c.input,
+			Done:  true,
+		}
+
+		if c.cleanText == "" {
+			// No remaining text — replace the text block with the tool_use block
+			blocks[c.index] = toolBlock
+		} else {
+			// Has remaining text — strip the tag and insert tool_use block after
+			blocks[c.index].Text = c.cleanText
+			// Insert tool_use block after the text block
+			insertAt := c.index + 1
+			blocks = append(blocks[:insertAt], append([]model.ContentBlock{toolBlock}, blocks[insertAt:]...)...)
+		}
+	}
+
+	return blocks
+}
 
 // sendEvent sends an event to the stream channel.
 // Non-blocking: if the channel is full (no SSE client reading), the event is dropped.

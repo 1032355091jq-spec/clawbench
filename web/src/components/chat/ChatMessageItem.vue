@@ -25,6 +25,7 @@
           :msgIndex="index"
           :expandedTools="expandedTools"
           :blockProposals="blockProposals"
+          :blockAskQuestions="blockAskQuestions"
           :streaming="msg.streaming"
           :cancelled="msg.cancelled"
           :renderTextBlock="renderTextBlock"
@@ -120,6 +121,7 @@ const props = defineProps({
   index: Number,
   expandedTools: Object,
   blockProposals: Object,
+  blockAskQuestions: Object,
   agents: Array,
   renderedContent: String,
   shouldCollapse: Boolean,
