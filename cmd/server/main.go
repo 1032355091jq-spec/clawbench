@@ -301,15 +301,8 @@ func main() {
 	}
 	handler.SetSpeechProvider(ttsProvider)
 
-	if cfg.LogMaxDays <= 0 {
-		cfg.LogMaxDays = 7
-	}
-	if cfg.LogDir == "" {
-		cfg.LogDir = filepath.Join(model.BinDir, ".clawbench", "logs")
-	}
-	cfg.LogDir = platform.ExpandTilde(cfg.LogDir)
 	// In dev mode, use a separate log directory
-	if devMode && cfg.LogDir != "" {
+	if devMode {
 		cfg.LogDir = cfg.LogDir + "-dev"
 	}
 	fileHandler, err := service.NewFileHandler(cfg.LogDir, "clawbench", cfg.LogMaxDays)
@@ -369,11 +362,17 @@ func main() {
 		slog.Warn("no agents available, session creation will fail")
 	}
 
-	// Hash the password for session comparison
-	if cfg.Password != "" {
-		hash := sha256.Sum256([]byte(cfg.Password + "clawbench-salt"))
-		model.SessionToken = hex.EncodeToString(hash[:])
+	// Print auto-generated password prominently
+	if autoPassword != "" {
+		fmt.Println("========================================")
+		fmt.Printf("  Auto-generated password: %s\n", autoPassword)
+		fmt.Println("  Please save this password for login.")
+		fmt.Println("========================================")
 	}
+
+	// Hash the password for session comparison
+	hash := sha256.Sum256([]byte(cfg.Password + "clawbench-salt"))
+	model.SessionToken = hex.EncodeToString(hash[:])
 
 	// Ensure the watch directory exists
 	if err := os.MkdirAll(model.WatchDir, 0755); err != nil {
@@ -411,13 +410,6 @@ func main() {
 	// CLI --port flag takes highest priority
 	if cliPort > 0 {
 		port = cliPort
-	}
-	if port <= 0 || port > 65535 {
-		if devMode {
-			port = 20002
-		} else {
-			port = 20000
-		}
 	}
 	host := ""
 	if devMode && cfg.Dev.Host != "" {

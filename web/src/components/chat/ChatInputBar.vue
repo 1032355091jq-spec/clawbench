@@ -665,14 +665,10 @@ defineExpose({
     100% { transform: translateX(160%); }
 }
 
-/* WebView: disable continuous animations that cause GPU compositing ghost artifacts */
+/* WebView: disable unread flash (layout-triggering) but keep sweep-light (transform-only, GPU-safe) */
 :root[data-app-mode] .chat-action-btn.has-unread {
     animation: none;
     background: color-mix(in srgb, var(--accent-color, #0066cc) 16%, transparent);
-}
-:root[data-app-mode] .chat-action-btn.has-running::before {
-    animation: none;
-    opacity: 0.15;
 }
 
 .chat-action-btn svg {
