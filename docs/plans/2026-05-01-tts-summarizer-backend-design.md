@@ -2,25 +2,25 @@
 
 ## Summary
 
-将 TTS 内容总结从 SpeechProvider 中解耦为独立的 Summarizer 服务，支持通过配置选择使用 `mmx` 或现有 AI 后端（Claude、Codebuddy、Gemini、OpenCode、Codex）做总结，两者为并列关系。
+将 TTS 内容总结从 SpeechProvider 中解耦为独立的 Summarizer 服务，支持通过配置选择使用 `mmx-cli` 或现有 AI 后端（Claude、Codebuddy、Gemini、OpenCode、Codex）做总结，两者为并列关系。
 
 ## Motivation
 
-不同 AI 后端总结质量不同，用户希望灵活选择最合适的总结后端。当前总结逻辑硬编码在三个 SpeechProvider 中，全部使用 `mmx text chat`，无法切换。
+不同 AI 后端总结质量不同，用户希望灵活选择最合适的总结后端。当前总结逻辑硬编码在三个 SpeechProvider 中，全部使用 `mmx-cli text chat`，无法切换。
 
 ## Architecture
 
 ### Current
 
 ```
-SpeechProvider.Summarize()  ->  mmx text chat  (hard-coded in all 3 providers)
+SpeechProvider.Summarize()  ->  mmx-cli text chat  (hard-coded in all 3 providers)
 SpeechProvider.Synthesize() ->  engine-specific implementation
 ```
 
 ### New
 
 ```
-Summarizer.Summarize()     ->  mmx / claude / gemini / ...  (independent selection)
+Summarizer.Summarize()     ->  mmx-cli / claude / gemini / ...  (independent selection)
 SpeechProvider.Synthesize() ->  engine-specific implementation (unchanged)
 ```
 
@@ -44,7 +44,7 @@ Shared logic extracted from existing providers:
 
 ### 2. MMXSummarizer (`internal/speech/summarizer.go`)
 
-Extracted from existing provider `Summarize()` methods. Calls `mmx text chat` with the summarize prompt. Behavior identical to current implementation.
+Extracted from existing provider `Summarize()` methods. Calls `mmx-cli text chat` with the summarize prompt. Behavior identical to current implementation.
 
 ### 3. AIBackendSummarizer (`internal/speech/summarizer.go`)
 
@@ -101,21 +101,21 @@ type SpeechProvider interface {
 New field in `Config.TTS`:
 
 ```go
-SummarizeBackend string // "mmx" (default) / "claude" / "codebuddy" / "gemini" / "opencode" / "codex"
+SummarizeBackend string // "mmx-cli" (default) / "claude" / "codebuddy" / "gemini" / "opencode" / "codex"
 ```
 
 Example `config.yaml`:
 ```yaml
 tts:
   engine: minimax          # unchanged: minimax / edge / piper
-  summarize_backend: mmx   # new: mmx / claude / codebuddy / gemini / opencode / codex
+  summarize_backend: mmx-cli   # new: mmx-cli / claude / codebuddy / gemini / opencode / codex
 ```
 
 ### 7. Initialization (`cmd/server/main.go`)
 
 New initialization order:
 1. Read `cfg.TTS.SummarizeBackend` -> create Summarizer
-   - `"mmx"` or empty -> `MMXSummarizer` (default, behavior identical to current)
+   - `"mmx-cli"` or empty -> `MMXSummarizer` (default, behavior identical to current)
    - Other values -> `AIBackendSummarizer` via `ai.NewBackend()`
 2. Read `cfg.TTS.Engine` -> create SpeechProvider (no longer contains Summarize)
 3. Call `handler.SetSummarizer()` and `handler.SetSpeechProvider()` separately

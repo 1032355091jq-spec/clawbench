@@ -142,18 +142,18 @@ func main() {
 	// Initialize TTS summarizer from config
 	summarizeBackend := cfg.TTS.SummarizeBackend
 	if summarizeBackend == "" {
-		summarizeBackend = "mmx"
+		summarizeBackend = "mmx-cli"
 	}
 
 	var ttsSummarizer speech.Summarizer
-	if summarizeBackend == "mmx" {
+	if summarizeBackend == "mmx-cli" {
 		s := speech.NewMMXSummarizer()
 		if cfg.TTS.SummarizeModel != "" {
 			s.Model = cfg.TTS.SummarizeModel
 		}
 		ttsSummarizer = s
 		slog.Info("tts summarizer configured",
-			slog.String("backend", "mmx"),
+			slog.String("backend", "mmx-cli"),
 			slog.String("model", s.Model),
 		)
 	} else if summarizeBackend == "ollama" {
@@ -167,7 +167,7 @@ func main() {
 	} else {
 		s, err := speech.NewAIBackendSummarizer(summarizeBackend)
 		if err != nil {
-			slog.Error("failed to create AI backend summarizer, falling back to mmx",
+			slog.Error("failed to create AI backend summarizer, falling back to mmx-cli",
 				slog.String("backend", summarizeBackend),
 				slog.String("error", err.Error()),
 			)

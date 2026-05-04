@@ -33,8 +33,8 @@ type Config struct {
 	} `yaml:"session"`
 	TTS struct {
 		Engine           string         `yaml:"engine"`            // TTS engine: "minimax" (default), "edge", "piper", "kokoro", "moss-nano"
-		SummarizeBackend string         `yaml:"summarize_backend"` // Summarization backend: "mmx" (default), "claude", "codebuddy", "gemini", "opencode", "codex", "ollama"
-		SummarizeModel   string         `yaml:"summarize_model"`   // Model for summarization (default: "MiniMax-M2.7" for mmx, "gemma3:270m" for ollama; empty = backend default for others)
+		SummarizeBackend string         `yaml:"summarize_backend"` // Summarization backend: "mmx-cli" (default), "claude", "codebuddy", "gemini", "opencode", "codex", "ollama"
+		SummarizeModel   string         `yaml:"summarize_model"`   // Model for summarization (default: "MiniMax-M2.7" for mmx-cli, "gemma3:270m" for ollama; empty = backend default for others)
 		TTSModel         string         `yaml:"tts_model"`         // TTS model for speech synthesis (default: "Speech-2.8-Turbo")
 		Voice            string         `yaml:"voice"`             // Voice ID for TTS (default: "female-chengshu")
 		Language         string         `yaml:"language"`          // Language boost code (default: "zh")

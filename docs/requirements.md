@@ -62,7 +62,7 @@ session:
 
 **现状**：
 - 总结功能使用 `mmx` CLI 工具调用 MiniMax
-- 命令：`mmx text chat --system <prompt> --messages-file - --model <model>`
+- 命令：`mmx text chat --system <prompt> --messages-file - --model <model>`（后端标识为 `mmx-cli`）
 
 **需求**：
 - 支持使用项目自己的 AI 后端进行总结
@@ -71,7 +71,7 @@ session:
 **配置项建议**：
 ```yaml
 tts:
-  # 总结功能使用的后端类型: "minimax" (默认, 使用mmx CLI) 或 "cli" (使用项目AI后端)
+  # 总结功能使用的后端类型: "minimax" (默认, 使用mmx CLI, 后端标识mmx-cli) 或 "cli" (使用项目AI后端)
   summarize_backend: "minimax"
   # 当 summarize_backend 为 "cli" 时使用的后端名称 (如 "assistant", "coder" 等)
   summarize_backend_name: "assistant"

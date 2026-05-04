@@ -46,7 +46,7 @@ const (
 var MaxTextRunes = 0
 
 // Summarizer abstracts text summarization for TTS.
-// Implementations can use different backends (mmx CLI, AI backends, etc.)
+// Implementations can use different backends (mmx-cli, AI backends, etc.)
 type Summarizer interface {
 	// Summarize condenses text for voice output.
 	// For short text, it may return the text as-is after stripping markdown.
@@ -55,7 +55,7 @@ type Summarizer interface {
 }
 
 // summarizePassFunc is the strategy function for a single summarization pass.
-// Each backend (mmx, ollama, AI backend) provides its own implementation.
+// Each backend (mmx-cli, ollama, AI backend) provides its own implementation.
 type summarizePassFunc func(ctx context.Context, text, systemPrompt string, pass int) (string, error)
 
 // genericSummarizer implements the shared Summarize logic that all backends use:

@@ -446,7 +446,7 @@ pip install -e .
 ```yaml
 tts:
   engine: "moss-nano"
-  summarize_backend: "mmx"
+  summarize_backend: "mmx-cli"
   summarize_model: "MiniMax-M2.7"
   moss_nano:
     model_dir: ""          # ONNX 模型目录，留空则自动下载或使用 .clawbench/moss-nano-models
@@ -463,7 +463,7 @@ tts:
 
 | 后端 | 说明 | 网络要求 |
 |------|------|---------|
-| `mmx` | mmx text chat（默认） | 需要 mmx CLI |
+| `mmx-cli` | mmx text chat（默认） | 需要 mmx CLI |
 | `claude` | Claude CLI | 需要 claude CLI |
 | `codebuddy` | CodeBuddy CLI | 需要 codebuddy CLI |
 | `gemini` | Gemini CLI | 需要 gemini CLI |
@@ -707,7 +707,7 @@ clawbench/
 │       └── codex.go / codex_stream.go
 │   └── speech/                  # TTS 语音合成 & 总结
 │       ├── summarizer.go        # Summarizer 接口 + genericSummarizer 共享管线
-│       ├── mmx_summarizer.go    # MMXSummarizer（mmx text chat）
+│       ├── mmx_summarizer.go    # MMXSummarizer（mmx-cli text chat）
 │       ├── ollama_summarizer.go # OllamaSummarizer（HTTP /api/chat）
 │       ├── ai_backend_summarizer.go # AIBackendSummarizer（CLI 后端总结）
 │       ├── minimax.go / edge.go / piper.go / kokoro.go / moss_tts_nano.go  # TTS 引擎实现

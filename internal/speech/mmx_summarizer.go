@@ -10,6 +10,7 @@ import (
 )
 
 // MMXSummarizer implements Summarizer using the mmx CLI tool (mmx text chat).
+// This is the "mmx-cli" backend in config — the default and fallback summarizer.
 type MMXSummarizer struct {
 	// Model is the model ID for text chat (default: "MiniMax-M2.7").
 	Model string
