@@ -95,6 +95,9 @@ export function useChatSession(options: UseChatSessionOptions) {
         if (metadata) msg.metadata = metadata
         if (cancelled) msg.cancelled = cancelled
         if (msg.streaming) { msg.streaming = true; msg.fromDB = true }
+      } else if (msg.role === 'user' && !msg.blocks) {
+        // User messages also use ContentBlocks for unified rendering & auto-collapse
+        msg.blocks = msg.content ? [{ type: 'text', text: msg.content }] : []
       }
       return msg
     })

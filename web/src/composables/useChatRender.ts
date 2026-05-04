@@ -1,38 +1,23 @@
 import { ref, reactive, nextTick, watch } from 'vue'
-import { escapeHtml } from '@/utils/html.ts'
-import { baseName, splitPath } from '@/utils/path.ts'
+import { baseName } from '@/utils/path.ts'
 import { marked, DOMPurify, mermaid } from '@/utils/globals.ts'
 import { formatToolInput } from '@/utils/renderToolDetail.ts'
 import { renderKatexInString, renderMermaidInElement } from '@/composables/useMarkdownRenderer.ts'
 import { useFilePathAnnotation } from '@/composables/useFilePathAnnotation.ts'
-import { useToast } from '@/composables/useToast.ts'
 import { gt } from '@/composables/useLocale'
 import { store } from '@/stores/app.ts'
 
 export function useChatRender(options) {
   const { messages, theme, currentSessionId } = options
-  const toast = useToast()
   const { annotateFilePaths, verifyFilePaths } = useFilePathAnnotation()
 
   const renderedContents = ref([])
-  const renderCache = new Map()
-  const RENDER_CACHE_MAX = 200
   const blockProposals = reactive({})
   const blockAskQuestions = reactive({})
   const expandedTools = ref({})
 
-  function trimRenderCache() {
-    if (renderCache.size > RENDER_CACHE_MAX) {
-      const keys = renderCache.keys()
-      for (let i = 0; i < renderCache.size - RENDER_CACHE_MAX; i++) {
-        renderCache.delete(keys.next().value)
-      }
-    }
-  }
-
-  // Clear cache and re-render when theme changes
+  // Re-render when theme changes
   watch(theme, () => {
-    renderCache.clear()
     updateRenderedContents(true)
   })
 
@@ -98,10 +83,6 @@ export function useChatRender(options) {
       return cleanText ? renderMarkdown(cleanText) : ''
     }
     return renderMarkdown(text)
-  }
-
-  function renderMsg(msg) {
-    return renderMarkdown(msg.content)
   }
 
   function parseAssistantContent(content) {
@@ -202,22 +183,10 @@ export function useChatRender(options) {
     }
     if (forceFullRender) {
       renderedContents.value = messages.value.map(msg => {
-        // Assistant messages are always rendered via blocks in ChatMessageItem,
-        // never via renderedContent. Return empty string to prevent stale/wrong
-        // HTML from leaking into the v-else-if branch.
-        if (msg.role === 'assistant') {
-          return ''
-        }
-        const key = msg.content || ''
-        if (key && renderCache.has(key)) {
-          return renderCache.get(key)
-        }
-        const html = renderMsg(msg)
-        if (key) {
-          renderCache.set(key, html)
-          trimRenderCache()
-        }
-        return html
+        // Both user and assistant messages now render via ContentBlocks
+        // (msg.blocks). Return empty string — renderedContent is only
+        // used as a legacy fallback for messages without blocks.
+        return ''
       })
       nextTick(() => {
         const el = document.getElementById('aiChatMessages')
@@ -229,22 +198,7 @@ export function useChatRender(options) {
 
       if (newMsgs.length === 0) return
 
-      const newContents = newMsgs.map(msg => {
-        // Assistant messages are always rendered via blocks, never via renderedContent
-        if (msg.role === 'assistant') {
-          return ''
-        }
-        const key = msg.content || ''
-        if (key && renderCache.has(key)) {
-          return renderCache.get(key)
-        }
-        const html = renderMsg(msg)
-        if (key) {
-          renderCache.set(key, html)
-          trimRenderCache()
-        }
-        return html
-      })
+      const newContents = newMsgs.map(() => '')
 
       renderedContents.value = [...renderedContents.value, ...newContents]
 
@@ -376,6 +330,5 @@ export function useChatRender(options) {
     humanizeCron,
     repeatLabel,
     truncate,
-    renderMsg,
   }
 }

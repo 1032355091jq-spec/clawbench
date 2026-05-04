@@ -159,6 +159,8 @@ export function useChatStream(options: UseChatStreamOptions) {
               msg.blocks = blocks
               if (metadata) msg.metadata = metadata
               if (cancelled) msg.cancelled = cancelled
+            } else if (msg.role === 'user' && !msg.blocks) {
+              msg.blocks = msg.content ? [{ type: 'text', text: msg.content }] : []
             }
             return msg
           })
@@ -388,9 +390,11 @@ export function useChatStream(options: UseChatStreamOptions) {
       const data = JSON.parse(e.data)
 
       // Add user message bubble (DB message already persisted by backend)
+      const userContent = data.text || ''
       messages.value.push({
         role: 'user',
-        content: data.text || '',
+        content: userContent,
+        blocks: userContent ? [{ type: 'text', text: userContent }] : [],
         filePath: data.filePaths?.length > 0 ? data.filePaths[0] : '',
         files: (data.files || []).map(p => ({ path: p })),
         createdAt: new Date().toISOString(),

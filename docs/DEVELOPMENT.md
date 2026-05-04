@@ -107,11 +107,22 @@ cd clawbench
 | `port` | 20000 | 服务端口 |
 | `watch_dir` | 用户家目录 | Linux: `/home/用户名`, Windows: `C:\Users\用户名` |
 | `password` | 自动生成 UUID | 首次生成后保存到 `.clawbench/auto-password`，重启复用 |
+| `log_dir` | `<BinDir>/.clawbench/logs` | 二进制同级目录下 |
+| `log_max_days` | 7 | 日志保留天数 |
+| `upload.max_size_mb` | 100 | 上传大小上限 MB |
+| `upload.max_files` | 20 | 单次上传文件数上限 |
+| `chat.initial_messages` | 20 | 初始加载消息条数 |
+| `chat.page_size` | 20 | 懒加载每页消息条数 |
+| `chat.collapsed_height` | 150 | 历史消息折叠高度 px |
+| `session.max_count` | 10 | 每项目会话上限 |
 | `proxy.enabled` | true | 端口转发默认启用 |
+| `proxy.allowed_ports` | `1024-65535` | 允许转发的端口范围 |
 | `ssh.enabled` | true | SSH 隧道默认启用 |
 | `tts.engine` | edge | Edge TTS 免费无限制 |
-| `upload.max_size_mb` | 100 | 上传大小上限 |
-| `session.max_count` | 10 | 每项目会话上限 |
+| `tts.summarize_backend` | simple | 纯文本清洗，零延迟 |
+| `tts.speed` | 1.0 | 正常语速 |
+| `tts.inline_code_max_len` | 100 | 行内代码保留最大字符数（rune），超出则删除 |
+| `tts.max_summarize_runes` | 10000 | 总结输入最大字符数，超出截取尾部 |
 
 **自动密码机制**：未配置 `password` 时，系统自动生成随机 UUID 作为密码，保存到 `.clawbench/auto-password`（权限 0600）。重启时复用已保存的密码，不会重新生成。配置 `password` 后自动删除该文件。启动脚本会从文件读取并显示密码。
 

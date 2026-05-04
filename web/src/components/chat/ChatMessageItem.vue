@@ -17,32 +17,31 @@
         </template>
       </div>
 
-      <!-- Message content -->
-      <template v-if="msg.role === 'assistant' && msg.blocks">
-        <ContentBlocks
-          :blocks="msg.blocks"
-          :msgId="msg.id"
-          :msgIndex="index"
-          :expandedTools="expandedTools"
-          :blockProposals="blockProposals"
-          :blockAskQuestions="blockAskQuestions"
-          :streaming="msg.streaming"
-          :cancelled="msg.cancelled"
-          :renderTextBlock="renderTextBlock"
-          :formatToolInput="formatToolInput"
-          :toolCallSummary="toolCallSummary"
-          :humanizeCron="humanizeCron"
-          :repeatLabel="repeatLabel"
-          :truncate="truncate"
-          :getAgentIcon="getAgentIcon"
-          :getAgentName="getAgentName"
-          @toggle-tool="$emit('toggle-tool', $event)"
-          @edit-task="$emit('edit-task', $event)"
-          @send-message="$emit('send-message', $event)"
-        />
-      </template>
-      <!-- User message or legacy plain text (NOT for assistant messages with blocks parsed) -->
-      <div v-else-if="msg.role === 'user'" v-html="renderedContent"></div>
+      <!-- Message content — unified ContentBlocks rendering for both user and assistant -->
+      <ContentBlocks
+        v-if="msg.blocks"
+        :blocks="msg.blocks"
+        :msgId="msg.id"
+        :msgIndex="index"
+        :expandedTools="expandedTools"
+        :blockProposals="blockProposals"
+        :blockAskQuestions="blockAskQuestions"
+        :streaming="msg.streaming"
+        :cancelled="msg.cancelled"
+        :renderTextBlock="renderTextBlock"
+        :formatToolInput="formatToolInput"
+        :toolCallSummary="toolCallSummary"
+        :humanizeCron="humanizeCron"
+        :repeatLabel="repeatLabel"
+        :truncate="truncate"
+        :getAgentIcon="getAgentIcon"
+        :getAgentName="getAgentName"
+        @toggle-tool="$emit('toggle-tool', $event)"
+        @edit-task="$emit('edit-task', $event)"
+        @send-message="$emit('send-message', $event)"
+      />
+      <!-- Legacy fallback: messages without blocks (shouldn't normally happen) -->
+      <div v-else v-html="renderedContent"></div>
     </div>
 
     <!-- Collapse overlay + expand button -->

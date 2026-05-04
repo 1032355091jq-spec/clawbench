@@ -415,6 +415,7 @@ async function sendMessageNow(text, filePaths, files) {
     messages.value.push({
         role: 'user',
         content: text || '',
+        blocks: text ? [{ type: 'text', text: text || '' }] : [],
         filePath: filePaths.length > 0 ? filePaths[0] : '',
         files: (files || []).map(p => ({ path: p })),
         createdAt: new Date().toISOString()

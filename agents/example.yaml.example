@@ -81,6 +81,8 @@ specialty: 配置示例与模板参考
 # 不同后端的 JSON 流式输出格式不同，系统会自动选择对应的 LineParser 解析。
 backend: codebuddy
 
+# ----- Optional Fields / 可选字段 -----
+
 # model [string, optional]
 # Model identifier passed to the backend CLI.
 # 传递给后端 CLI 的模型标识符。
@@ -96,11 +98,13 @@ backend: codebuddy
 #   backend=codex     → "codex-MiniMax-M2.7"
 model: glm-5.1
 
-# system_prompt [string, required]
+# system_prompt [string, optional]
 # The agent's system prompt / role definition.
 # 智能体的系统提示词 / 角色设定。
-# At load time, the content of common_prompt.md is automatically prepended.
-# 加载时会自动在前面拼接 common_prompt.md 的内容。
+# When omitted, the agent uses only common_prompt.md as its system prompt (if it exists).
+# 省略时，智能体仅使用 common_prompt.md 作为系统提示词（如果存在）。
+# When set, common_prompt.md content is automatically prepended.
+# 设置后，加载时会自动在前面拼接 common_prompt.md 的内容。
 # Supports multi-line text using YAML | (preserve newlines) or > (fold newlines) syntax.
 # 支持多行，使用 YAML 的 |（保留换行）或 >（折叠换行）语法。
 # You may use the placeholder {{AVAILABLE_AGENTS}}, which is replaced at load time with the
@@ -116,8 +120,6 @@ system_prompt: |
 
   （上面的占位符会在加载时自动替换为实际的智能体列表。）
   (The placeholder above is automatically replaced with the actual agent list at load time.)
-
-# ----- Optional Fields / 可选字段 -----
 
 # command [string, optional]
 # Custom CLI executable path or command (with optional arguments).
