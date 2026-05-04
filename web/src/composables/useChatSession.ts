@@ -4,7 +4,6 @@ import { useToast } from '@/composables/useToast.ts'
 import { useNotification } from '@/composables/useNotification.ts'
 import { useSessionIdentity } from '@/composables/useSessionIdentity.ts'
 import { useAgents } from '@/composables/useAgents.ts'
-import { useAppMode } from '@/composables/useAppMode.ts'
 import { store } from '@/stores/app.ts'
 
 export interface UseChatSessionOptions {
@@ -55,7 +54,6 @@ export function useChatSession(options: UseChatSessionOptions) {
 
   const toast = useToast()
   const notification = useNotification()
-  const { isAppMode } = useAppMode()
 
   // ── Identity refs from singleton ──
   const identity = useSessionIdentity()
@@ -102,12 +100,27 @@ export function useChatSession(options: UseChatSessionOptions) {
     })
   }
 
+  // ── Change detection for polling ──
+  // Tracks a lightweight fingerprint of the last loaded messages.
+  // When polling-triggered reloads find no change, the UI is not refreshed,
+  // preventing expandedTools collapse, scroll reset, and unnecessary re-renders.
+  let lastMessageSnapshot = ''
+
+  function buildMessageSnapshot(rawMsgs: any[]): string {
+    // Fingerprint: each message's ID + role + content length + createdAt + streaming flag
+    // Detects new/deleted messages and content changes without comparing full content.
+    return rawMsgs.map(m =>
+      `${m.id ?? ''}:${m.role}:${(m.content || '').length}:${m.createdAt || ''}:${m.streaming ? 1 : 0}`
+    ).join('|')
+  }
+
   // forceScrollBottom: true = always scroll to bottom (switch session, first load)
   //                   false = only scroll if already near bottom (re-open panel, polling)
   // showOverlay: true = show the switching overlay (session switch, first open)
-  //            false = silent reload (stream done, polling) — avoids jarring flash
-  async function loadHistory(forceScrollBottom = true, showOverlay = false) {
-    expandedTools.value = {}
+  //            false = silent reload (stream done, polling)
+  // skipIfUnchanged: true = when data matches last snapshot, skip UI refresh entirely
+  //                (used by polling to avoid collapsing expandedTools / resetting scroll)
+  async function loadHistory(forceScrollBottom = true, showOverlay = false, skipIfUnchanged = false) {
     if (showOverlay) switching.value = true
     try {
       // Load agents first so we can resolve agent names
@@ -123,7 +136,20 @@ export function useChatSession(options: UseChatSessionOptions) {
         throw new Error(errData.error || gt('chat.session.requestFailed', { status: resp.status }))
       }
       const data = await resp.json()
-      messages.value = parseMessages(data.messages || [])
+      const rawMsgs = data.messages || []
+
+      // Change detection: if skipIfUnchanged and data matches last snapshot, do nothing.
+      // Always refresh when session is running (SSE events may have been dropped).
+      const newSnapshot = buildMessageSnapshot(rawMsgs)
+      if (skipIfUnchanged && newSnapshot === lastMessageSnapshot && !data.running) {
+        switching.value = false
+        return
+      }
+      lastMessageSnapshot = newSnapshot
+
+      // Data has changed (or this is a full load) — reset UI state and apply new data
+      expandedTools.value = {}
+      messages.value = parseMessages(rawMsgs)
       totalMessages.value = data.total || messages.value.length
       currentSessionId.value = data.sessionId || ''
       currentSessionTitle.value = data.sessionTitle || ''
@@ -189,6 +215,7 @@ export function useChatSession(options: UseChatSessionOptions) {
     onDisconnectStream()
     onStopPolling()
     stopMsgCountPolling()
+    lastMessageSnapshot = ''  // Invalidate snapshot — new session may have different data
     expandedTools.value = {}
     try {
       // Load agents first so we can resolve agent names
@@ -257,6 +284,7 @@ export function useChatSession(options: UseChatSessionOptions) {
       messages.value = []
       renderedContents.value = []
       totalMessages.value = 0
+      lastMessageSnapshot = ''  // New session — no messages yet
       Object.keys(blockProposals).forEach(k => delete blockProposals[k])
       Object.keys(blockAskQuestions).forEach(k => delete blockAskQuestions[k])
       loading.value = false
@@ -315,8 +343,8 @@ export function useChatSession(options: UseChatSessionOptions) {
         const data = await resp.json()
         if (data.count > lastMsgCount.value) {
           lastMsgCount.value = data.count
-          // Reload history to pick up new messages (don't force scroll)
-          await loadHistory(false)
+          // Reload history to pick up new messages (don't force scroll, skip if unchanged)
+          await loadHistory(false, false, true)
         }
       } catch (err) {
         // Silently ignore polling errors
@@ -367,11 +395,6 @@ export function useChatSession(options: UseChatSessionOptions) {
           }
         } catch (_) {}
 
-        // Sync unread counts to Android native layer for launcher badge
-        if (isAppMode.value) {
-          ;(window as any).AndroidNative?.setUnreadCount(totalChatUnread, totalTaskUnread)
-        }
-
         // Check for completed sessions
         const completedSessions: string[] = []
         for (const sessionId of runningSessions.value) {
@@ -397,9 +420,9 @@ export function useChatSession(options: UseChatSessionOptions) {
 
           if (sessionId === currentSessionId.value) {
             // Current session completed but UI may be stuck in loading state
-            // (e.g. done event was dropped) — force reset
+            // (e.g. done event was dropped) — force reset with full reload
             if (loading.value) {
-              loadHistory()
+              loadHistory(true, false, true)
             }
           } else {
             // Other session completed
@@ -441,7 +464,7 @@ export function useChatSession(options: UseChatSessionOptions) {
       // Page became visible while streaming - reconnect
       onDisconnectStream()
       onStopPolling()
-      loadHistory().catch(() => {
+      loadHistory(true, false, true).catch(() => {
         // loadHistory failed — reset loading state so user isn't stuck
         loading.value = false
       })
