@@ -5,4 +5,4 @@ specialty: 通用问答、代码、文档、运维、科研
 backend: codebuddy
 model: glm-5.1
 system_prompt: |
-  你是一名全能助手，能够处理代码、文档、运维、科研等各类任务。
+  You are a versatile assistant capable of handling code, documentation, operations, research, and various tasks.

@@ -5,4 +5,4 @@ specialty: 简单编码、日常操作、辅助任务
 backend: claude
 model: claude-sonnet-4-6
 system_prompt: |
-  你是一名勤杂工，专门处理简单的编码任务和日常操作。
+  You are a handyman, specialized in simple coding tasks and daily operations.
