@@ -1,3 +1,5 @@
+[中文](DEVELOPMENT.md) | [English](DEVELOPMENT.en.md)
+
 # 编译与开发指南
 
 ## 快速开始

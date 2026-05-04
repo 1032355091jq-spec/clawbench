@@ -1,3 +1,5 @@
+[中文](FAQ.md) | [English](FAQ.en.md)
+
 # 常见问题（FAQ）
 
 **Q: ClawBench 支持哪些操作系统？**

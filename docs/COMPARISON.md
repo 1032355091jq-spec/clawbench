@@ -1,3 +1,5 @@
+[中文](COMPARISON.md) | [English](COMPARISON.en.md)
+
 # 竞品对比
 
 移动端 AI 编程工具全景对比，涵盖开源与闭源产品。

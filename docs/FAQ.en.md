@@ -1,0 +1,43 @@
+[中文](FAQ.md) | [English](FAQ.en.md)
+
+# Frequently Asked Questions (FAQ)
+
+**Q: Which operating systems does ClawBench support?**
+
+A: Linux (x86_64 / ARM64) and Windows (x86_64) are supported. The backend is written in Go and the frontend is a standard web application, enabling cross-platform operation.
+
+**Q: Which AI backends are supported?**
+
+A: Five CLI backends are supported: CodeBuddy, Claude Code, OpenCode, Gemini CLI, and Codex. You can switch between them in real time via the Web UI, with isolated session data. Just make sure the corresponding CLI is installed and available in your PATH.
+
+**Q: How do I add a new agent?**
+
+A: Create a YAML file in the `agents/` directory, defining id, name, icon, specialty, backend, model, and system_prompt. Common prompts go in `common_prompt.md`, which is automatically injected into all agents. The `{{AVAILABLE_AGENTS}}` placeholder is automatically replaced with the list of available agents.
+
+**Q: Do I need to configure an API Key?**
+
+A: No. ClawBench implements AI functionality by calling local CLIs (CodeBuddy, Claude Code, OpenCode, Gemini CLI, or Codex), which already handle API Key configuration and management.
+
+**Q: Can TTS speech synthesis use local models?**
+
+A: Yes. Set `summarize_backend` to `"ollama"` to use a local Ollama service for text summarization without any cloud API. Just install Ollama and pull a model (e.g., `ollama pull gemma3:270m`), then set `summarize_backend: "ollama"` in the config file. The TTS engine itself also supports local offline solutions (piper / kokoro / moss-nano). Combining both enables fully offline speech playback. Among these, moss-nano supports multiple languages and voice cloning with 48kHz high-quality output.
+
+**Q: Can I run multiple ClawBench instances simultaneously?**
+
+A: Yes. The release and dev versions use independent ports and databases, so they can run simultaneously. You can also run multiple instances by specifying different ports with the `--port` parameter.
+
+**Q: Do I need a config file to start?**
+
+A: No. All configuration options have default values, so you can start without `config.yaml`. When `password` is not configured, a random password is auto-generated and saved to `.clawbench/auto-password`; the startup script will display it. To customize, copy `config.example.yaml` to `config.yaml` and modify as needed.
+
+**Q: What if I forget the auto-generated password?**
+
+A: Check the `.clawbench/auto-password` file to retrieve the password. You can also set `password` in `config.yaml` to use a fixed password.
+
+**Q: Where is data stored?**
+
+A: Data is stored in the `.clawbench/` directory alongside the binary, including the database file (`ClawBench.db`), log files (`logs/`), and auto-password (`auto-password`). Uploaded files are stored in `.clawbench/uploads/` within the project directory. It's a green portable deployment — deleting the program directory completely uninstalls everything.
+
+**Q: How do I back up data?**
+
+A: Back up the `.clawbench/ClawBench.db` database file in the directory alongside the binary.

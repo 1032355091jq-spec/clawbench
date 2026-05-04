@@ -1,3 +1,5 @@
+[中文](TTS.md) | [English](TTS.en.md)
+
 # TTS 语音合成部署指南
 
 ClawBench 支持 TTS 语音合成，自动将 AI 回复总结后朗读。需要配置 **TTS 引擎** 和 **总结后端**。

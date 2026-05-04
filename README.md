@@ -1,3 +1,5 @@
+[中文](README.md) | [English](README.en.md)
+
 # ClawBench —— 为移动端打造的AI工作台
 
 <p>
