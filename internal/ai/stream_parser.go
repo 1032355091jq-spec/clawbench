@@ -8,6 +8,10 @@ import (
 // LineParser is the interface for parsing individual JSON lines from CLI output.
 type LineParser interface {
 	ParseLine(line string, ch chan<- StreamEvent)
+	// GetCapturedSessionID returns the externally-identifiable session ID
+	// captured from parsed lines (e.g., OpenCode ses_xxx, Codex thread_xxx).
+	// Returns empty string if not yet captured or not applicable.
+	GetCapturedSessionID() string
 }
 
 // ClaudeContentBlock represents a content block within a Claude stream message
@@ -131,6 +135,10 @@ type StreamParser struct {
 	// currentTool tracks the in-progress tool call
 	currentTool *ToolCall
 }
+
+// GetCapturedSessionID returns empty string for Claude/Codebuddy/Gemini backends
+// which use ClawBench UUIDs natively and don't need external session ID mapping.
+func (p *StreamParser) GetCapturedSessionID() string { return "" }
 
 // ParseLine parses a single JSON line from stream-json output and sends
 // StreamEvent(s) to the provided channel. This is the shared parser used by

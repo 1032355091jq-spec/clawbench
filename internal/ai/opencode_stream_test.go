@@ -154,6 +154,28 @@ func TestOpenCodeStream_ParseLine_StepStart(t *testing.T) {
 	}
 }
 
+func TestOpenCodeStream_GetCapturedSessionID(t *testing.T) {
+	parser := &OpenCodeStreamParser{}
+
+	// Before any parsing, session ID is empty
+	if id := parser.GetCapturedSessionID(); id != "" {
+		t.Errorf("expected empty session ID before parsing, got %q", id)
+	}
+
+	// step_start captures session ID
+	ch := make(chan StreamEvent, 64)
+	parser.ParseLine(`{"type":"step_start","timestamp":1,"sessionID":"ses_test123","part":{"type":"step-start"}}`, ch)
+	if id := parser.GetCapturedSessionID(); id != "ses_test123" {
+		t.Errorf("expected session ID ses_test123 after step_start, got %q", id)
+	}
+
+	// text message updates to new session ID
+	parser.ParseLine(`{"type":"text","timestamp":2,"sessionID":"ses_updated456","part":{"type":"text","text":"\n\nhello"}}`, ch)
+	if id := parser.GetCapturedSessionID(); id != "ses_updated456" {
+		t.Errorf("expected session ID ses_updated456 after text, got %q", id)
+	}
+}
+
 func TestOpenCodeStream_ParseLine_EmptyText(t *testing.T) {
 	line := `{"type":"text","timestamp":1,"sessionID":"ses_abc","part":{"type":"text","text":"\n\n"}}`
 	events := parseOpenCodeLine(line)

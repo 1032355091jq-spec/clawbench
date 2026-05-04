@@ -73,6 +73,10 @@ type GeminiStreamParser struct {
 	model     string // captured from init event
 }
 
+// GetCapturedSessionID returns empty string for Gemini which uses --resume latest
+// and doesn't need external session ID mapping.
+func (p *GeminiStreamParser) GetCapturedSessionID() string { return "" }
+
 // ParseLine parses a single JSON line from Gemini's stream-json output and sends
 // StreamEvent(s) to the provided channel.
 func (p *GeminiStreamParser) ParseLine(line string, ch chan<- StreamEvent) {

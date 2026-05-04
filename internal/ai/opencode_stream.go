@@ -57,6 +57,10 @@ type OpenCodeStreamParser struct {
 	sessionID string // captured from any message that has a sessionID
 }
 
+// GetCapturedSessionID returns the OpenCode session ID (ses_xxx) captured from
+// parsed stream messages. Available as soon as the first message (e.g., step_start) is parsed.
+func (p *OpenCodeStreamParser) GetCapturedSessionID() string { return p.sessionID }
+
 // ParseLine parses a single JSON line from OpenCode's stream-json output and sends
 // StreamEvent(s) to the provided channel.
 func (p *OpenCodeStreamParser) ParseLine(line string, ch chan<- StreamEvent) {

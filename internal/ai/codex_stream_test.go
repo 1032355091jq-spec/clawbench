@@ -29,6 +29,22 @@ func TestCodexStream_ThreadStarted(t *testing.T) {
 	}
 }
 
+func TestCodexStream_GetCapturedSessionID(t *testing.T) {
+	parser := &CodexStreamParser{}
+
+	// Before any parsing, thread ID is empty
+	if id := parser.GetCapturedSessionID(); id != "" {
+		t.Errorf("expected empty thread ID before parsing, got %q", id)
+	}
+
+	// thread.started captures thread ID
+	ch := make(chan StreamEvent, 64)
+	parser.ParseLine(`{"type":"thread.started","thread_id":"019dc744-1f6e-75d0-9877-99c8d2f134da"}`, ch)
+	if id := parser.GetCapturedSessionID(); id != "019dc744-1f6e-75d0-9877-99c8d2f134da" {
+		t.Errorf("expected thread ID after thread.started, got %q", id)
+	}
+}
+
 func TestCodexStream_AgentMessageTextOnly(t *testing.T) {
 	line := `{"type":"item.completed","item":{"id":"item_0","type":"agent_message","text":"Hello, world!"}}`
 	events := parseCodexLine(line)

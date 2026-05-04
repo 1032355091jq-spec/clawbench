@@ -34,12 +34,12 @@ type Metadata struct {
 
 // StreamEvent represents a single event in the streaming output
 type StreamEvent struct {
-	Type      string          // "content", "thinking", "metadata", "done", "error", "tool_use", "raw_output", "resume_split", "queue_consume", "queue_update"
-	Content   string          // Incremental text (Type=content, Type=thinking)
-	Meta      *Metadata       // Metadata (Type=metadata)
-	Error     string          // Error message (Type=error)
-	Tool      *ToolCall       // Tool call info (Type=tool_use)
-	RawOutput string          // Raw stdout lines from AI backend (Type=raw_output)
+	Type       string          // "content", "thinking", "metadata", "done", "error", "tool_use", "raw_output", "resume_split", "queue_consume", "queue_update", "session_capture"
+	Content    string          // Incremental text (Type=content, Type=thinking) or captured session ID (Type=session_capture)
+	Meta       *Metadata       // Metadata (Type=metadata)
+	Error      string          // Error message (Type=error)
+	Tool       *ToolCall       // Tool call info (Type=tool_use)
+	RawOutput  string          // Raw stdout lines from AI backend (Type=raw_output)
 	QueueEvent *QueueEventData // Queue data (Type=queue_consume, Type=queue_update)
 }
 

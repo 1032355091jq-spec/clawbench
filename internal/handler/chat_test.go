@@ -1019,3 +1019,20 @@ func TestAccumulateBlock_ResumeSession_ContentThenError(t *testing.T) {
 		t.Errorf("expected 'Connection lost', got %q", blocks[1].Text)
 	}
 }
+
+func TestAccumulateBlock_SessionCaptureNotAccumulated(t *testing.T) {
+	// session_capture events should NOT be accumulated as content blocks
+	events := []ai.StreamEvent{
+		{Type: "session_capture", Content: "ses_test123"},
+		{Type: "content", Content: "Hello"},
+	}
+
+	blocks := feedEvents(events)
+
+	if len(blocks) != 1 {
+		t.Fatalf("expected 1 block (session_capture should be skipped), got %d", len(blocks))
+	}
+	if blocks[0].Type != "text" {
+		t.Errorf("expected text block, got %q", blocks[0].Type)
+	}
+}

@@ -65,6 +65,8 @@ func (b *CLIBackend) ExecuteStream(ctx context.Context, req ChatRequest) (<-chan
 
 	// Collect raw stdout lines for debugging/analysis
 	var rawLines strings.Builder
+	// Track the last emitted captured session ID to avoid duplicate session_capture events
+	var lastCapturedSessionID string
 
 	go func() {
 		defer close(ch)
@@ -108,6 +110,17 @@ func (b *CLIBackend) ExecuteStream(ctx context.Context, req ChatRequest) (<-chan
 
 			slog.Debug(b.name+" stream: raw line", "session_id", req.SessionID, "line", line)
 			parser.ParseLine(line, ch)
+
+			// Early capture of external session ID (OpenCode ses_xxx, Codex thread_xxx).
+			// This allows the handler to persist the ID immediately, even if the stream
+			// is cancelled before step_finish/turn.completed emits the metadata event.
+			if capturedID := parser.GetCapturedSessionID(); capturedID != "" && capturedID != lastCapturedSessionID {
+				lastCapturedSessionID = capturedID
+				select {
+				case ch <- StreamEvent{Type: "session_capture", Content: capturedID}:
+				default:
+				}
+			}
 
 			// Check context after parsing
 			select {

@@ -501,6 +501,28 @@ func executeStreamRun(
 				rawOutput = event.RawOutput
 				continue
 			}
+			// Early capture of external session ID (OpenCode/Codex).
+			// Persist immediately so that if the stream is cancelled before
+			// step_finish/turn.completed, the ID is already saved for resumption.
+			if event.Type == "session_capture" {
+				if (backendName == "opencode" || backendName == "codex") && event.Content != "" {
+					existingExtID := service.GetExternalSessionID(sessionID)
+					if existingExtID == "" {
+						if err := service.UpdateExternalSessionID(sessionID, event.Content); err != nil {
+							slog.Error("failed to save external session ID (early capture)",
+								slog.String("session", sessionID),
+								slog.String("external_id", event.Content),
+								slog.String("err", err.Error()),
+							)
+						} else {
+							slog.Info("early-captured external session ID",
+								slog.String("session", sessionID),
+								slog.String("external_id", event.Content))
+						}
+					}
+				}
+				continue
+			}
 			// Forward to SSE channel
 			if !sendEvent(ctx, streamCh, event) {
 				return finalizeStreamRun(ctx, streamCh, projectPath, backendName, sessionID, agentID, chatReq, blocks, responseMetadata, rawOutput, eventCh)
@@ -753,6 +775,12 @@ func buildChatRequest(prompt, sessionID, backendName, agentID, fileDir string) a
 		extID := service.GetExternalSessionID(sessionID)
 		if extID != "" {
 			effectiveSessionID = extID
+		} else {
+			// No external session ID available — don't pass the invalid ClawBench UUID
+			// to OpenCode/Codex. They don't recognize it and would silently fail
+			// (stdout empty, exit 0), resulting in "AI 未返回任何内容".
+			// Let them start a fresh session instead.
+			effectiveSessionID = ""
 		}
 	}
 

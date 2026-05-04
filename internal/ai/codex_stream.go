@@ -50,6 +50,10 @@ type CodexStreamParser struct {
 	threadID string // captured from thread.started event
 }
 
+// GetCapturedSessionID returns the Codex thread ID captured from thread.started.
+// Available as soon as the first event is parsed.
+func (p *CodexStreamParser) GetCapturedSessionID() string { return p.threadID }
+
 // ParseLine parses a single JSON line from Codex's --json output and sends
 // StreamEvent(s) to the provided channel.
 func (p *CodexStreamParser) ParseLine(line string, ch chan<- StreamEvent) {
