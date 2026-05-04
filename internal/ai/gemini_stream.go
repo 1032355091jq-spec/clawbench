@@ -161,11 +161,13 @@ func (p *GeminiStreamParser) ParseLine(line string, ch chan<- StreamEvent) {
 
 // buildGeminiStreamArgs constructs the CLI arguments for Gemini streaming
 func buildGeminiStreamArgs(req ChatRequest) []string {
-	// Prompt: prepend system prompt if set.
+	// Prompt: prepend system prompt on first message only.
 	// Gemini CLI has no --system-prompt flag, so injecting the system prompt
 	// into the user prompt is the only way to pass it through.
+	// On resume, the system prompt is already in the session history from the
+	// first message — repeating it would waste tokens by duplicating it in context.
 	prompt := req.Prompt
-	if req.SystemPrompt != "" {
+	if req.SystemPrompt != "" && !req.Resume {
 		prompt = fmt.Sprintf("[System Instructions: %s]\n\n%s", req.SystemPrompt, prompt)
 	}
 

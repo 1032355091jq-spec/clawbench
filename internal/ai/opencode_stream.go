@@ -156,11 +156,13 @@ func (p *OpenCodeStreamParser) ParseLine(line string, ch chan<- StreamEvent) {
 
 // buildOpenCodeStreamArgs constructs the CLI arguments for OpenCode streaming
 func buildOpenCodeStreamArgs(req ChatRequest) []string {
-	// Prompt: prepend system prompt if set.
+	// Prompt: prepend system prompt on first message only.
 	// OpenCode CLI has no --system-prompt flag, so injecting the system prompt
 	// into the user prompt is the only way to pass it through.
+	// On resume, the system prompt is already in the session history from the
+	// first message — repeating it would waste tokens by duplicating it in context.
 	prompt := req.Prompt
-	if req.SystemPrompt != "" {
+	if req.SystemPrompt != "" && !req.Resume {
 		prompt = fmt.Sprintf("[System Instructions: %s]\n\n%s", req.SystemPrompt, prompt)
 	}
 

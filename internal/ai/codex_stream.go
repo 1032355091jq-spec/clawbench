@@ -158,12 +158,14 @@ func buildCodexStreamArgs(req ChatRequest) []string {
 	// Skip git repo check (allows running in non-git dirs)
 	args = append(args, "--skip-git-repo-check")
 
-	// Prompt: prepend system prompt if set.
+	// Prompt: prepend system prompt on first message only.
 	// Codex CLI has no --system-prompt flag, and -c developer_instructions= causes
 	// reconnection errors (v0.57.0). Injecting the system prompt into the user prompt
 	// is the only reliable mechanism that works across all Codex CLI versions.
+	// On resume, the system prompt is already in the session history from the
+	// first message — repeating it would waste tokens by duplicating it in context.
 	prompt := req.Prompt
-	if req.SystemPrompt != "" {
+	if req.SystemPrompt != "" && !req.Resume {
 		prompt = fmt.Sprintf("[System Instructions: %s]\n\n%s", req.SystemPrompt, prompt)
 	}
 
