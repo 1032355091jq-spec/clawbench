@@ -10,9 +10,8 @@
 
 将强大的 AI 编程智能体能力完整移植到浏览器与移动端 App，打造真正的移动端工作环境。文件浏览、代码编辑、AI 对话、Git 操作、定时调度 —— 一个应用，全部搞定。
 
-**核心优势**：原生透传 AI 能力（工具调用、深度思考、Skill、MCP），零适配成本，完整保留编程智能体的强大功能。不同于其他移动端 AI 工具仅做"遥控器"，ClawBench 是**唯一的全功能移动端工作台**——文件、代码、Git、AI、定时任务、TTS，手机上直接干活，不依赖电脑在线。（[竞品对比](docs/COMPARISON.md)）
+核心优势：原生透传 AI 能力（工具调用、深度思考、Skill、MCP），零适配成本，完整保留编程智能体的强大功能。不同于其他移动端 AI 工具仅做"遥控器"，ClawBench 是全功能移动端工作台——文件、代码、Git、AI、定时任务、TTS，手机上直接干活，不依赖电脑在线。（[同类项目对比](docs/COMPARISON.md)）
 
-**本项目本身即完全使用 ClawBench 在手机上开发，全程未使用 PC。**
 
 - **支持平台**：浏览器（PC / 平板 / 手机）、Android App、PWA
 - **AI 后端**：CodeBuddy、Claude Code、OpenCode、Gemini CLI、Codex
@@ -25,49 +24,47 @@
 
 | 登录 | 首页 | 选择项目 |
 |------|------|----------|
-| ![登录](docs/screenshots/screenshot-12.jpg) | ![首页](docs/screenshots/screenshot-13.jpg) | ![选择项目](docs/screenshots/screenshot-10.jpg) |
+| ![登录](docs/screenshots/login.png) | ![首页](docs/screenshots/home.png) | ![选择项目](docs/screenshots/project-select.png) |
 
 ### 文件浏览与代码编辑
 
-| 代码编辑器 | 搜索 | 文件浏览 |
-|------------|------|----------|
-| ![代码编辑器](docs/screenshots/screenshot-11.jpg) | ![搜索](docs/screenshots/screenshot-2.jpg) | ![文件浏览](docs/screenshots/screenshot-3.jpg) |
+| 文件浏览 | 搜索过滤 | 代码编辑器 | 引用提问 |
+|----------|----------|------------|----------|
+| ![文件浏览](docs/screenshots/file-browser.png) | ![搜索过滤](docs/screenshots/file-search.png) | ![代码编辑器](docs/screenshots/code-editor.png) | ![引用提问](docs/screenshots/quote-question.png) |
 
 ### Markdown 与文档预览
 
-| LaTeX 公式 | Mermaid 图表 | 目录导航 |
-|------------|-------------|----------|
-| ![LaTeX 公式](docs/screenshots/screenshot-5.jpg) | ![Mermaid 图表](docs/screenshots/screenshot-8.jpg) | ![目录导航](docs/screenshots/screenshot-24.jpg) |
+| Markdown 渲染 | LaTeX 公式 | Mermaid 图表 | 目录导航 |
+|---------------|------------|-------------|----------|
+| ![Markdown 渲染](docs/screenshots/markdown-preview.png) | ![LaTeX 公式](docs/screenshots/latex-formula.png) | ![Mermaid 图表](docs/screenshots/mermaid-diagram.png) | ![目录导航](docs/screenshots/toc-drawer.png) |
 
 ### AI 智能体
 
-| 智能体选择 | AI 全能助手 | 会话管理 | 定时任务 |
-|------------|-------------|----------|----------|
-| ![智能体选择](docs/screenshots/screenshot-19.jpg) | ![AI 全能助手](docs/screenshots/screenshot-6.jpg) | ![会话管理](docs/screenshots/screenshot-9.jpg) | ![定时任务](docs/screenshots/screenshot-18.jpg) |
+| 智能体选择 | AI 对话 | 结构化提问 | 会话管理 |
+|------------|---------|------------|----------|
+| ![智能体选择](docs/screenshots/agent-selector.png) | ![AI 对话](docs/screenshots/chat-panel.png) | ![结构化提问](docs/screenshots/ask-question.png) | ![会话管理](docs/screenshots/session-manager.png) |
 
-### AI 对话
-
-| 工具调用与深度思考 | 快捷发送 |
-|--------------------|----------|
-| ![工具调用与深度思考](docs/screenshots/screenshot-20.jpg) | ![快捷发送](docs/screenshots/screenshot-25.jpg) |
+| 定时任务 | 创建任务 | 对话创建任务 |
+|----------|----------|--------------|
+| ![定时任务](docs/screenshots/scheduled-tasks.png) | ![创建任务](docs/screenshots/task-create.png) | ![对话创建任务](docs/screenshots/schedule-proposal.png) |
 
 ### Git 集成
 
-| Git Diff | 提交历史 | Git 分支图 |
-|----------|----------|------------|
-| ![Git Diff](docs/screenshots/screenshot-1.jpg) | ![提交历史](docs/screenshots/screenshot-4.jpg) | ![Git 分支图](docs/screenshots/screenshot-21.jpg) |
+| 提交历史与分支图 | 提交详情 | 比较报告 |
+|------------------|----------|----------|
+| ![提交历史与分支图](docs/screenshots/git-history.png) | ![提交详情](docs/screenshots/git-commit-detail.png) | ![比较报告](docs/screenshots/git-comparison-report.png) |
 
 ### 媒体预览
 
-| 图片查看 | 灯箱放大 | 视频播放 | 音频播放 | PDF 预览 |
-|----------|----------|----------|----------|----------|
-| ![图片查看](docs/screenshots/screenshot-14.jpg) | ![灯箱放大](docs/screenshots/screenshot-26.jpg) | ![视频播放](docs/screenshots/screenshot-15.jpg) | ![音频播放](docs/screenshots/screenshot-16.jpg) | ![PDF 预览](docs/screenshots/screenshot-17.jpg) |
+| 图片查看 | 视频播放 | 音频播放 | PDF 预览 |
+|----------|----------|----------|----------|
+| ![图片查看](docs/screenshots/image-viewer.png) | ![视频播放](docs/screenshots/video-player.png) | ![音频播放](docs/screenshots/audio-player.png) | ![PDF 预览](docs/screenshots/pdf-preview.png) |
 
 ### SSH 隧道端口转发
 
 | 端口转发管理 |
 |-------------|
-| ![端口转发](docs/screenshots/screenshot-23.jpg) |
+| ![端口转发](docs/screenshots/port-forwarding.png) |
 
 ---
 
@@ -104,6 +101,13 @@ graph LR
 ---
 
 ## 快速开始
+
+### 前置准备
+
+- **一台 PC（Linux / macOS / Windows）**：用于运行 ClawBench 服务端，需已安装至少一种 AI 编程智能体 CLI（CodeBuddy、Claude Code、OpenCode、Gemini CLI、Codex 均可）
+- **一台手机**：安装 [ClawBench Android App](https://github.com/xulongzhe/clawbench/releases)，或使用手机浏览器（推荐 Chrome）访问服务端地址
+
+### 下载与解压
 
 从 [GitHub Releases](https://github.com/xulongzhe/clawbench/releases) 下载最新版 ZIP 包，解压即可部署。所有配置项均有默认值，无需配置文件即可启动。
 

@@ -10,9 +10,7 @@
 
 Brings the full power of AI coding agents to browsers and mobile apps, creating a true mobile development environment. File browsing, code editing, AI conversation, Git operations, scheduled tasks — one app does it all.
 
-**Core Advantage**: Native passthrough of AI capabilities (tool calls, extended thinking, Skills, MCP) with zero adaptation cost, fully preserving the power of coding agents. Unlike other mobile AI tools that are merely "remote controllers," ClawBench is the **only full-featured mobile workstation** — files, code, Git, AI, scheduled tasks, TTS, get real work done on your phone without needing a PC online. ([Comparison](docs/COMPARISON.en.md))
-
-**This project was developed entirely using ClawBench on a phone, without ever using a PC.**
+Core Advantage: Native passthrough of AI capabilities (tool calls, extended thinking, Skills, MCP) with zero adaptation cost, fully preserving the power of coding agents. Unlike other mobile AI tools that are merely "remote controllers," ClawBench is a full-featured mobile workstation — files, code, Git, AI, scheduled tasks, TTS, get real work done on your phone without needing a PC online. ([Similar Projects Comparison](docs/COMPARISON.en.md))
 
 - **Supported Platforms**: Browser (PC / Tablet / Phone), Android App, PWA
 - **AI Backends**: CodeBuddy, Claude Code, OpenCode, Gemini CLI, Codex
@@ -25,49 +23,47 @@ Brings the full power of AI coding agents to browsers and mobile apps, creating 
 
 | Login | Home | Select Project |
 |-------|------|----------------|
-| ![Login](docs/screenshots/screenshot-12.jpg) | ![Home](docs/screenshots/screenshot-13.jpg) | ![Select Project](docs/screenshots/screenshot-10.jpg) |
+| ![Login](docs/screenshots/login.png) | ![Home](docs/screenshots/home.png) | ![Select Project](docs/screenshots/project-select.png) |
 
 ### File Browsing & Code Editing
 
-| Code Editor | Search | File Browser |
-|-------------|--------|--------------|
-| ![Code Editor](docs/screenshots/screenshot-11.jpg) | ![Search](docs/screenshots/screenshot-2.jpg) | ![File Browser](docs/screenshots/screenshot-3.jpg) |
+| File Browser | Search & Filter | Code Editor | Quote & Ask |
+|-------------|----------------|-------------|-------------|
+| ![File Browser](docs/screenshots/file-browser.png) | ![Search & Filter](docs/screenshots/file-search.png) | ![Code Editor](docs/screenshots/code-editor.png) | ![Quote & Ask](docs/screenshots/quote-question.png) |
 
 ### Markdown & Document Preview
 
-| LaTeX Formulas | Mermaid Diagrams | Table of Contents |
-|----------------|------------------|-------------------|
-| ![LaTeX Formulas](docs/screenshots/screenshot-5.jpg) | ![Mermaid Diagrams](docs/screenshots/screenshot-8.jpg) | ![Table of Contents](docs/screenshots/screenshot-24.jpg) |
+| Markdown Render | LaTeX Formulas | Mermaid Diagrams | Table of Contents |
+|-----------------|----------------|------------------|-------------------|
+| ![Markdown Render](docs/screenshots/markdown-preview.png) | ![LaTeX Formulas](docs/screenshots/latex-formula.png) | ![Mermaid Diagrams](docs/screenshots/mermaid-diagram.png) | ![Table of Contents](docs/screenshots/toc-drawer.png) |
 
 ### AI Agents
 
-| Agent Selection | AI Assistant | Session Manager | Scheduled Tasks |
-|-----------------|-------------|-----------------|-----------------|
-| ![Agent Selection](docs/screenshots/screenshot-19.jpg) | ![AI Assistant](docs/screenshots/screenshot-6.jpg) | ![Session Manager](docs/screenshots/screenshot-9.jpg) | ![Scheduled Tasks](docs/screenshots/screenshot-18.jpg) |
+| Agent Selection | AI Conversation | Structured Question | Session Manager |
+|-----------------|-----------------|---------------------|-----------------|
+| ![Agent Selection](docs/screenshots/agent-selector.png) | ![AI Conversation](docs/screenshots/chat-panel.png) | ![Structured Question](docs/screenshots/ask-question.png) | ![Session Manager](docs/screenshots/session-manager.png) |
 
-### AI Conversation
-
-| Tool Calls & Extended Thinking | Quick Send |
-|-------------------------------|------------|
-| ![Tool Calls & Extended Thinking](docs/screenshots/screenshot-20.jpg) | ![Quick Send](docs/screenshots/screenshot-25.jpg) |
+| Scheduled Tasks | Create Task | Schedule Proposal |
+|-----------------|-------------|-------------------|
+| ![Scheduled Tasks](docs/screenshots/scheduled-tasks.png) | ![Create Task](docs/screenshots/task-create.png) | ![Schedule Proposal](docs/screenshots/schedule-proposal.png) |
 
 ### Git Integration
 
-| Git Diff | Commit History | Git Branch Graph |
-|----------|---------------|------------------|
-| ![Git Diff](docs/screenshots/screenshot-1.jpg) | ![Commit History](docs/screenshots/screenshot-4.jpg) | ![Git Branch Graph](docs/screenshots/screenshot-21.jpg) |
+| Commit History & Branch Graph | Commit Detail | Comparison Report |
+|-------------------------------|---------------|-------------------|
+| ![Commit History & Branch Graph](docs/screenshots/git-history.png) | ![Commit Detail](docs/screenshots/git-commit-detail.png) | ![Comparison Report](docs/screenshots/git-comparison-report.png) |
 
 ### Media Preview
 
-| Image Viewer | Lightbox Zoom | Video Player | Audio Player | PDF Preview |
-|-------------|---------------|-------------|-------------|------------|
-| ![Image Viewer](docs/screenshots/screenshot-14.jpg) | ![Lightbox Zoom](docs/screenshots/screenshot-26.jpg) | ![Video Player](docs/screenshots/screenshot-15.jpg) | ![Audio Player](docs/screenshots/screenshot-16.jpg) | ![PDF Preview](docs/screenshots/screenshot-17.jpg) |
+| Image Viewer | Video Player | Audio Player | PDF Preview |
+|-------------|-------------|-------------|------------|
+| ![Image Viewer](docs/screenshots/image-viewer.png) | ![Video Player](docs/screenshots/video-player.png) | ![Audio Player](docs/screenshots/audio-player.png) | ![PDF Preview](docs/screenshots/pdf-preview.png) |
 
 ### SSH Tunnel Port Forwarding
 
 | Port Forwarding |
 |----------------|
-| ![Port Forwarding](docs/screenshots/screenshot-23.jpg) |
+| ![Port Forwarding](docs/screenshots/port-forwarding.png) |
 
 ---
 
@@ -104,6 +100,13 @@ graph LR
 ---
 
 ## Quick Start
+
+### Prerequisites
+
+- **A PC (Linux / macOS / Windows)**: To run the ClawBench server, with at least one AI coding agent CLI installed (CodeBuddy, Claude Code, OpenCode, Gemini CLI, or Codex)
+- **A phone**: Install the [ClawBench Android App](https://github.com/xulongzhe/clawbench/releases), or use a mobile browser (Chrome recommended) to access the server address
+
+### Download & Extract
 
 Download the latest ZIP package from [GitHub Releases](https://github.com/xulongzhe/clawbench/releases), extract and deploy. All configuration items have default values — no config file needed to start.
 
