@@ -7,7 +7,6 @@ import (
 	"net/http"
 	"time"
 
-	"clawbench/internal/model"
 	"clawbench/internal/service"
 )
 
@@ -27,7 +26,7 @@ func AIChatStream(w http.ResponseWriter, r *http.Request) {
 		sessionID = getSessionID(r)
 	}
 	if sessionID == "" {
-		model.WriteErrorf(w, http.StatusBadRequest, "session_id required")
+		writeLocalizedErrorf(w, r, http.StatusBadRequest, "SessionIdRequired")
 		return
 	}
 
@@ -38,7 +37,8 @@ func AIChatStream(w http.ResponseWriter, r *http.Request) {
 
 	// Check if session is running
 	if !service.IsSessionRunning(sessionID) {
-		fmt.Fprintf(w, "event: error\ndata: {\"error\":\"会话未在运行\"}\n\n")
+		errMsg := T(r, "SessionNotRunning")
+		fmt.Fprintf(w, "event: error\ndata: {\"error\":%q}\n\n", errMsg)
 		if canFlush, ok := w.(http.Flusher); ok {
 			canFlush.Flush()
 		}
@@ -48,7 +48,8 @@ func AIChatStream(w http.ResponseWriter, r *http.Request) {
 	// Get the stream channel
 	streamCh, ok := service.GetSessionStream(sessionID)
 	if !ok {
-		fmt.Fprintf(w, "event: error\ndata: {\"error\":\"未找到会话流\"}\n\n")
+		errMsg := T(r, "SessionStreamNotFound")
+		fmt.Fprintf(w, "event: error\ndata: {\"error\":%q}\n\n", errMsg)
 		if canFlush, ok := w.(http.Flusher); ok {
 			canFlush.Flush()
 		}
@@ -146,6 +147,8 @@ func AIChatStream(w http.ResponseWriter, r *http.Request) {
 					})
 					fmt.Fprintf(w, "event: queue_update\ndata: %s\n\n", data)
 				}
+			case "queue_done":
+				fmt.Fprintf(w, "event: queue_done\ndata: {}\n\n")
 			}
 
 			if canFlush {

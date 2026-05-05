@@ -68,7 +68,7 @@ const (
 
 // StreamEvent represents a single event in the streaming output
 type StreamEvent struct {
-	Type       string          // "content", "thinking", "metadata", "done", "error", "tool_use", "raw_output", "resume_split", "queue_consume", "queue_update", "session_capture"
+	Type       string          // "content", "thinking", "metadata", "done", "error", "tool_use", "raw_output", "resume_split", "queue_consume", "queue_update", "queue_done", "session_capture"
 	Content    string          // Incremental text (Type=content, Type=thinking) or captured session ID (Type=session_capture)
 	Reason     string          // Structured reason code for i18n (e.g. "disconnect", "timeout", "parse_error")
 	Meta       *Metadata       // Metadata (Type=metadata)

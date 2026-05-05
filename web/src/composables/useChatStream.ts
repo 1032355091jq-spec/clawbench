@@ -19,6 +19,7 @@ export interface UseChatStreamOptions {
   onNotification: (title: string, opts?: any) => void
   onStreamEnd?: (reason: 'done' | 'cancelled' | 'error') => void
   onQueueUpdate?: (queue: any[]) => void
+  onQueueConsume?: () => void
 }
 
 export function useChatStream(options: UseChatStreamOptions) {
@@ -39,6 +40,7 @@ export function useChatStream(options: UseChatStreamOptions) {
     onNotification,
     onStreamEnd,
     onQueueUpdate,
+    onQueueConsume,
   } = options
 
   let eventSource: EventSource | null = null
@@ -410,6 +412,7 @@ export function useChatStream(options: UseChatStreamOptions) {
       })
       lastIndex = messages.value.length - 1 // CRITICAL: update closure variable
 
+      onQueueConsume?.()
       onRenderNeeded()
       onScrollBottom()
     })
@@ -419,6 +422,26 @@ export function useChatStream(options: UseChatStreamOptions) {
       resetStreamTimeout()
       const data = JSON.parse(e.data)
       onQueueUpdate?.(data.queue || [])
+    })
+
+    eventSource.addEventListener('queue_done', () => {
+      if (!guard()) return
+      resetStreamTimeout()
+      // Current streaming message is finalized — clear loading state
+      // before the next queued message starts (queue_consume)
+      const msg = messages.value[lastIndex]
+      if (msg) {
+        delete msg.streaming
+        // Mark all unfinished tool_use blocks as done so spinner stops
+        if (msg.blocks) {
+          for (const block of msg.blocks) {
+            if (block.type === 'tool_use' && !block.done) {
+              block.done = true
+            }
+          }
+        }
+      }
+      onRenderNeeded()
     })
 
     eventSource.addEventListener('error', (e) => {

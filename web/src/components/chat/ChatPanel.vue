@@ -297,6 +297,15 @@ const stream = useChatStream({
   onNotification: (title, opts) => notification.show(title, opts),
   onStreamEnd,
   onQueueUpdate: (queue) => { manager.setPendingMessages(queue) },
+  onQueueConsume: () => {
+    // Optimistically remove the first pending message — it's being consumed now.
+    // The subsequent queue_update SSE event will provide authoritative state,
+    // but this ensures the queue UI updates immediately even if queue_update is delayed or dropped.
+    const current = manager.pendingMessages.value
+    if (current.length > 0) {
+      manager.setPendingMessages(current.slice(1))
+    }
+  },
 })
 
 const { pendingFiles, attachedFiles, handleFileSelect, handleFileDrop, removeFile, addAttachedFile, removeAttachedFile, cleanupPreviewUrls, clearPendingFiles } = useFileUpload()

@@ -76,9 +76,9 @@ func AIChat(w http.ResponseWriter, r *http.Request) {
 			sessionID = requestedSessionID
 			sessionBackend = service.GetSessionBackend(sessionID)
 			if sessionBackend == "" {
-				model.WriteErrorf(w, http.StatusNotFound, "session not found")
-				return
-			}
+			writeLocalizedErrorf(w, r, http.StatusNotFound, "SessionNotFound")
+			return
+		}
 		} else {
 			// No specific session requested, get the most recent session across all backends
 			allSessions, err := service.GetSessions(projectPath, "")
@@ -92,10 +92,10 @@ func AIChat(w http.ResponseWriter, r *http.Request) {
 				agentID := model.GetDefaultAgentID()
 				sessionBackend2, defaultModel, _, _, ok := resolveAgentConfig(agentID)
 				if !ok {
-					model.WriteErrorf(w, http.StatusServiceUnavailable, "no agents available")
+			writeLocalizedErrorf(w, r, http.StatusServiceUnavailable, "NoAgentsAvailable")
 					return
 				}
-				sessionID, err = service.CreateSession(projectPath, sessionBackend2, "新会话", agentID, defaultModel, "default")
+				sessionID, err = service.CreateSession(projectPath, sessionBackend2, T(r, "NewSession"), agentID, defaultModel, "default")
 				if err != nil {
 					model.WriteError(w, model.Internal(fmt.Errorf("failed to create session")))
 					return
@@ -148,7 +148,7 @@ func AIChat(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if r.Method != http.MethodPost {
-		model.WriteErrorf(w, http.StatusMethodNotAllowed, "Method not allowed")
+		writeLocalizedErrorf(w, r, http.StatusMethodNotAllowed, "MethodNotAllowed")
 		return
 	}
 
@@ -159,18 +159,18 @@ func AIChat(w http.ResponseWriter, r *http.Request) {
 		// Check session count limit before auto-creating (0 = unlimited)
 		if model.SessionMaxCount > 0 {
 			if count, cerr := service.GetSessionCount(projectPath); cerr == nil && count >= model.SessionMaxCount {
-				model.WriteErrorf(w, http.StatusConflict, fmt.Sprintf("已达会话数量上限（%d），请先删除旧会话", model.SessionMaxCount))
+				writeLocalizedErrorf(w, r, http.StatusConflict, "SessionLimitReached", map[string]any{"MaxCount": model.SessionMaxCount})
 				return
 			}
 		}
 		agentID2 := model.GetDefaultAgentID()
 		sessionBackend2, defaultModel2, _, _, ok := resolveAgentConfig(agentID2)
 		if !ok {
-			model.WriteErrorf(w, http.StatusServiceUnavailable, "no agents available")
+			writeLocalizedErrorf(w, r, http.StatusServiceUnavailable, "NoAgentsAvailable")
 			return
 		}
 		var err error
-		sessionID, err = service.CreateSession(projectPath, sessionBackend2, "新会话", agentID2, defaultModel2, "default")
+		sessionID, err = service.CreateSession(projectPath, sessionBackend2, T(r, "NewSession"), agentID2, defaultModel2, "default")
 		if err != nil {
 			model.WriteError(w, model.Internal(fmt.Errorf("failed to create session")))
 			return
@@ -179,7 +179,7 @@ func AIChat(w http.ResponseWriter, r *http.Request) {
 	}
 	backendName := service.GetSessionBackend(sessionID)
 	if backendName == "" {
-		model.WriteErrorf(w, http.StatusBadRequest, "Session backend not found")
+	writeLocalizedErrorf(w, r, http.StatusBadRequest, "SessionBackendNotFound")
 		return
 	}
 
@@ -192,13 +192,13 @@ func AIChat(w http.ResponseWriter, r *http.Request) {
 	}
 	r.Body = http.MaxBytesReader(w, r.Body, maxChatBodySize)
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		model.WriteErrorf(w, http.StatusBadRequest, "Invalid request")
+		writeLocalizedErrorf(w, r, http.StatusBadRequest, "InvalidRequest")
 		return
 	}
 
 	// Allow empty message if files are provided
 	if req.Message == "" && len(req.Files) == 0 && len(req.FilePaths) == 0 {
-		model.WriteErrorf(w, http.StatusBadRequest, "Message or files required")
+		writeLocalizedErrorf(w, r, http.StatusBadRequest, "MessageOrFilesRequired")
 		return
 	}
 
@@ -214,12 +214,12 @@ func AIChat(w http.ResponseWriter, r *http.Request) {
 	// Validate all attached file paths are within project
 	validatedFilePaths := make([]string, 0, len(allFilePaths))
 	for _, fp := range allFilePaths {
-		fAbsPath, ok := validateAndResolvePath(w, basePath, fp)
+		fAbsPath, ok := validateAndResolvePath(w, r, basePath, fp)
 		if !ok {
 			return
 		}
 		if _, err := os.Stat(fAbsPath); err != nil {
-			model.WriteError(w, model.NotFound(nil, "File not found: "+fp))
+			writeLocalizedErrorf(w, r, http.StatusNotFound, "FileNotFound", map[string]any{"Path": fp})
 			return
 		}
 		validatedFilePaths = append(validatedFilePaths, fAbsPath)
@@ -228,12 +228,12 @@ func AIChat(w http.ResponseWriter, r *http.Request) {
 	// Validate file paths are within project and collect absolute paths
 	fileAbsPaths := make([]string, 0, len(req.Files))
 	for _, fPath := range req.Files {
-		fAbsPath, ok := validateAndResolvePath(w, basePath, fPath)
+		fAbsPath, ok := validateAndResolvePath(w, r, basePath, fPath)
 		if !ok {
 			return
 		}
 		if _, err := os.Stat(fAbsPath); err != nil {
-			model.WriteError(w, model.NotFound(nil, "File not found: "+fPath))
+			writeLocalizedErrorf(w, r, http.StatusNotFound, "FileNotFound", map[string]any{"Path": fPath})
 			return
 		}
 		fileAbsPaths = append(fileAbsPaths, fAbsPath)
@@ -241,10 +241,10 @@ func AIChat(w http.ResponseWriter, r *http.Request) {
 
 	prompt := req.Message
 	if len(validatedFilePaths) > 0 {
-		prompt = fmt.Sprintf("[当前文件: %s]\n%s", strings.Join(validatedFilePaths, ", "), req.Message)
+		prompt = fmt.Sprintf("[Current file: %s]\n%s", strings.Join(validatedFilePaths, ", "), req.Message)
 	}
 	if len(fileAbsPaths) > 0 {
-		prompt = fmt.Sprintf("[用户上传了 %d 个文件: %s]\n%s", len(fileAbsPaths), strings.Join(fileAbsPaths, ", "), prompt)
+		prompt = fmt.Sprintf("[User uploaded %d file(s): %s]\n%s", len(fileAbsPaths), strings.Join(fileAbsPaths, ", "), prompt)
 	}
 
 	// allFiles already includes filePaths (frontend merges them before sending)
@@ -268,7 +268,7 @@ func AIChat(w http.ResponseWriter, r *http.Request) {
 		queueState := service.EnqueueMessage(sessionID, qMsg)
 
 		// Persist user message to DB immediately
-		service.AddChatMessage(projectPath, backendName, sessionID, "user", req.Message, allFiles, false)
+		service.AddChatMessage(projectPath, backendName, sessionID, "user", req.Message, allFiles, false, T(r, "FileMessage"))
 
 		// Notify the running goroutine via SSE
 		service.SendSessionEvent(sessionID, ai.StreamEvent{
@@ -284,7 +284,7 @@ func AIChat(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if _, err := service.AddChatMessage(projectPath, backendName, sessionID, "user", req.Message, allFiles, false); err != nil {
+	if _, err := service.AddChatMessage(projectPath, backendName, sessionID, "user", req.Message, allFiles, false, T(r, "FileMessage")); err != nil {
 		service.SetSessionRunning(sessionID, false)
 		model.WriteError(w, model.Internal(fmt.Errorf("failed to save message")))
 		return
@@ -332,7 +332,7 @@ func AIChat(w http.ResponseWriter, r *http.Request) {
 		firstChatReq := buildChatRequest(prompt, sessionID, backendName, effectiveAgentID, fileDir)
 
 		// Execute first message
-		result := executeStreamRun(ctx, streamCh, projectPath, sessionID, backendName, effectiveAgentID, firstChatReq, fileDir)
+		result := executeStreamRun(ctx, r, streamCh, projectPath, sessionID, backendName, effectiveAgentID, firstChatReq, fileDir)
 
 		// Drain loop: keep executing queued messages after normal completion
 		for {
@@ -368,8 +368,12 @@ func AIChat(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 
-			// Queue has next message — send queue_consume + queue_update, persist, execute
+			// Queue has next message — notify frontend that current message is done,
+			// then send queue_consume + queue_update, persist, execute the next one
 			slog.Info("draining queued message", slog.String("session", sessionID), slog.String("text", qMsg.Text))
+
+			// Notify frontend: current streaming message is finalized (remove loading dots)
+			sendEvent(ctx, streamCh, ai.StreamEvent{Type: "queue_done"})
 
 			// Notify frontend: a queued message is about to execute
 			sendEvent(ctx, streamCh, ai.StreamEvent{
@@ -378,7 +382,7 @@ func AIChat(w http.ResponseWriter, r *http.Request) {
 			})
 
 			// Persist user message to DB
-			service.AddChatMessage(projectPath, backendName, sessionID, "user", qMsg.Text, qMsg.Files, false)
+			service.AddChatMessage(projectPath, backendName, sessionID, "user", qMsg.Text, qMsg.Files, false, T(r, "FileMessage"))
 
 			// Send updated queue state
 			remainingQueue := service.GetQueue(sessionID)
@@ -389,7 +393,7 @@ func AIChat(w http.ResponseWriter, r *http.Request) {
 
 			// Build chat request from queued message and execute
 			nextChatReq := buildChatRequestFromQueue(qMsg, sessionID, projectPath, backendName, effectiveAgentID, fileDir)
-			result = executeStreamRun(ctx, streamCh, projectPath, sessionID, backendName, effectiveAgentID, nextChatReq, fileDir)
+			result = executeStreamRun(ctx, r, streamCh, projectPath, sessionID, backendName, effectiveAgentID, nextChatReq, fileDir)
 			// Loop continues
 		}
 	}()
@@ -408,6 +412,7 @@ type streamRunResult struct {
 // It does NOT send a terminal SSE event — the caller decides what to send.
 func executeStreamRun(
 	ctx context.Context,
+	r *http.Request,
 	streamCh chan<- ai.StreamEvent,
 	projectPath, sessionID, backendName, agentID string,
 	chatReq ai.ChatRequest,
@@ -416,22 +421,22 @@ func executeStreamRun(
 	backend, err := ai.NewBackend(backendName)
 	if err != nil {
 		slog.Error("failed to create backend", slog.String("backend", backendName), slog.String("err", err.Error()))
-		errMsg := fmt.Sprintf("创建 AI Backend 失败: %v", err)
+		errMsg := T(r, "BackendCreateFailed", map[string]any{"Error": err.Error()})
 		if !sendEvent(ctx, streamCh, ai.StreamEvent{Type: "error", Error: errMsg}) {
 			return streamRunResult{err: errMsg}
 		}
-		_, _ = service.AddChatMessage(projectPath, backendName, sessionID, "assistant", errMsg, nil, false)
+		_, _ = service.AddChatMessage(projectPath, backendName, sessionID, "assistant", errMsg, nil, false, "")
 		return streamRunResult{err: errMsg}
 	}
 
 	eventCh, err := backend.ExecuteStream(ctx, chatReq)
 	if err != nil {
 		slog.Error("failed to start stream", slog.String("err", err.Error()))
-		errMsg := fmt.Sprintf("启动流式输出失败: %v", err)
+		errMsg := T(r, "StreamStartFailed", map[string]any{"Error": err.Error()})
 		if !sendEvent(ctx, streamCh, ai.StreamEvent{Type: "error", Error: errMsg}) {
 			return streamRunResult{err: errMsg}
 		}
-		_, _ = service.AddChatMessage(projectPath, backendName, sessionID, "assistant", errMsg, nil, false)
+		_, _ = service.AddChatMessage(projectPath, backendName, sessionID, "assistant", errMsg, nil, false, "")
 		return streamRunResult{err: errMsg}
 	}
 
@@ -440,7 +445,7 @@ func executeStreamRun(
 
 	// Create streaming placeholder message in DB
 	emptyContent, _ := json.Marshal(map[string]any{"blocks": []any{}})
-	_, _ = service.AddChatMessage(projectPath, backendName, sessionID, "assistant", string(emptyContent), nil, true)
+	_, _ = service.AddChatMessage(projectPath, backendName, sessionID, "assistant", string(emptyContent), nil, true, "")
 
 	var blocks []model.ContentBlock
 	var responseMetadata *ai.Metadata
@@ -538,7 +543,7 @@ func executeStreamRun(
 
 				// Create new streaming assistant placeholder
 				emptyContent, _ = json.Marshal(map[string]any{"blocks": []any{}})
-				if _, err := service.AddChatMessage(projectPath, backendName, sessionID, "assistant", string(emptyContent), nil, true); err != nil {
+				if _, err := service.AddChatMessage(projectPath, backendName, sessionID, "assistant", string(emptyContent), nil, true, ""); err != nil {
 					slog.Error("failed to create resume streaming message",
 						slog.String("session", sessionID),
 						slog.String("err", err.Error()))
@@ -786,10 +791,10 @@ func buildChatRequest(prompt, sessionID, backendName, agentID, fileDir string) a
 func buildChatRequestFromQueue(qMsg model.QueuedMessage, sessionID, projectPath, backendName, agentID, fileDir string) ai.ChatRequest {
 	prompt := qMsg.Text
 	if len(qMsg.FilePaths) > 0 {
-		prompt = fmt.Sprintf("[当前文件: %s]\n%s", strings.Join(qMsg.FilePaths, ", "), qMsg.Text)
+		prompt = fmt.Sprintf("[Current file: %s]\n%s", strings.Join(qMsg.FilePaths, ", "), qMsg.Text)
 	}
 	if len(qMsg.Files) > 0 {
-		prompt = fmt.Sprintf("[用户上传了 %d 个文件: %s]\n%s", len(qMsg.Files), strings.Join(qMsg.Files, ", "), prompt)
+		prompt = fmt.Sprintf("[User uploaded %d file(s): %s]\n%s", len(qMsg.Files), strings.Join(qMsg.Files, ", "), prompt)
 	}
 
 	return buildChatRequest(prompt, sessionID, backendName, agentID, fileDir)
@@ -806,12 +811,12 @@ func CancelChat(w http.ResponseWriter, r *http.Request) {
 		sessionID = getSessionID(r)
 	}
 	if sessionID == "" {
-		model.WriteErrorf(w, http.StatusBadRequest, "session_id required")
+		writeLocalizedErrorf(w, r, http.StatusBadRequest, "SessionIdRequired")
 		return
 	}
 
 	if !service.CancelSession(sessionID) {
-		model.WriteErrorf(w, http.StatusNotFound, "session not running")
+		writeLocalizedErrorf(w, r, http.StatusNotFound, "SessionNotRunning")
 		return
 	}
 
