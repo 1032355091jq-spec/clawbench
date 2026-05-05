@@ -150,6 +150,10 @@ export function useChatSession(options: UseChatSessionOptions) {
 
       // Data has changed (or this is a full load) — reset UI state and apply new data
       expandedTools.value = {}
+      // Clear stale blockAskQuestions — after backend converts <ask-question> text blocks
+      // to tool_use blocks, old entries keyed by text-block indices would cause duplicate
+      // rendering. extractScheduleProposals below will re-populate from current DB state.
+      Object.keys(blockAskQuestions).forEach(k => delete blockAskQuestions[k])
       messages.value = parseMessages(rawMsgs)
       totalMessages.value = data.total || messages.value.length
       currentSessionId.value = data.sessionId || ''
@@ -218,6 +222,8 @@ export function useChatSession(options: UseChatSessionOptions) {
     stopMsgCountPolling()
     lastMessageSnapshot = ''  // Invalidate snapshot — new session may have different data
     expandedTools.value = {}
+    // Clear stale blockAskQuestions from previous session
+    Object.keys(blockAskQuestions).forEach(k => delete blockAskQuestions[k])
     try {
       // Load agents first so we can resolve agent names
       if (agents.value.length === 0) await loadAgents()
