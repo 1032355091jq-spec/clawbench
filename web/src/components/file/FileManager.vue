@@ -3,9 +3,6 @@
     <template #header>
       <Folder :size="16" class="bs-header-icon" />
       <span class="bs-header-title">{{ t('file.manager') }}</span>
-      <div v-if="projectPath" class="bs-header-description">
-        <HeaderMarquee :text="projectPath">{{ projectPath }}</HeaderMarquee>
-      </div>
     </template>
 
     <!-- Dir nav -->
@@ -157,7 +154,6 @@ import { ref, computed, reactive, inject, nextTick, Teleport, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { Folder, ArrowDownAz, ArrowUpDown, ChevronDown, ChevronUp, Clock, FileText, Eye, EyeOff, ArrowRightLeft, Loader, FileImage, FileMusic, ChevronRight, Copy, Scissors, ClipboardPaste, FilePlus, FolderPlus, Pencil, Download, Trash2, FolderOpen, RotateCw, Search } from 'lucide-vue-next'
 import BottomSheet from '@/components/common/BottomSheet.vue'
-import HeaderMarquee from '@/components/common/HeaderMarquee.vue'
 import { getFileType } from '@/utils/fileType.ts'
 import { dirName } from '@/utils/path.ts'
 import { store } from '@/stores/app.ts'
@@ -182,27 +178,6 @@ const props = defineProps({
 
 const emit = defineEmits(['close', 'navigateDir', 'selectFile', 'toggleSort', 'toggleHidden', 'rename', 'delete', 'refresh'])
 
-const projectPath = computed(() => {
-    const abs = store.state.projectRoot
-    const wd = store.state.watchDir
-    if (!abs) return ''
-    if (!wd) return abs
-    const rel = abs.slice(wd.length).replace(/^\//, '')
-    return rel || abs
-})
-
-function copyProjectPath() {
-    const path = projectPath.value
-    if (!path) return
-    const ta = document.createElement('textarea')
-    ta.value = path
-    ta.style.cssText = 'position:fixed;opacity:0'
-    document.body.appendChild(ta)
-    ta.select()
-    document.execCommand('copy')
-    document.body.removeChild(ta)
-    if (toast) toast.show(t('common.copied'), { icon: '📋', type: 'success', duration: 1500 })
-}
 
 const searchQuery = ref('')
 const searchExpanded = ref(false)

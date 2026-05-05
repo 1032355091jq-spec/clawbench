@@ -3,10 +3,7 @@
     <template #header>
       <GitBranch :size="16" class="bs-header-icon" />
       <span class="bs-header-title">{{ mode === 'file' ? t('git.history.fileHistory') : t('git.history.projectHistory') }}</span>
-      <div v-if="mode === 'project' && store.state.projectRoot" class="bs-header-description">
-        <HeaderMarquee :text="store.state.projectRoot">{{ store.state.projectRoot }}</HeaderMarquee>
-      </div>
-      <div v-else-if="mode === 'file' && file?.path" class="bs-header-description">
+      <div v-if="mode === 'file' && file?.path" class="bs-header-description">
         <HeaderMarquee :text="file.path">{{ file.path }}</HeaderMarquee>
       </div>
     </template>
