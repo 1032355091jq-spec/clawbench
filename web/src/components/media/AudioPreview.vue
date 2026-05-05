@@ -10,7 +10,7 @@
       </div>
       <audio
         ref="audioRef"
-        :src="'/api/local-file/' + encodeURIComponent(file.path)"
+        :src="mediaUrl"
         controls
         class="audio-player"
         @loadedmetadata="onLoaded"
@@ -20,12 +20,19 @@
 </template>
 
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, watch } from 'vue'
 import { Music } from 'lucide-vue-next'
 
 const props = defineProps({
     file: Object,
 })
+
+// Cache-busting: update timestamp when file changes to bust browser cache
+const mediaTimestamp = ref(Date.now())
+watch(() => props.file, () => { mediaTimestamp.value = Date.now() })
+const mediaUrl = computed(() =>
+    `/api/local-file/${encodeURIComponent(props.file.path)}?t=${mediaTimestamp.value}`
+)
 
 const audioRef = ref(null)
 const duration = ref(0)

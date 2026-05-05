@@ -149,6 +149,10 @@ func RegisterRoutes(mux *http.ServeMux) {
 	register("/api/tasks/", middleware.Auth(ServeTaskByID))
 	register("/api/tts/generate", middleware.Auth(TTSGenerate))
 
+	// File watch SSE (auto-refresh on file changes)
+	register("/api/file/watch", middleware.Auth(FileWatchSSE))
+	register("/api/file/watch/update", middleware.Auth(FileWatchUpdate))
+
 	// Port forwarding (registration & detection only; actual forwarding uses SSH tunnels)
 	register("/api/proxy/ports", middleware.Auth(ServeProxyPortAction))
 	register("/api/proxy/detect", middleware.Auth(ServeProxyDetect))

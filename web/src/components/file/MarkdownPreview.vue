@@ -125,9 +125,13 @@ async function doRender(f) {
 }
 
 watch(() => props.file, (f, oldF) => {
-    if (!f || f.error) return
-    if (!f.content) return
-    doRender(f)
+    if (!f || f.error) {
+        renderedHtml.value = ''
+        return
+    }
+    // Cancel any in-flight render from old file.
+    // Actual rendering is handled by the content watcher below.
+    currentRenderId++
 }, { immediate: true })
 
 watch(() => props.file?.content, (content) => {
@@ -135,7 +139,7 @@ watch(() => props.file?.content, (content) => {
     const f = props.file
     if (!f || f.error) return
     doRender(f)
-})
+}, { immediate: true })
 
 // 当 viewMode 切换回 rendered 时，DOM 会被 v-if 重建，
 // Mermaid 的 SVG 渲染结果丢失，需要重新执行 DOM 级渲染

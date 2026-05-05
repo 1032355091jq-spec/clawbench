@@ -3,7 +3,7 @@
     <div class="video-preview-body">
       <video
         ref="videoRef"
-        :src="'/api/local-file/' + encodeURIComponent(file.path)"
+        :src="mediaUrl"
         controls
         class="video-player"
         @loadedmetadata="onLoaded"
@@ -15,7 +15,7 @@
 </template>
 
 <script setup>
-import { ref } from 'vue'
+import { ref, computed, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 
 const { t } = useI18n()
@@ -23,6 +23,13 @@ const { t } = useI18n()
 const props = defineProps({
     file: Object,
 })
+
+// Cache-busting: update timestamp when file changes to bust browser cache
+const mediaTimestamp = ref(Date.now())
+watch(() => props.file, () => { mediaTimestamp.value = Date.now() })
+const mediaUrl = computed(() =>
+    `/api/local-file/${encodeURIComponent(props.file.path)}?t=${mediaTimestamp.value}`
+)
 
 const videoRef = ref(null)
 

@@ -24,6 +24,21 @@ func (rw *ResponseWriter) Write(b []byte) (int, error) {
 	return n, err
 }
 
+// Flush implements http.Flusher so that SSE and other streaming responses
+// can flush data through the wrapped ResponseWriter.
+func (rw *ResponseWriter) Flush() {
+	if flusher, ok := rw.ResponseWriter.(http.Flusher); ok {
+		flusher.Flush()
+	}
+}
+
+// Unwrap returns the underlying http.ResponseWriter for interface compatibility
+// (e.g., http.Flusher, http.Hijacker). Go 1.20+ http.ResponseController
+// uses this method to access underlying interfaces.
+func (rw *ResponseWriter) Unwrap() http.ResponseWriter {
+	return rw.ResponseWriter
+}
+
 // RequestLogger logs method, path, status, duration, client IP, trace_id via slog.
 func RequestLogger(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {

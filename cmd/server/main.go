@@ -448,6 +448,15 @@ func main() {
 		defer sshServer.Close()
 	}
 
+	// Initialize file watcher for auto-refresh (non-critical — continue on failure)
+	if err := service.InitFileWatcher(); err != nil {
+		slog.Warn("file watcher not available, auto-refresh disabled",
+			slog.String("err", err.Error()),
+		)
+	} else {
+		defer service.StopFileWatcher()
+	}
+
 	mux := http.NewServeMux()
 	handler.RegisterRoutes(mux)
 

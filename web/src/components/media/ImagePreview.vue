@@ -4,7 +4,7 @@
     tabindex="0"
     ref="containerRef">
     <div v-if="file.isPdf" class="image-preview-body pdf-preview-body">
-      <embed :src="'/api/local-file/' + encodeURIComponent(file.path)" type="application/pdf" class="pdf-preview-embed" />
+      <embed :src="mediaUrl" type="application/pdf" class="pdf-preview-embed" />
     </div>
     <div v-else class="image-preview-body"
       @mousedown="handleMouseDown"
@@ -12,7 +12,7 @@
       @touchmove="handleTouchMove"
       @touchend="handleTouchEnd"
       @touchcancel="handleTouchEnd">
-      <img :src="'/api/local-file/' + encodeURIComponent(file.path)" :alt="file.name" class="image-preview-img"
+      <img :src="mediaUrl" :alt="file.name" class="image-preview-img"
         :style="{ transform: `translateX(${dragOffsetX}px)`, transition: isDragging ? 'none' : 'transform 0.25s ease-out' }" />
       <!-- Prev overlay -->
       <div v-if="hasPrev" class="img-nav-hint img-nav-prev" @click="goPrev">
@@ -38,6 +38,13 @@ import { getFileType } from '@/utils/fileType.ts'
 const props = defineProps({
     file: Object,
 })
+
+// Cache-busting: update timestamp when file changes to bust browser cache
+const mediaTimestamp = ref(Date.now())
+watch(() => props.file, () => { mediaTimestamp.value = Date.now() })
+const mediaUrl = computed(() =>
+    `/api/local-file/${encodeURIComponent(props.file.path)}?t=${mediaTimestamp.value}`
+)
 
 const containerRef = ref(null)
 const dragOffsetX = ref(0)

@@ -120,7 +120,6 @@ const state = reactive<AppState>({
 
 async function loadProject(): Promise<void> {
     try {
-        console.log('[loadProject] 开始加载项目...')
         try {
             const wd = await apiGet<{ watchDir: string; uploadMaxSizeMB: number; uploadMaxFiles: number; chatInitialMessages?: number; chatPageSize?: number; chatCollapsedHeight?: number; chatQuickSend?: Record<string, string>; sessionMaxCount?: number }>('/api/watch-dir')
             state.watchDir = wd.watchDir || ''
@@ -131,24 +130,18 @@ async function loadProject(): Promise<void> {
             if (wd.chatCollapsedHeight > 0) state.chatCollapsedHeight = wd.chatCollapsedHeight
             if (wd.chatQuickSend && Object.keys(wd.chatQuickSend).length > 0) state.chatQuickSend = wd.chatQuickSend
             if (wd.sessionMaxCount > 0) state.sessionMaxCount = wd.sessionMaxCount
-            console.log('[loadProject] watchDir 加载成功:', state.watchDir)
         } catch (error) {
-            console.error('[loadProject] watchDir 加载失败:', error)
+            console.error('[loadProject] watchDir failed:', error)
         }
         const data = await apiGet<{ path: string }>('/api/project')
-        console.log('[loadProject] /api/project 响应:', data)
-        if (!data.path) {
-            console.warn('[loadProject] 项目路径为空，停止加载')
-            return
-        }
+        if (!data.path) return
         state.projectRoot = data.path
         state.projectName = baseName(data.path)
         localStorage.setItem('currentProjectPath', data.path)
-        console.log('[loadProject] 项目加载成功:', state.projectRoot, state.projectName)
         // Add to recent projects
         apiPost('/api/recent-projects', { path: data.path }).catch(() => {})
     } catch (error) {
-        console.error('[loadProject] 加载项目失败:', error)
+        console.error('[loadProject] failed:', error)
     }
 }
 
@@ -297,7 +290,14 @@ async function selectFile(path: string, isImageFile = false, isAudioFile = false
         }
         const data = await resp.json() as CurrentFile
         // Backend may also mark as binary if the file somehow passes frontend check
-        state.currentFile = data
+        // When refreshing the same file (auto-refresh from file watcher),
+        // update content in-place to avoid a full object replacement which
+        // causes visual flash (v-html teardown/rebuild in MarkdownPreview).
+        if (state.currentFile?.path === path && !addToHistory) {
+            Object.assign(state.currentFile, data)
+        } else {
+            state.currentFile = data
+        }
     } catch (err) {
         state.currentFile = { path, name: baseName(path), error: (err as Error).message }
     }

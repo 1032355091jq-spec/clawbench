@@ -154,6 +154,8 @@ function toggleWordWrap() {
 const scrollPositions = new Map()
 let pendingRestore = null // { path, scrollTop }
 let restoreTimer = null
+let restoreAttempts = 0
+const MAX_RESTORE_ATTEMPTS = 100 // 100 * 50ms = 5 seconds max
 let currentFilePath = null
 let scrollHandler = null
 let scrollEl = null // reference to the element we attached scroll listener to
@@ -196,6 +198,13 @@ function detachScrollListener() {
 }
 
 function tryRestoreOrAttach() {
+    restoreAttempts++
+    if (restoreAttempts > MAX_RESTORE_ATTEMPTS) {
+        clearRestoreTimer()
+        // Even if not scrollable, attach listener for future scroll events
+        attachScrollListener()
+        return
+    }
     if (loading.value) return
     const el = getScrollEl()
     if (!el) return
@@ -236,6 +245,7 @@ watch(() => props.file, (f, oldF) => {
             pendingRestore = { path: f.path, scrollTop: savedScroll }
         }
         // Poll until content is rendered and scrollable
+        restoreAttempts = 0
         restoreTimer = setInterval(tryRestoreOrAttach, 50)
         tryRestoreOrAttach()
     }
