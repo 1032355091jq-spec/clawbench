@@ -47,7 +47,6 @@ export function useChatStream(options: UseChatStreamOptions) {
   let reconnectAttempts = 0
   let streamTimeout: ReturnType<typeof setTimeout> | null = null
   let renderTimer: ReturnType<typeof setTimeout> | null = null
-  let lastScrollTime = 0
   let pollingInterval: ReturnType<typeof setInterval> | null = null
   // Track tool_use timeout timers so we can clean them up
   const toolUseTimeouts: Map<string, ReturnType<typeof setTimeout>> = new Map()
@@ -60,13 +59,9 @@ export function useChatStream(options: UseChatStreamOptions) {
     if (renderTimer) clearTimeout(renderTimer)
     renderTimer = window.setTimeout(() => {
       onRenderNeeded()
-      // 减少scrollBottom调用频率，每500ms最多一次
-      if (Date.now() - lastScrollTime > 500) {
-        onScrollBottom()
-        lastScrollTime = Date.now()
-      }
+      onScrollBottom()
       renderTimer = null
-    }, 200) // 增加防抖时间到200ms
+    }, 80)
   }
 
   function resetStreamTimeout() {

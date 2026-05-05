@@ -127,9 +127,11 @@ const expandedSet = ref(new Set())
 const collapsedSet = ref(new Set())
 
 // Reset expanded/collapsed state when messages change identity (session switch / reload)
+// Also reset isAtBottom so auto-scroll re-engages for the new session
 watch(() => props.messages, () => {
   expandedSet.value = new Set()
   collapsedSet.value = new Set()
+  isAtBottom = true
 })
 
 // Compute the last round: last assistant message + its preceding user message
