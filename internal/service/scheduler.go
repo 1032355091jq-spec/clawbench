@@ -28,7 +28,7 @@ type Scheduler struct {
 // NewScheduler creates a new Scheduler instance.
 func NewScheduler() *Scheduler {
 	return &Scheduler{
-		cron:    cron.New(cron.WithSeconds()), // support second-level precision
+		cron:    cron.New(),
 		entries: make(map[string]cron.EntryID),
 	}
 }
@@ -314,17 +314,19 @@ func (s *Scheduler) executeTask(task *model.ScheduledTask, projectPath string, t
 
 	// Update task execution stats
 	now := time.Now()
-	runCount := task.RunCount + 1
 	newStatus := task.Status
 
-	// Check repeat mode
-	switch task.RepeatMode {
-	case "once":
-		newStatus = "completed"
-	case "limited":
-		if runCount >= task.MaxRuns {
-			newStatus = "completed"
+	// Check repeat mode — for "limited", read current DB value to decide completion
+	if task.RepeatMode == "limited" {
+		var currentCount int
+		if err := DB.QueryRow("SELECT run_count FROM scheduled_tasks WHERE id = ?", task.ID).Scan(&currentCount); err == nil {
+			if currentCount+1 >= task.MaxRuns {
+				newStatus = "completed"
+			}
 		}
+	}
+	if task.RepeatMode == "once" {
+		newStatus = "completed"
 	}
 
 	schedule, _ := cron.ParseStandard(task.CronExpr)
@@ -343,16 +345,15 @@ func (s *Scheduler) executeTask(task *model.ScheduledTask, projectPath string, t
 	}
 
 	if nextRunAt != nil {
-		DB.Exec("UPDATE scheduled_tasks SET last_run_at = ?, next_run_at = ?, run_count = ?, status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
-			now, nextRunAt, runCount, newStatus, task.ID)
+		DB.Exec("UPDATE scheduled_tasks SET last_run_at = ?, next_run_at = ?, run_count = run_count + 1, status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+			now, nextRunAt, newStatus, task.ID)
 	} else {
-		DB.Exec("UPDATE scheduled_tasks SET last_run_at = ?, next_run_at = NULL, run_count = ?, status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
-			now, runCount, newStatus, task.ID)
+		DB.Exec("UPDATE scheduled_tasks SET last_run_at = ?, next_run_at = NULL, run_count = run_count + 1, status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+			now, newStatus, task.ID)
 	}
 
 	slog.Info("task execution completed",
 		slog.String("task_id", task.ID),
-		slog.Int("run_count", runCount),
 		slog.String("status", newStatus),
 	)
 }

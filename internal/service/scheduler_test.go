@@ -731,3 +731,30 @@ func TestSchedulerRestartLoadsTasks(t *testing.T) {
 	persisted, _ := service.GetTaskByID(task.ID)
 	assert.Equal(t, "paused", persisted.Status)
 }
+
+// ---------- Run count atomic increment ----------
+
+func TestRunCount_AtomicIncrement(t *testing.T) {
+	_, cleanup := setupScheduler(t)
+	defer cleanup()
+
+	// Insert a task directly
+	now := time.Now()
+	service.DB.Exec(
+		"INSERT INTO scheduled_tasks (id, project_path, name, cron_expr, agent_id, prompt, session_id, status, repeat_mode, run_count, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+		"task-rc", "/proj", "RC Task", "0 * * * *", "agent1", "p", "", "active", "unlimited", 0, now, now,
+	)
+
+	// Run 10 sequential atomic SQL increments.
+	// Sequential is necessary because SQLite serializes writes; concurrent
+	// DB.Exec calls may silently lose SQLITE_BUSY errors.
+	for i := 0; i < 10; i++ {
+		_, err := service.DB.Exec("UPDATE scheduled_tasks SET run_count = run_count + 1 WHERE id = ?", "task-rc")
+		assert.NoError(t, err)
+	}
+
+	// All 10 increments should be accounted for
+	task, err := service.GetTaskByID("task-rc")
+	assert.NoError(t, err)
+	assert.Equal(t, 10, task.RunCount, "run_count should be exactly 10 after 10 sequential increments")
+}

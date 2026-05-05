@@ -468,19 +468,26 @@ func TestAIChatStream_ClientDisconnect(t *testing.T) {
 	ch := setupStreamSession(sessionID)
 	defer cleanupStreamSession(sessionID)
 
-	ctx, cancel := context.WithCancel(context.Background())
+	// Register a cancel function so ForceCancelSession has something to cancel
+	_, cancel := context.WithCancel(context.Background())
+	service.RegisterSessionCancel(sessionID, cancel)
+
+	ctx2, cancel2 := context.WithCancel(context.Background())
 	go func() {
 		time.Sleep(50 * time.Millisecond)
-		cancel()
+		cancel2()
 	}()
 
 	req := newRequest(t, http.MethodGet, "/api/ai/chat/stream?session_id="+sessionID, nil)
 	req = withProjectCookie(req, env.ProjectDir)
-	req = req.WithContext(ctx)
+	req = req.WithContext(ctx2)
 
 	w := httptest.NewRecorder()
 	AIChatStream(w, req)
 
-	assert.True(t, service.IsSessionRunning(sessionID))
-	ch <- ai.StreamEvent{Type: "done"}
+	// After SSE disconnect, ForceCancelSession should have been called,
+	// which sets the cancel reason to "disconnect"
+	reason := service.GetAndClearCancelReason(sessionID)
+	assert.Equal(t, "disconnect", reason)
+	_ = ch
 }

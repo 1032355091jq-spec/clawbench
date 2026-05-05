@@ -162,9 +162,10 @@ func AIChatStream(w http.ResponseWriter, r *http.Request) {
 			}
 
 		case <-r.Context().Done():
-			slog.Info("sse client disconnected, ai session continues",
+			slog.Info("sse client disconnected, cancelling ai session",
 				slog.String("session_id", sessionID),
 			)
+			service.ForceCancelSession(sessionID)
 			return
 		}
 	}

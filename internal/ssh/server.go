@@ -20,6 +20,102 @@ import (
 	"clawbench/internal/service"
 )
 
+// ipRecord tracks failed authentication attempts from a single IP.
+type ipRecord struct {
+	failCount    int
+	lastFail     time.Time
+	blockedUntil time.Time
+}
+
+// authTracker tracks failed SSH authentication attempts per IP address
+// and temporarily blocks IPs with too many failures.
+type authTracker struct {
+	mu      sync.Mutex
+	records map[string]*ipRecord // key: IP address
+}
+
+const (
+	maxAuthFails    = 5                      // Block after this many consecutive failures
+	initialBlockDur = 5 * time.Minute
+	maxBlockDur     = 1 * time.Hour
+	cleanupInterval = 10 * time.Minute
+	recordTTL       = 30 * time.Minute // Purge records idle this long
+)
+
+func newAuthTracker() *authTracker {
+	return &authTracker{records: make(map[string]*ipRecord)}
+}
+
+// isBlocked returns true if the IP is currently blocked.
+func (a *authTracker) isBlocked(ip string) bool {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	rec, ok := a.records[ip]
+	if !ok {
+		return false
+	}
+	if rec.blockedUntil.IsZero() || time.Now().Before(rec.blockedUntil) {
+		return !rec.blockedUntil.IsZero()
+	}
+	// Block expired, clear it
+	rec.blockedUntil = time.Time{}
+	rec.failCount = 0
+	return false
+}
+
+// recordFailure increments the failure counter for an IP.
+// If the counter exceeds maxAuthFails, the IP is blocked with exponential backoff.
+func (a *authTracker) recordFailure(ip string) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	rec, ok := a.records[ip]
+	if !ok {
+		rec = &ipRecord{}
+		a.records[ip] = rec
+	}
+	rec.failCount++
+	rec.lastFail = time.Now()
+	if rec.failCount >= maxAuthFails {
+		// Exponential backoff: initialBlockDur * 2^(infractions - 1), capped at maxBlockDur
+		infractions := rec.failCount / maxAuthFails
+		dur := initialBlockDur * time.Duration(1<<uint(infractions-1))
+		if dur > maxBlockDur {
+			dur = maxBlockDur
+		}
+		rec.blockedUntil = rec.lastFail.Add(dur)
+	}
+}
+
+// reset clears the failure counter for an IP after successful authentication.
+func (a *authTracker) reset(ip string) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	delete(a.records, ip)
+}
+
+// cleanup removes expired records. Called periodically.
+func (a *authTracker) cleanup() {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	now := time.Now()
+	for ip, rec := range a.records {
+		// Remove records that are unblocked and idle past TTL
+		if (rec.blockedUntil.IsZero() || now.After(rec.blockedUntil)) &&
+			now.Sub(rec.lastFail) > recordTTL {
+			delete(a.records, ip)
+		}
+	}
+}
+
+// extractIP extracts the IP address from a net.Addr.
+func extractIP(addr net.Addr) string {
+	host, _, err := net.SplitHostPort(addr.String())
+	if err != nil {
+		return addr.String()
+	}
+	return host
+}
+
 // Server is an SSH server that supports local port forwarding (direct-tcpip channels).
 // It allows authenticated clients to create `-L` tunnels to forward local ports
 // to services running on the server (127.0.0.1).
@@ -36,6 +132,7 @@ type Server struct {
 	connCount      int
 	activeChannels int
 	lastConnected  time.Time
+	authTracker    *authTracker
 }
 
 // NewServer creates a new SSH tunnel server.
@@ -47,11 +144,12 @@ func NewServer(cfg model.SSHConfig, mainPort int, password string, portReg *serv
 	}
 
 	return &Server{
-		password: password,
-		portReg:  portReg,
-		done:     make(chan struct{}),
-		addr:     fmt.Sprintf("0.0.0.0:%d", sshPort),
-		cfg:      cfg,
+		password:    password,
+		portReg:     portReg,
+		done:        make(chan struct{}),
+		addr:        fmt.Sprintf("0.0.0.0:%d", sshPort),
+		cfg:         cfg,
+		authTracker: newAuthTracker(),
 	}
 }
 
@@ -65,10 +163,19 @@ func (s *Server) ListenAndServe() error {
 	// Configure SSH server
 	config := &gossh.ServerConfig{
 		PasswordCallback: func(c gossh.ConnMetadata, pass []byte) (*gossh.Permissions, error) {
+			remoteIP := extractIP(c.RemoteAddr())
+
+			if s.authTracker.isBlocked(remoteIP) {
+				return nil, fmt.Errorf("ssh: too many authentication failures")
+			}
+
 			if c.User() == "clawbench" && string(pass) == s.password {
+				s.authTracker.reset(remoteIP)
 				return nil, nil
 			}
-			return nil, fmt.Errorf("ssh: authentication failed for user %q", c.User())
+
+			s.authTracker.recordFailure(remoteIP)
+			return nil, fmt.Errorf("ssh: authentication failed")
 		},
 	}
 	config.AddHostKey(s.hostKey)
@@ -79,6 +186,20 @@ func (s *Server) ListenAndServe() error {
 		return fmt.Errorf("ssh: failed to listen on %s: %w", s.addr, err)
 	}
 	s.listener = listener
+
+	// Periodically cleanup expired auth records
+	go func() {
+		ticker := time.NewTicker(cleanupInterval)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-s.done:
+				return
+			case <-ticker.C:
+				s.authTracker.cleanup()
+			}
+		}
+	}()
 
 	slog.Info("SSH tunnel server started",
 		slog.String("addr", s.addr),

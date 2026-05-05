@@ -5,6 +5,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -590,4 +591,100 @@ func TestSSHServer_ConnectionStats_ActiveChannels(t *testing.T) {
 	if stats.ActiveChannels != 0 {
 		t.Errorf("expected ActiveChannels=0 after closing channel, got %d", stats.ActiveChannels)
 	}
+}
+
+// --- Auth Rate Limiting Tests ---
+
+func TestSSHServer_BruteForceProtection(t *testing.T) {
+	portReg := newTestRegistry(t)
+	srv := testServerHelper(t, "correct-password", portReg)
+
+	// Make multiple failed auth attempts from the same client
+	for i := 0; i < 5; i++ {
+		clientCfg := &gossh.ClientConfig{
+			User: "clawbench",
+			Auth: []gossh.AuthMethod{
+				gossh.Password("wrong-password"),
+			},
+			HostKeyCallback: gossh.InsecureIgnoreHostKey(),
+			Timeout:         5 * time.Second,
+		}
+		gossh.Dial("tcp", srv.addr, clientCfg)
+	}
+
+	// After 5 failures, even the correct password should be rejected (IP is blocked)
+	clientCfg := &gossh.ClientConfig{
+		User: "clawbench",
+		Auth: []gossh.AuthMethod{
+			gossh.Password("correct-password"),
+		},
+		HostKeyCallback: gossh.InsecureIgnoreHostKey(),
+		Timeout:         5 * time.Second,
+	}
+	_, err := gossh.Dial("tcp", srv.addr, clientCfg)
+	if err == nil {
+		t.Error("expected auth to be blocked after 5 failed attempts, but connection succeeded")
+	}
+}
+
+func TestSSHServer_AuthFailureNoUsernameLeak(t *testing.T) {
+	portReg := newTestRegistry(t)
+	srv := testServerHelper(t, "test-password", portReg)
+
+	// Wrong username should not leak which usernames exist
+	clientCfg := &gossh.ClientConfig{
+		User: "root",
+		Auth: []gossh.AuthMethod{
+			gossh.Password("test-password"),
+		},
+		HostKeyCallback: gossh.InsecureIgnoreHostKey(),
+		Timeout:         5 * time.Second,
+	}
+	_, err := gossh.Dial("tcp", srv.addr, clientCfg)
+	if err == nil {
+		t.Error("expected auth failure for wrong username")
+	}
+	// Error message should NOT contain the username "root"
+	if err != nil && strings.Contains(err.Error(), "root") {
+		t.Errorf("error message should not leak username: %v", err)
+	}
+}
+
+func TestSSHServer_SuccessfulAuthResetsCounter(t *testing.T) {
+	portReg := newTestRegistry(t)
+	srv := testServerHelper(t, "correct-password", portReg)
+
+	// Make 3 failed attempts (below the threshold of 5)
+	for i := 0; i < 3; i++ {
+		clientCfg := &gossh.ClientConfig{
+			User: "clawbench",
+			Auth: []gossh.AuthMethod{
+				gossh.Password("wrong-password"),
+			},
+			HostKeyCallback: gossh.InsecureIgnoreHostKey(),
+			Timeout:         5 * time.Second,
+		}
+		gossh.Dial("tcp", srv.addr, clientCfg)
+	}
+
+	// Successful login should reset the counter
+	client := testSSHClient(t, srv.addr, "clawbench", "correct-password")
+	client.Close()
+
+	// Now 3 more failures should NOT trigger block (counter was reset)
+	for i := 0; i < 3; i++ {
+		clientCfg := &gossh.ClientConfig{
+			User: "clawbench",
+			Auth: []gossh.AuthMethod{
+				gossh.Password("wrong-password"),
+			},
+			HostKeyCallback: gossh.InsecureIgnoreHostKey(),
+			Timeout:         5 * time.Second,
+		}
+		gossh.Dial("tcp", srv.addr, clientCfg)
+	}
+
+	// Should still be able to connect with correct password
+	client2 := testSSHClient(t, srv.addr, "clawbench", "correct-password")
+	client2.Close()
 }
