@@ -209,6 +209,7 @@ import { useToast } from './composables/useToast.ts'
 import { useAppMode } from './composables/useAppMode.ts'
 import { usePortForward } from './composables/usePortForward.ts'
 import { useFileWatch } from './composables/useFileWatch.ts'
+import { refreshCurrentFile } from './composables/useFileRefresh.ts'
 import { store } from './stores/app.ts'
 import { initMermaid, reRenderMermaid } from './utils/mermaid.ts'
 import { getFileType } from './utils/fileType.ts'
@@ -448,13 +449,7 @@ function handleChatMessage() {
 }
 
 async function handleRefresh() {
-    await store.loadFiles(currentDir.value)
-    if (currentFile.value) {
-        await store.selectFile(currentFile.value.path)
-        if (store.state.currentFile?.error) {
-            store.state.currentFile = null
-        }
-    }
+    await refreshCurrentFile({ loadDir: true, clearOnError: true })
 }
 
 function scrollToLine(line) {

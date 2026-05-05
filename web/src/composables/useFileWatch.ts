@@ -1,5 +1,6 @@
-import { watch, onUnmounted, nextTick, type Ref } from 'vue'
+import { watch, onUnmounted, type Ref } from 'vue'
 import { store } from '@/stores/app.ts'
+import { refreshCurrentFile } from '@/composables/useFileRefresh.ts'
 
 interface UseFileWatchOptions {
   fileManagerOpen: Ref<boolean>
@@ -52,18 +53,7 @@ export function useFileWatch(options: UseFileWatchOptions) {
 
     eventSource.addEventListener('file_change', () => {
       if (!currentFile.value?.path) return
-      const scrollEl = getScrollContainer()
-      const scrollTop = scrollEl?.scrollTop ?? 0
-      store.selectFile(currentFile.value.path, currentFile.value.isImage, currentFile.value.isAudio, false).then(() => {
-        if (scrollTop > 0) {
-          nextTick(() => {
-            nextTick(() => {
-              const el = getScrollContainer()
-              if (el) el.scrollTop = scrollTop
-            })
-          })
-        }
-      })
+      refreshCurrentFile()
     })
 
     eventSource.onerror = () => {
@@ -106,11 +96,6 @@ export function useFileWatch(options: UseFileWatchOptions) {
     } finally {
       updating = false
     }
-  }
-
-  function getScrollContainer(): HTMLElement | null {
-    const el = document.querySelector('.markdown-body') || document.querySelector('.raw-content-pre')
-    return el as HTMLElement | null
   }
 
   function shouldWatch(): boolean {

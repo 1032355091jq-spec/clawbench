@@ -20,7 +20,11 @@ export interface UseChatStreamOptions {
   onStreamEnd?: (reason: 'done' | 'cancelled' | 'error') => void
   onQueueUpdate?: (queue: any[]) => void
   onQueueConsume?: () => void
+  onFileModified?: (filePath: string) => void
 }
+
+// Tool names that modify files on disk (canonical PascalCase, guaranteed by backend normalization)
+const FILE_MODIFYING_TOOLS = new Set(['Write', 'Edit'])
 
 export function useChatStream(options: UseChatStreamOptions) {
   const {
@@ -41,6 +45,7 @@ export function useChatStream(options: UseChatStreamOptions) {
     onStreamEnd,
     onQueueUpdate,
     onQueueConsume,
+    onFileModified,
   } = options
 
   let eventSource: EventSource | null = null
@@ -286,6 +291,18 @@ export function useChatStream(options: UseChatStreamOptions) {
         // Clear timeout if set
         const timer = toolUseTimeouts.get(data.id)
         if (timer) { clearTimeout(timer); toolUseTimeouts.delete(data.id) }
+
+        // Notify file modification: when a file-modifying tool completes,
+        // extract the file_path from its input and call the callback.
+        // This provides reliable preview refresh even when fsnotify SSE
+        // is disconnected (defense-in-depth with the file watcher).
+        if (FILE_MODIFYING_TOOLS.has(data.name) && onFileModified) {
+          const input = data.input || existing?.input
+          const filePath = input?.file_path
+          if (filePath) {
+            onFileModified(filePath)
+          }
+        }
       } else {
         if (existing) {
           // Update existing block with new input data (may be richer than start event)
@@ -409,7 +426,10 @@ export function useChatStream(options: UseChatStreamOptions) {
 
       onQueueConsume?.()
       onRenderNeeded()
-      onScrollBottom()
+      // Force scroll: queue_done removes the streaming indicator which shrinks layout,
+      // making isAtBottom=false even though the user is visually at the bottom.
+      // Since new messages are being injected, always scroll to show them.
+      onScrollBottom(true)
     })
 
     eventSource.addEventListener('queue_update', (e) => {
@@ -437,6 +457,11 @@ export function useChatStream(options: UseChatStreamOptions) {
         }
       }
       onRenderNeeded()
+      // Re-sync scroll position: removing the streaming indicator and pending
+      // messages shrinks the layout, which can make isAtBottom=false even when
+      // the user is visually at the bottom. Scroll to ensure isAtBottom stays
+      // accurate before queue_consume arrives.
+      onScrollBottom()
     })
 
     eventSource.addEventListener('error', (e) => {

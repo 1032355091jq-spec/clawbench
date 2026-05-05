@@ -32,6 +32,7 @@ const props = defineProps({
 
 const renderedHtml = ref('')
 const bodyRef = ref(null)
+const imageTimestamp = ref(Date.now())
 let currentRenderId = 0
 
 const quoteQuestion = useQuoteQuestion()
@@ -88,12 +89,13 @@ function fixLocalImagePaths(html) {
             if (part === '..') { normalized.pop(); continue }
             normalized.push(part)
         }
-        return match.replace(`src="${src}"`, `src="/api/local-file/${normalized.join('/')}"`)
+        return match.replace(`src="${src}"`, `src="/api/local-file/${normalized.join('/')}?t=${imageTimestamp.value}"`)
     })
 }
 
 async function doRender(f) {
     const renderId = ++currentRenderId
+    imageTimestamp.value = Date.now()
     let html = renderMarkdown(f.content, {
         sanitize: false, // MarkdownPreview不需要净化，因为是受信任的文件内容
         fixImagePaths: fixLocalImagePaths

@@ -156,6 +156,7 @@ import { useToast } from '@/composables/useToast.ts'
 import { useFilePathAnnotation } from '@/composables/useFilePathAnnotation.ts'
 import { useNotification } from '@/composables/useNotification.ts'
 import { useFileUpload } from '@/composables/useFileUpload.ts'
+import { refreshCurrentFile } from '@/composables/useFileRefresh.ts'
 import { playNotificationSound } from '@/composables/useNotificationSound.ts'
 import { useAutoSpeech } from '@/composables/useAutoSpeech.ts'
 import { useSwipeSession } from '@/composables/useSwipeSession.ts'
@@ -304,6 +305,32 @@ const stream = useChatStream({
     const current = manager.pendingMessages.value
     if (current.length > 0) {
       manager.setPendingMessages(current.slice(1))
+    }
+  },
+  onFileModified: (filePath) => {
+    // Chat-driven file refresh: when AI's Write/Edit tool completes,
+    // refresh the file preview if the modified file is currently being viewed.
+    // This is a defense-in-depth mechanism alongside the fsnotify-based file watcher.
+    const currentFilePath = store.state.currentFile?.path
+
+    // Path matching: tool paths may be relative, absolute, or have different prefixes.
+    // Use suffix matching: if the current file path ends with the tool's file path,
+    // or vice versa, they match.
+    const normA = filePath.replace(/\\/g, '/')
+    const normB = (currentFilePath || '').replace(/\\/g, '/')
+    const isMatch = normA === normB ||
+      normA.endsWith('/' + normB) ||
+      normB.endsWith('/' + normA)
+
+    if (isMatch && currentFilePath) {
+      // refreshCurrentFile handles both file content and directory listing
+      refreshCurrentFile({ loadDir: true })
+    } else {
+      // File not currently viewed, but still refresh directory listing
+      const currentDir = store.state.currentDir
+      if (currentDir !== undefined) {
+        store.loadFiles(currentDir)
+      }
     }
   },
 })
