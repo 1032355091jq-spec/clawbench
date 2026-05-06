@@ -23,6 +23,7 @@ nohup.out
 node_modules/
 vite.log
 public/
+web/coverage/
 
 # App runtime data
 .ClawBench/

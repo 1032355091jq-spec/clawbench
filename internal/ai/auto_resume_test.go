@@ -81,11 +81,12 @@ func TestAutoResume_TransparentPassThrough(t *testing.T) {
 		events = append(events, e)
 	}
 
-	assert.Equal(t, 2, len(events)) // "hello ", "world" — "done" closes channel
+	assert.Equal(t, 3, len(events)) // "hello ", "world", "done" — "done" is now forwarded
 	assert.Equal(t, "content", events[0].Type)
 	assert.Equal(t, "hello ", events[0].Content)
 	assert.Equal(t, "content", events[1].Type)
 	assert.Equal(t, "world", events[1].Content)
+	assert.Equal(t, "done", events[2].Type)
 }
 
 func TestAutoResume_ExitPlanModeDetection(t *testing.T) {
@@ -123,8 +124,8 @@ func TestAutoResume_ExitPlanModeDetection(t *testing.T) {
 		events = append(events, e)
 	}
 
-	// Expected: content, tool_use(ExitPlanMode), resume_split, content(resume)
-	assert.Equal(t, 4, len(events))
+	// Expected: content, tool_use(ExitPlanMode), resume_split, content(resume), done
+	assert.Equal(t, 5, len(events))
 	assert.Equal(t, "content", events[0].Type)
 	assert.Equal(t, "planning...", events[0].Content)
 	assert.Equal(t, "tool_use", events[1].Type)
@@ -132,6 +133,7 @@ func TestAutoResume_ExitPlanModeDetection(t *testing.T) {
 	assert.Equal(t, "resume_split", events[2].Type)
 	assert.Equal(t, "content", events[3].Type)
 	assert.Equal(t, "continuing...", events[3].Content)
+	assert.Equal(t, "done", events[4].Type)
 
 	// Verify mock was called twice (original + resume)
 	assert.Equal(t, 2, mock.callCount)
@@ -154,10 +156,18 @@ func TestAutoResume_OuterCancelDuringFirstStream(t *testing.T) {
 	// Cancel the outer context
 	cancel()
 
-	// The outer channel should close promptly
+	// The outer channel should close promptly (may receive a "done" event first
+	// if the blockingBackend's goroutine races to close before the cancel is detected)
 	select {
-	case _, ok := <-ch:
-		assert.False(t, ok, "channel should be closed after outer cancel")
+	case event, ok := <-ch:
+		if ok {
+			// May receive a "done" event before channel closes
+			assert.Equal(t, "done", event.Type, "only 'done' event expected before close")
+			// Now drain until closed
+			for range ch {
+			}
+		}
+		// Channel is closed — this is the expected outcome
 	case <-time.After(2 * time.Second):
 		t.Fatal("timeout: outer channel did not close after cancel")
 	}
@@ -326,7 +336,7 @@ func TestAutoResume_NoNestedExitPlanMode(t *testing.T) {
 	}
 
 	// Should only have 2 calls (no nested resume), and second ExitPlanMode
-	// should be forwarded as a normal event
+	// should be forwarded as a normal event. "done" from resume stream is also forwarded.
 	assert.Equal(t, 2, mock.callCount, "should not trigger nested resume")
 
 	// Find second ExitPlanMode tool_use

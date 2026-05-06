@@ -19,8 +19,9 @@ var codebuddyBackend = &CLIBackend{
 		return line, true
 	},
 	preStart: func(cmd *exec.Cmd, req ChatRequest) {
-		if req.Resume {
-			cmd.Stdin = strings.NewReader(req.Prompt)
-		}
+		// Codebuddy CLI in --print mode with stdout piped (non-TTY) requires
+		// prompt via stdin — positional prompt argument is not recognized.
+		// Both new sessions and resume sessions use stdin for prompt.
+		cmd.Stdin = strings.NewReader(req.Prompt)
 	},
 }

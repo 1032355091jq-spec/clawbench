@@ -22,7 +22,9 @@ func buildClaudeStreamArgs(req ChatRequest) []string {
 
 	// Disable built-in scheduling/timer tools to force use of ClawBench's
 	// <schedule-proposal> mechanism instead of native CronCreate/CronDelete/CronList.
-	args = append(args, "--disallowedTools", "CronCreate", "CronDelete", "CronList")
+	// Use comma-separated format — Claude CLI treats space-separated values as
+	// additional positional arguments, swallowing the prompt.
+	args = append(args, "--disallowedTools", "CronCreate,CronDelete,CronList")
 
 	if req.SystemPrompt != "" {
 		args = append(args, "--system-prompt", req.SystemPrompt)
@@ -36,8 +38,9 @@ func buildClaudeStreamArgs(req ChatRequest) []string {
 	if req.Resume {
 		// With --resume, prompt is read from stdin
 	} else {
-		// With --session-id, prompt is the last argument
-		args = append(args, req.Prompt)
+		// With --session-id, prompt is read from stdin (not positional arg).
+		// Claude CLI in --print mode with piped stdout does not accept
+		// positional prompt arguments — stdin is required.
 	}
 
 	return args

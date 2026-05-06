@@ -793,7 +793,7 @@ func TestBuildClaudeStreamArgs_NewSession(t *testing.T) {
 		Resume:       false,
 	})
 
-	// Should use --session-id, prompt as last arg
+	// Should use --session-id, prompt via stdin
 	found := false
 	for i, a := range args {
 		if a == "--session-id" && i+1 < len(args) && args[i+1] == "sess-1" {
@@ -811,9 +811,11 @@ func TestBuildClaudeStreamArgs_NewSession(t *testing.T) {
 		}
 	}
 
-	// Prompt should be the last argument
-	if args[len(args)-1] != "hello" {
-		t.Errorf("expected last arg to be prompt 'hello', got %q", args[len(args)-1])
+	// Prompt is passed via stdin (not as positional arg)
+	for _, a := range args {
+		if a == "hello" {
+			t.Error("prompt should not appear in args — it is passed via stdin")
+		}
 	}
 }
 

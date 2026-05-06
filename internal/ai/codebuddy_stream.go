@@ -15,7 +15,7 @@ func buildCodebuddyStreamArgs(req ChatRequest) []string {
 	}
 
 	args = append(args, "--add-dir", req.WorkDir, "--dangerously-skip-permissions",
-		"--disallowedTools", "CronCreate", "CronDelete", "CronList", "ToolSearch", "DeferExecuteTool")
+		"--disallowedTools", "CronCreate,CronDelete,CronList,ToolSearch,DeferExecuteTool")
 
 	if req.SystemPrompt != "" {
 		args = append(args, "--system-prompt", req.SystemPrompt)
@@ -29,8 +29,9 @@ func buildCodebuddyStreamArgs(req ChatRequest) []string {
 	if req.Resume {
 		// With --resume, prompt is read from stdin
 	} else {
-		// With --session-id, prompt is the last argument
-		args = append(args, req.Prompt)
+		// With --session-id, prompt is read from stdin (not positional arg).
+		// Codebuddy CLI in --print mode with piped stdout does not accept
+		// positional prompt arguments — stdin is required.
 	}
 
 	return args

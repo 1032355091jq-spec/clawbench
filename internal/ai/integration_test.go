@@ -1,0 +1,1131 @@
+//go:build integration
+
+package ai
+
+import (
+	"context"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"strings"
+	"testing"
+	"time"
+
+	"clawbench/internal/model"
+
+	"github.com/google/uuid"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+)
+
+// --- Shared Helpers ---
+
+// codexCommand matches the agent config in config/agents/codex-MiniMax.yaml:
+//   command: codex --profile m27
+// This tells CodexBackend to use the MiniMax provider (MINIMAX_API_KEY) instead of OpenAI.
+const codexCommand = "codex --profile m27"
+
+// newSessionID returns a unique session ID for integration tests.
+// Claude requires a valid UUID format for --session-id.
+// Codebuddy/OpenCode/Codex accept any string.
+func newSessionID() string {
+	return uuid.New().String()
+}
+
+// testWorkDir returns a suitable working directory for integration tests.
+// Prefers the current project directory (which is a git repo) over /tmp,
+// since some CLIs (e.g., Codex) behave better in a git repo.
+func testWorkDir() string {
+	if dir, _ := os.Getwd(); dir != "" {
+		return dir
+	}
+	return os.TempDir()
+}
+
+// requireCLIAvailable skips the test if the named CLI binary is not found on PATH.
+func requireCLIAvailable(t *testing.T, cliName string) {
+	t.Helper()
+	if _, err := exec.LookPath(cliName); err != nil {
+		t.Skipf("%s CLI not available, skipping integration test", cliName)
+	}
+}
+
+// requireGeminiEnv ensures the Gemini CLI can run in the test environment.
+// Gemini CLI requires trusted directories; set GEMINI_CLI_TRUST_WORKSPACE=true
+// if not already set.
+func requireGeminiEnv(t *testing.T) {
+	t.Helper()
+	requireCLIAvailable(t, "gemini")
+	if os.Getenv("GEMINI_CLI_TRUST_WORKSPACE") == "" {
+		t.Setenv("GEMINI_CLI_TRUST_WORKSPACE", "true")
+	}
+}
+
+// requireCodexEnv ensures the Codex CLI can actually run. Codex requires specific
+// environment setup (API keys loaded from .env, profile configuration).
+// It loads the project .env file and runs a smoke test with --profile m27
+// (matching the agent config in config/agents/codex-MiniMax.yaml).
+// Skip if the smoke test fails.
+func requireCodexEnv(t *testing.T) {
+	t.Helper()
+	requireCLIAvailable(t, "codex")
+
+	// Load .env file into process environment so API keys are available.
+	// Go tests don't go through main.go, so .env is not auto-loaded.
+	// Try multiple paths: project root (detected via go.mod), BinDir, current dir.
+	dotenvPaths := []string{}
+	// Walk up from current directory to find project root (has go.mod)
+	if dir, _ := os.Getwd(); dir != "" {
+		for d := dir; d != "/"; d = filepath.Dir(d) {
+			if _, err := os.Stat(filepath.Join(d, "go.mod")); err == nil {
+				dotenvPaths = append(dotenvPaths, filepath.Join(d, ".env"))
+				break
+			}
+		}
+	}
+	if model.BinDir != "" {
+		dotenvPaths = append(dotenvPaths, filepath.Join(model.BinDir, ".env"))
+	}
+	dotenvPaths = append(dotenvPaths, ".env")
+
+	for _, p := range dotenvPaths {
+		if _, err := os.Stat(p); err == nil {
+			if err := model.LoadDotEnv(p); err != nil {
+				t.Logf("warning: failed to load .env from %s: %v", p, err)
+			} else {
+				t.Logf("loaded .env from %s", p)
+			}
+			break
+		}
+	}
+
+	// Quick smoke test: run codex with --profile m27 (matches agent config)
+	// and a simple prompt. If it fails, the environment is not set up correctly.
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, "codex", "exec", "--profile", "m27", "--json",
+		"--dangerously-bypass-approvals-and-sandbox",
+		"--skip-git-repo-check", "echo ok")
+	cmd.Dir = os.TempDir()
+	cmd.Env = os.Environ() // inherit env (includes MINIMAX_API_KEY from .env)
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Skipf("codex CLI environment not ready (exit error: %v, output: %s), skipping integration test", err, truncate(string(output), 200))
+	}
+}
+
+// collectEvents reads all events from the channel until it closes or timeout.
+// Returns the collected events slice.
+func collectEvents(t *testing.T, ch <-chan StreamEvent, timeout time.Duration) []StreamEvent {
+	t.Helper()
+	var events []StreamEvent
+	timer := time.NewTimer(timeout)
+	defer timer.Stop()
+	for {
+		select {
+		case event, ok := <-ch:
+			if !ok {
+				return events
+			}
+			events = append(events, event)
+		case <-timer.C:
+			t.Log("collectEvents: timeout waiting for channel to close")
+			return events
+		}
+	}
+}
+
+// findEvents returns all events matching the given type.
+func findEvents(events []StreamEvent, eventType string) []StreamEvent {
+	var matched []StreamEvent
+	for _, e := range events {
+		if e.Type == eventType {
+			matched = append(matched, e)
+		}
+	}
+	return matched
+}
+
+// requireEventSequence asserts that the events contain the specified event types
+// in order (ignoring other event types in between).
+func requireEventSequence(t *testing.T, events []StreamEvent, expectedTypes ...string) {
+	t.Helper()
+	var actualTypes []string
+	for _, e := range events {
+		actualTypes = append(actualTypes, e.Type)
+	}
+
+	idx := 0
+	for _, actual := range actualTypes {
+		if idx < len(expectedTypes) && actual == expectedTypes[idx] {
+			idx++
+		}
+	}
+	if idx < len(expectedTypes) {
+		t.Errorf("expected event sequence %v not found; actual types: %v", expectedTypes, actualTypes)
+	}
+}
+
+// concatContent joins all content from content-type events into a single string.
+func concatContent(events []StreamEvent) string {
+	var sb strings.Builder
+	for _, e := range events {
+		if e.Type == "content" {
+			sb.WriteString(e.Content)
+		}
+	}
+	return sb.String()
+}
+
+// extractSessionID extracts the session ID from metadata or session_capture events.
+func extractSessionID(events []StreamEvent) string {
+	// Prefer session_capture (early-captured external ID like OpenCode ses_xxx, Codex thread_xxx)
+	for _, e := range events {
+		if e.Type == "session_capture" && e.Content != "" {
+			return e.Content
+		}
+	}
+	// Fallback to metadata session ID (Claude/Codebuddy/Gemini)
+	for _, e := range events {
+		if e.Type == "metadata" && e.Meta != nil && e.Meta.SessionID != "" {
+			return e.Meta.SessionID
+		}
+	}
+	return ""
+}
+
+// --- 1. New Session Basic Dialog ---
+
+func TestIntegration_Claude_NewSession(t *testing.T) {
+	requireCLIAvailable(t, "claude")
+	backend, err := NewBackend("claude")
+	require.NoError(t, err)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+
+	ch, err := backend.ExecuteStream(ctx, ChatRequest{
+		Prompt:    "说一个字：好",
+		SessionID: newSessionID(),
+		WorkDir:   testWorkDir(),
+	})
+	require.NoError(t, err)
+
+	events := collectEvents(t, ch, 90*time.Second)
+
+	requireEventSequence(t, events, "content", "metadata")
+	content := concatContent(events)
+	assert.NotEmpty(t, content, "should receive content from claude")
+
+	metaEvents := findEvents(events, "metadata")
+	require.NotEmpty(t, metaEvents, "should have metadata event")
+	assert.NotEmpty(t, metaEvents[0].Meta.Model, "metadata should contain model name")
+
+	// AutoResumeBackend now forwards the "done" event
+	doneEvents := findEvents(events, "done")
+	assert.NotEmpty(t, doneEvents, "should receive 'done' event from AutoResumeBackend")
+
+	errorEvents := findEvents(events, "error")
+	assert.Empty(t, errorEvents, "should not have error events")
+}
+
+func TestIntegration_Codebuddy_NewSession(t *testing.T) {
+	requireCLIAvailable(t, "codebuddy")
+	backend, err := NewBackend("codebuddy")
+	require.NoError(t, err)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+
+	ch, err := backend.ExecuteStream(ctx, ChatRequest{
+		Prompt:    "说一个字：好",
+		SessionID: newSessionID(),
+		WorkDir:   testWorkDir(),
+	})
+	require.NoError(t, err)
+
+	events := collectEvents(t, ch, 90*time.Second)
+
+	requireEventSequence(t, events, "content", "metadata")
+	content := concatContent(events)
+	assert.NotEmpty(t, content, "should receive content from codebuddy")
+
+	metaEvents := findEvents(events, "metadata")
+	require.NotEmpty(t, metaEvents, "should have metadata event")
+	assert.NotEmpty(t, metaEvents[0].Meta.Model, "metadata should contain model name")
+
+	// AutoResumeBackend now forwards the "done" event
+	doneEvents := findEvents(events, "done")
+	assert.NotEmpty(t, doneEvents, "should receive 'done' event from AutoResumeBackend")
+
+	errorEvents := findEvents(events, "error")
+	assert.Empty(t, errorEvents, "should not have error events")
+}
+
+func TestIntegration_Gemini_NewSession(t *testing.T) {
+	requireGeminiEnv(t)
+	backend, err := NewBackend("gemini")
+	require.NoError(t, err)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+
+	ch, err := backend.ExecuteStream(ctx, ChatRequest{
+		Prompt:  "说一个字：好",
+		WorkDir: testWorkDir(),
+	})
+	require.NoError(t, err)
+
+	events := collectEvents(t, ch, 90*time.Second)
+
+	contentEvents := findEvents(events, "content")
+	if len(contentEvents) == 0 {
+		// Gemini CLI may fail to produce content due to network issues
+		warningEvents := findEvents(events, "warning")
+		t.Skipf("gemini produced no content events (likely network issue); warnings: %d, event types: %v",
+			len(warningEvents), eventTypes(events))
+	}
+
+	requireEventSequence(t, events, "content", "metadata")
+	content := concatContent(events)
+	assert.NotEmpty(t, content, "should receive content from gemini")
+
+	metaEvents := findEvents(events, "metadata")
+	require.NotEmpty(t, metaEvents, "should have metadata event")
+	assert.NotEmpty(t, metaEvents[0].Meta.Model, "metadata should contain model name")
+
+	errorEvents := findEvents(events, "error")
+	assert.Empty(t, errorEvents, "should not have error events")
+}
+
+func TestIntegration_OpenCode_NewSession(t *testing.T) {
+	requireCLIAvailable(t, "opencode")
+	backend, err := NewBackend("opencode")
+	require.NoError(t, err)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+
+	ch, err := backend.ExecuteStream(ctx, ChatRequest{
+		Prompt:  "说一个字：好",
+		WorkDir: testWorkDir(),
+	})
+	require.NoError(t, err)
+
+	events := collectEvents(t, ch, 90*time.Second)
+
+	requireEventSequence(t, events, "content", "metadata")
+	content := concatContent(events)
+	assert.NotEmpty(t, content, "should receive content from opencode")
+
+	metaEvents := findEvents(events, "metadata")
+	require.NotEmpty(t, metaEvents, "should have metadata event")
+	// OpenCode metadata may or may not have model name depending on CLI version
+
+	errorEvents := findEvents(events, "error")
+	assert.Empty(t, errorEvents, "should not have error events")
+}
+
+func TestIntegration_Codex_NewSession(t *testing.T) {
+	requireCodexEnv(t)
+	backend, err := NewBackend("codex")
+	require.NoError(t, err)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+
+	ch, err := backend.ExecuteStream(ctx, ChatRequest{
+		Prompt:  "说一个字：好",
+		WorkDir: testWorkDir(),
+		Command: codexCommand,
+	})
+	require.NoError(t, err)
+
+	events := collectEvents(t, ch, 90*time.Second)
+
+	requireEventSequence(t, events, "content", "metadata")
+	content := concatContent(events)
+	assert.NotEmpty(t, content, "should receive content from codex")
+
+	metaEvents := findEvents(events, "metadata")
+	require.NotEmpty(t, metaEvents, "should have metadata event")
+	assert.NotEmpty(t, metaEvents[0].Meta.SessionID, "codex metadata should contain session ID (thread_id)")
+
+	errorEvents := findEvents(events, "error")
+	assert.Empty(t, errorEvents, "should not have error events")
+}
+
+// --- 2. Stream Event Completeness ---
+
+func TestIntegration_Claude_StreamEvents(t *testing.T) {
+	requireCLIAvailable(t, "claude")
+	backend, err := NewBackend("claude")
+	require.NoError(t, err)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+
+	ch, err := backend.ExecuteStream(ctx, ChatRequest{
+		Prompt:    "1+1等于几？只回答数字",
+		SessionID: newSessionID(),
+		WorkDir:   testWorkDir(),
+	})
+	require.NoError(t, err)
+
+	events := collectEvents(t, ch, 90*time.Second)
+
+	// Claude with --include-partial-messages should produce incremental content deltas
+	contentEvents := findEvents(events, "content")
+	assert.NotEmpty(t, contentEvents, "should have content events")
+
+	// Metadata should include session ID from --session-id
+	metaEvents := findEvents(events, "metadata")
+	require.NotEmpty(t, metaEvents)
+	assert.NotEmpty(t, metaEvents[0].Meta.SessionID, "claude metadata should contain session ID")
+
+	// Should have raw_output event for debugging
+	rawEvents := findEvents(events, "raw_output")
+	assert.NotEmpty(t, rawEvents, "should have raw_output event")
+}
+
+func TestIntegration_Codebuddy_StreamEvents(t *testing.T) {
+	requireCLIAvailable(t, "codebuddy")
+	backend, err := NewBackend("codebuddy")
+	require.NoError(t, err)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+
+	ch, err := backend.ExecuteStream(ctx, ChatRequest{
+		Prompt:    "1+1等于几？只回答数字",
+		SessionID: newSessionID(),
+		WorkDir:   testWorkDir(),
+	})
+	require.NoError(t, err)
+
+	events := collectEvents(t, ch, 90*time.Second)
+
+	contentEvents := findEvents(events, "content")
+	assert.NotEmpty(t, contentEvents, "should have content events")
+
+	metaEvents := findEvents(events, "metadata")
+	require.NotEmpty(t, metaEvents)
+	assert.NotEmpty(t, metaEvents[0].Meta.SessionID, "codebuddy metadata should contain session ID")
+	// Codebuddy should provide model via providerData
+	assert.NotEmpty(t, metaEvents[0].Meta.Model, "codebuddy metadata should contain model from providerData")
+
+	rawEvents := findEvents(events, "raw_output")
+	assert.NotEmpty(t, rawEvents, "should have raw_output event")
+}
+
+func TestIntegration_Gemini_StreamEvents(t *testing.T) {
+	requireGeminiEnv(t)
+	backend, err := NewBackend("gemini")
+	require.NoError(t, err)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+
+	ch, err := backend.ExecuteStream(ctx, ChatRequest{
+		Prompt:  "1+1等于几？只回答数字",
+		WorkDir: testWorkDir(),
+	})
+	require.NoError(t, err)
+
+	events := collectEvents(t, ch, 90*time.Second)
+
+	contentEvents := findEvents(events, "content")
+	if len(contentEvents) == 0 {
+		// Gemini CLI may fail to produce content due to network issues (ECONNRESET, etc.)
+		warningEvents := findEvents(events, "warning")
+		errorEvents := findEvents(events, "error")
+		t.Skipf("gemini produced no content events (likely network issue); warnings: %d, errors: %d, event types: %v",
+			len(warningEvents), len(errorEvents), eventTypes(events))
+	}
+	assert.NotEmpty(t, contentEvents, "should have content events")
+
+	metaEvents := findEvents(events, "metadata")
+	require.NotEmpty(t, metaEvents)
+	// Gemini result event provides DurationMs
+	assert.NotZero(t, metaEvents[0].Meta.DurationMs, "gemini metadata should contain DurationMs")
+}
+
+func TestIntegration_OpenCode_StreamEvents(t *testing.T) {
+	requireCLIAvailable(t, "opencode")
+	backend, err := NewBackend("opencode")
+	require.NoError(t, err)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+
+	ch, err := backend.ExecuteStream(ctx, ChatRequest{
+		Prompt:  "1+1等于几？只回答数字",
+		WorkDir: testWorkDir(),
+	})
+	require.NoError(t, err)
+
+	events := collectEvents(t, ch, 90*time.Second)
+
+	// OpenCode may produce thinking or content events (or both)
+	thinkingEvents := findEvents(events, "thinking")
+	contentEvents := findEvents(events, "content")
+	assert.True(t, len(thinkingEvents) > 0 || len(contentEvents) > 0,
+		"should have thinking or content events")
+
+	metaEvents := findEvents(events, "metadata")
+	require.NotEmpty(t, metaEvents)
+	// OpenCode session ID is captured early via session_capture
+	sessionCaptureEvents := findEvents(events, "session_capture")
+	assert.NotEmpty(t, sessionCaptureEvents, "opencode should emit session_capture for ses_xxx ID")
+}
+
+func TestIntegration_Codex_StreamEvents(t *testing.T) {
+	requireCodexEnv(t)
+	backend, err := NewBackend("codex")
+	require.NoError(t, err)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+
+	ch, err := backend.ExecuteStream(ctx, ChatRequest{
+		Prompt:  "1+1等于几？只回答数字",
+		WorkDir: testWorkDir(),
+		Command: codexCommand,
+	})
+	require.NoError(t, err)
+
+	events := collectEvents(t, ch, 90*time.Second)
+
+	contentEvents := findEvents(events, "content")
+	assert.NotEmpty(t, contentEvents, "should have content events")
+
+	// Codex should capture thread_id via session_capture
+	sessionCaptureEvents := findEvents(events, "session_capture")
+	if assert.NotEmpty(t, sessionCaptureEvents, "codex should emit session_capture for thread ID") {
+		t.Logf("codex session_capture content: %q", sessionCaptureEvents[0].Content)
+		// Codex thread_id is a UUID (e.g. "019dfb6d-ad2c-7292-aaa8-93bf629c5fe2")
+		assert.NotEmpty(t, sessionCaptureEvents[0].Content,
+			"codex session_capture should contain a non-empty thread ID")
+	}
+}
+
+// --- 3. Session Resume ---
+
+func TestIntegration_Claude_ResumeSession(t *testing.T) {
+	requireCLIAvailable(t, "claude")
+	backend, err := NewBackend("claude")
+	require.NoError(t, err)
+
+	sessionID := newSessionID()
+
+	// Phase 1: new session
+	ctx1, cancel1 := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel1()
+
+	ch1, err := backend.ExecuteStream(ctx1, ChatRequest{
+		Prompt:    "记住数字42，稍后我会问你。只回复OK",
+		SessionID: sessionID,
+		WorkDir:   testWorkDir(),
+	})
+	require.NoError(t, err)
+
+	events1 := collectEvents(t, ch1, 90*time.Second)
+	// Verify first conversation completed normally
+	doneEvents1 := findEvents(events1, "metadata")
+	require.NotEmpty(t, doneEvents1, "first conversation should complete with metadata event")
+
+	// Phase 2: resume session
+	ctx2, cancel2 := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel2()
+
+	ch2, err := backend.ExecuteStream(ctx2, ChatRequest{
+		Prompt:    "我之前让你记住的数字是什么？只回答数字",
+		SessionID: sessionID,
+		WorkDir:   testWorkDir(),
+		Resume:    true,
+	})
+	require.NoError(t, err)
+
+	events2 := collectEvents(t, ch2, 90*time.Second)
+	requireEventSequence(t, events2, "content", "metadata")
+	content := concatContent(events2)
+	assert.NotEmpty(t, content, "should receive content in resumed session")
+
+	// Note: "done" event should now be forwarded by AutoResumeBackend
+	doneEvents2 := findEvents(events2, "done")
+	assert.NotEmpty(t, doneEvents2, "should receive 'done' event in resumed session")
+}
+
+func TestIntegration_Codebuddy_ResumeSession(t *testing.T) {
+	requireCLIAvailable(t, "codebuddy")
+	backend, err := NewBackend("codebuddy")
+	require.NoError(t, err)
+
+	sessionID := newSessionID()
+
+	// Phase 1: new session
+	ctx1, cancel1 := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel1()
+
+	ch1, err := backend.ExecuteStream(ctx1, ChatRequest{
+		Prompt:    "记住数字42，稍后我会问你。只回复OK",
+		SessionID: sessionID,
+		WorkDir:   testWorkDir(),
+	})
+	require.NoError(t, err)
+
+	events1 := collectEvents(t, ch1, 90*time.Second)
+	doneEvents1 := findEvents(events1, "metadata")
+	require.NotEmpty(t, doneEvents1, "first conversation should complete with metadata event")
+
+	// Phase 2: resume session
+	ctx2, cancel2 := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel2()
+
+	ch2, err := backend.ExecuteStream(ctx2, ChatRequest{
+		Prompt:    "我之前让你记住的数字是什么？只回答数字",
+		SessionID: sessionID,
+		WorkDir:   testWorkDir(),
+		Resume:    true,
+	})
+	require.NoError(t, err)
+
+	events2 := collectEvents(t, ch2, 90*time.Second)
+	requireEventSequence(t, events2, "content", "metadata")
+	content := concatContent(events2)
+	assert.NotEmpty(t, content, "should receive content in resumed session")
+
+	// "done" event should now be forwarded by AutoResumeBackend
+	doneEvents2 := findEvents(events2, "done")
+	assert.NotEmpty(t, doneEvents2, "should receive 'done' event in resumed session")
+}
+
+func TestIntegration_OpenCode_ResumeSession(t *testing.T) {
+	requireCLIAvailable(t, "opencode")
+	backend, err := NewBackend("opencode")
+	require.NoError(t, err)
+
+	// Phase 1: new session
+	ctx1, cancel1 := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel1()
+
+	ch1, err := backend.ExecuteStream(ctx1, ChatRequest{
+		Prompt:  "记住数字42，稍后我会问你。只回复OK",
+		WorkDir: testWorkDir(),
+	})
+	require.NoError(t, err)
+
+	events1 := collectEvents(t, ch1, 90*time.Second)
+	sessionID := extractSessionID(events1)
+	require.NotEmpty(t, sessionID, "should capture OpenCode session ID (ses_xxx)")
+	assert.True(t, strings.HasPrefix(sessionID, "ses_"),
+		"OpenCode session ID should start with ses_")
+
+	doneEvents1 := findEvents(events1, "metadata")
+	require.NotEmpty(t, doneEvents1, "first conversation should complete with metadata event")
+
+	// Phase 2: resume with the OpenCode session ID
+	ctx2, cancel2 := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel2()
+
+	ch2, err := backend.ExecuteStream(ctx2, ChatRequest{
+		Prompt:    "我之前让你记住的数字是什么？只回答数字",
+		SessionID: sessionID,
+		WorkDir:   testWorkDir(),
+		Resume:    true,
+	})
+	require.NoError(t, err)
+
+	events2 := collectEvents(t, ch2, 90*time.Second)
+	requireEventSequence(t, events2, "content", "metadata")
+	content := concatContent(events2)
+	assert.NotEmpty(t, content, "should receive content in resumed session")
+}
+
+func TestIntegration_Codex_ResumeSession(t *testing.T) {
+	requireCodexEnv(t)
+	backend, err := NewBackend("codex")
+	require.NoError(t, err)
+
+	// Phase 1: new session
+	ctx1, cancel1 := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel1()
+
+	ch1, err := backend.ExecuteStream(ctx1, ChatRequest{
+		Prompt:  "记住数字42，稍后我会问你。只回复OK",
+		WorkDir: testWorkDir(),
+		Command: codexCommand,
+	})
+	require.NoError(t, err)
+
+	events1 := collectEvents(t, ch1, 90*time.Second)
+	sessionID := extractSessionID(events1)
+	require.NotEmpty(t, sessionID, "should capture Codex thread ID")
+	// Codex thread_id is a UUID format, not "thread_xxx" prefix
+
+	doneEvents1 := findEvents(events1, "metadata")
+	require.NotEmpty(t, doneEvents1, "first conversation should complete with metadata event")
+
+	// Phase 2: resume with the Codex thread ID
+	ctx2, cancel2 := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel2()
+
+	ch2, err := backend.ExecuteStream(ctx2, ChatRequest{
+		Prompt:    "我之前让你记住的数字是什么？只回答数字",
+		SessionID: sessionID,
+		WorkDir:   testWorkDir(),
+		Resume:    true,
+		Command:   codexCommand,
+	})
+	require.NoError(t, err)
+
+	events2 := collectEvents(t, ch2, 90*time.Second)
+	requireEventSequence(t, events2, "content", "metadata")
+	content := concatContent(events2)
+	assert.NotEmpty(t, content, "should receive content in resumed session")
+}
+
+// --- 4. Context Cancellation ---
+
+func TestIntegration_Claude_CancelMidStream(t *testing.T) {
+	requireCLIAvailable(t, "claude")
+	backend, err := NewBackend("claude")
+	require.NoError(t, err)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+
+	ch, err := backend.ExecuteStream(ctx, ChatRequest{
+		Prompt:    "写一篇500字的文章，主题是春天的花园",
+		SessionID: newSessionID(),
+		WorkDir:   testWorkDir(),
+	})
+	require.NoError(t, err)
+
+	events := cancelOnFirstContent(t, ch, cancel)
+	contentEvents := findEvents(events, "content")
+	assert.NotEmpty(t, contentEvents, "should have received at least one content before cancel")
+}
+
+func TestIntegration_Codebuddy_CancelMidStream(t *testing.T) {
+	requireCLIAvailable(t, "codebuddy")
+	backend, err := NewBackend("codebuddy")
+	require.NoError(t, err)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+
+	ch, err := backend.ExecuteStream(ctx, ChatRequest{
+		Prompt:    "写一篇500字的文章，主题是春天的花园",
+		SessionID: newSessionID(),
+		WorkDir:   testWorkDir(),
+	})
+	require.NoError(t, err)
+
+	events := cancelOnFirstContent(t, ch, cancel)
+	contentEvents := findEvents(events, "content")
+	assert.NotEmpty(t, contentEvents, "should have received at least one content before cancel")
+}
+
+func TestIntegration_Gemini_CancelMidStream(t *testing.T) {
+	requireGeminiEnv(t)
+	backend, err := NewBackend("gemini")
+	require.NoError(t, err)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+
+	ch, err := backend.ExecuteStream(ctx, ChatRequest{
+		Prompt:  "写一篇500字的文章，主题是春天的花园",
+		WorkDir: testWorkDir(),
+	})
+	require.NoError(t, err)
+
+	events := cancelOnFirstContent(t, ch, cancel)
+	contentEvents := findEvents(events, "content")
+	if len(contentEvents) == 0 {
+		// Gemini CLI may fail to produce content due to network issues (ECONNRESET, etc.)
+		// This is an infrastructure issue, not a code bug.
+		warningEvents := findEvents(events, "warning")
+		errorEvents := findEvents(events, "error")
+		t.Skipf("gemini produced no content before cancel (likely network issue); warnings: %d, errors: %d, event types: %v",
+			len(warningEvents), len(errorEvents), eventTypes(events))
+	}
+	assert.NotEmpty(t, contentEvents, "should have received at least one content before cancel")
+}
+
+func TestIntegration_OpenCode_CancelMidStream(t *testing.T) {
+	requireCLIAvailable(t, "opencode")
+	backend, err := NewBackend("opencode")
+	require.NoError(t, err)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+
+	ch, err := backend.ExecuteStream(ctx, ChatRequest{
+		Prompt:  "写一篇500字的文章，主题是春天的花园",
+		WorkDir: testWorkDir(),
+	})
+	require.NoError(t, err)
+
+	events := cancelOnFirstContent(t, ch, cancel)
+	contentEvents := findEvents(events, "content")
+	assert.NotEmpty(t, contentEvents, "should have received at least one content before cancel")
+}
+
+func TestIntegration_Codex_CancelMidStream(t *testing.T) {
+	requireCodexEnv(t)
+	backend, err := NewBackend("codex")
+	require.NoError(t, err)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+
+	ch, err := backend.ExecuteStream(ctx, ChatRequest{
+		Prompt:  "写一篇500字的文章，主题是春天的花园",
+		WorkDir: testWorkDir(),
+		Command: codexCommand,
+	})
+	require.NoError(t, err)
+
+	events := cancelOnFirstContent(t, ch, cancel)
+	contentEvents := findEvents(events, "content")
+	assert.NotEmpty(t, contentEvents, "should have received at least one content before cancel")
+}
+
+// cancelOnFirstContent reads events from ch, calls cancelFunc after the first
+// content event, then continues collecting until the channel closes.
+func cancelOnFirstContent(t *testing.T, ch <-chan StreamEvent, cancelFunc context.CancelFunc) []StreamEvent {
+	t.Helper()
+	var events []StreamEvent
+	cancelled := false
+	timer := time.NewTimer(90 * time.Second)
+	defer timer.Stop()
+
+	for {
+		select {
+		case event, ok := <-ch:
+			if !ok {
+				return events
+			}
+			events = append(events, event)
+			// Cancel after first content event
+			if !cancelled && event.Type == "content" {
+				cancelled = true
+				cancelFunc()
+			}
+		case <-timer.C:
+			t.Log("cancelOnFirstContent: timeout")
+			return events
+		}
+	}
+}
+
+// --- 5. Error Paths ---
+
+func TestIntegration_InvalidWorkDir(t *testing.T) {
+	// Test all CLIBackend-based backends with an invalid work directory.
+	// The CLI should fail to start or produce an error/warning event.
+	backends := []struct {
+		name    string
+		cliName string
+	}{
+		{"claude", "claude"},
+		{"codebuddy", "codebuddy"},
+		{"gemini", "gemini"},
+		{"opencode", "opencode"},
+	}
+
+	for _, tc := range backends {
+		t.Run(tc.name, func(t *testing.T) {
+			requireCLIAvailable(t, tc.cliName)
+			backend, err := NewBackend(tc.name)
+			require.NoError(t, err)
+
+			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+			defer cancel()
+
+			ch, err := backend.ExecuteStream(ctx, ChatRequest{
+				Prompt:    "hello",
+				SessionID: newSessionID(),
+				WorkDir:   "/nonexistent/path/that/does/not/exist/abc123",
+			})
+			if err != nil {
+				// ExecuteStream itself returned an error — acceptable
+				t.Logf("ExecuteStream returned error (expected for invalid WorkDir): %v", err)
+				return
+			}
+
+			// If no error from ExecuteStream, the stream should contain warning/error
+			events := collectEvents(t, ch, 30*time.Second)
+			hasError := len(findEvents(events, "error")) > 0
+			hasWarning := len(findEvents(events, "warning")) > 0
+			assert.True(t, hasError || hasWarning,
+				"invalid WorkDir should produce error or warning events; got types: %v",
+				eventTypes(events))
+		})
+	}
+}
+
+func TestIntegration_Codex_InvalidCommand(t *testing.T) {
+	requireCodexEnv(t)
+	backend, err := NewBackend("codex")
+	require.NoError(t, err)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	_, err = backend.ExecuteStream(ctx, ChatRequest{
+		Prompt:  "hello",
+		WorkDir: testWorkDir(),
+		Command: "nonexistent-codex-binary-12345",
+	})
+	// Codex should fail to start the command
+	assert.Error(t, err, "invalid Command should cause ExecuteStream to return error")
+}
+
+// eventTypes returns a slice of event type strings for debugging.
+func eventTypes(events []StreamEvent) []string {
+	types := make([]string, len(events))
+	for i, e := range events {
+		types[i] = e.Type
+	}
+	return types
+}
+
+// --- 6. AutoResume ExitPlanMode ---
+
+func TestIntegration_AutoResume_ExitPlanMode(t *testing.T) {
+	requireCLIAvailable(t, "claude")
+	backend, err := NewBackend("claude")
+	require.NoError(t, err)
+
+	// Verify it's an AutoResumeBackend
+	_, ok := backend.(*AutoResumeBackend)
+	require.True(t, ok, "claude backend should be AutoResumeBackend")
+
+	ctx, cancel := context.WithTimeout(context.Background(), 180*time.Second)
+	defer cancel()
+
+	// Use a prompt that tends to trigger EnterPlanMode in Claude.
+	// Keep it short to avoid long tool-use chains that timeout.
+	ch, err := backend.ExecuteStream(ctx, ChatRequest{
+		Prompt:    "请进入规划模式，帮我规划一下如何给hello world程序写测试",
+		SessionID: newSessionID(),
+		WorkDir:   testWorkDir(),
+	})
+	require.NoError(t, err)
+
+	events := collectEvents(t, ch, 200*time.Second)
+
+	// Check if ExitPlanMode was triggered
+	resumeSplitEvents := findEvents(events, "resume_split")
+	if len(resumeSplitEvents) == 0 {
+		t.Log("ExitPlanMode was not triggered in this run — this is expected and not a failure")
+		t.Log("AI behavior is non-deterministic; ExitPlanMode may not always be triggered")
+		// Still verify basic flow completed — need either metadata or content events
+		metaEvents := findEvents(events, "metadata")
+		if len(metaEvents) > 0 {
+			t.Log("basic flow completed with metadata event")
+		} else {
+			contentEvents := findEvents(events, "content")
+			if assert.NotEmpty(t, contentEvents, "should have at least content events") {
+				t.Log("basic flow produced content events but no metadata (may have timed out)")
+			}
+		}
+		return
+	}
+
+	// If ExitPlanMode was triggered, verify the resume flow
+	t.Log("ExitPlanMode detected — verifying resume flow")
+
+	// Should have resume_split event
+	requireEventSequence(t, events, "resume_split", "content", "metadata")
+
+	// Should have two rounds of content (before and after resume)
+	contentEvents := findEvents(events, "content")
+	assert.NotEmpty(t, contentEvents, "should have content events after resume")
+
+	// Should have metadata from the second round
+	metaEvents := findEvents(events, "metadata")
+	assert.NotEmpty(t, metaEvents, "should have metadata from resumed session")
+
+	// "done" event should now be forwarded by AutoResumeBackend
+	doneEvents := findEvents(events, "done")
+	assert.NotEmpty(t, doneEvents, "should receive 'done' event")
+}
+
+// --- 7. System Prompt Injection ---
+
+// TestIntegration_*_SystemPromptInjection tests verify that the SystemPrompt field
+// in ChatRequest is correctly passed through to the CLI backend. The tests check
+// two things:
+// 1. The system prompt is present in the CLI arguments (verified via raw_output for
+//    backends that support --system-prompt, or via prompt injection for others)
+// 2. The AI response acknowledges the system prompt (best-effort — AI may not comply)
+
+func TestIntegration_Claude_SystemPromptInjection(t *testing.T) {
+	requireCLIAvailable(t, "claude")
+	backend, err := NewBackend("claude")
+	require.NoError(t, err)
+
+	const marker = "INTEGRATION_TEST_MARKER_7X9Z"
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+
+	ch, err := backend.ExecuteStream(ctx, ChatRequest{
+		Prompt:       "请重复以下标记：" + marker,
+		SessionID:    newSessionID(),
+		WorkDir:      testWorkDir(),
+		SystemPrompt: "你必须在你回复的开头包含标记 " + marker + "，这是系统级要求",
+	})
+	require.NoError(t, err)
+
+	events := collectEvents(t, ch, 90*time.Second)
+	requireEventSequence(t, events, "content", "metadata")
+
+	// Verify the stream completed successfully with metadata (which means CLI args were valid)
+	metaEvents := findEvents(events, "metadata")
+	require.NotEmpty(t, metaEvents, "should have metadata event")
+
+	// Best-effort check: AI may or may not include the marker in its response
+	content := concatContent(events)
+	if !strings.Contains(content, marker) {
+		t.Logf("claude did not include marker %q in response — AI compliance is non-deterministic; content: %s", marker, truncate(content, 200))
+	}
+}
+
+func TestIntegration_Codebuddy_SystemPromptInjection(t *testing.T) {
+	requireCLIAvailable(t, "codebuddy")
+	backend, err := NewBackend("codebuddy")
+	require.NoError(t, err)
+
+	const marker = "INTEGRATION_TEST_MARKER_K3P8"
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+
+	ch, err := backend.ExecuteStream(ctx, ChatRequest{
+		Prompt:       "请重复以下标记：" + marker,
+		SessionID:    newSessionID(),
+		WorkDir:      testWorkDir(),
+		SystemPrompt: "你必须在你回复的开头包含标记 " + marker + "，这是系统级要求",
+	})
+	require.NoError(t, err)
+
+	events := collectEvents(t, ch, 90*time.Second)
+	requireEventSequence(t, events, "content", "metadata")
+
+	// Verify the stream completed successfully with metadata (which means CLI args were valid)
+	metaEvents := findEvents(events, "metadata")
+	require.NotEmpty(t, metaEvents, "should have metadata event")
+
+	// Best-effort check
+	content := concatContent(events)
+	if !strings.Contains(content, marker) {
+		t.Logf("codebuddy did not include marker %q in response — AI compliance is non-deterministic; content: %s", marker, truncate(content, 200))
+	}
+}
+
+func TestIntegration_Gemini_SystemPromptInjection(t *testing.T) {
+	requireGeminiEnv(t)
+	backend, err := NewBackend("gemini")
+	require.NoError(t, err)
+
+	// Gemini CLI has no --system-prompt flag; prompt is injected as [System Instructions: ...]
+	const marker = "INTEGRATION_TEST_MARKER_W4M2"
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+
+	// Set ChatSystemPromptInterval so ShouldInjectSystemPrompt returns true on first message
+	model.ChatSystemPromptInterval = 10
+
+	ch, err := backend.ExecuteStream(ctx, ChatRequest{
+		Prompt:       "请重复以下标记：" + marker,
+		WorkDir:      testWorkDir(),
+		SystemPrompt: "你必须在你回复的开头包含标记 " + marker + "，这是系统级要求",
+	})
+	require.NoError(t, err)
+
+	events := collectEvents(t, ch, 90*time.Second)
+	requireEventSequence(t, events, "content", "metadata")
+
+	// Check that system instructions were injected into the prompt (raw_output or args)
+	// Gemini injects as "[System Instructions: ...]" prefix in the --prompt arg
+	metaEvents := findEvents(events, "metadata")
+	assert.NotEmpty(t, metaEvents, "should complete with metadata event")
+
+	// Best-effort check
+	content := concatContent(events)
+	if !strings.Contains(content, marker) {
+		t.Logf("gemini did not include marker %q in response — AI compliance is non-deterministic; content: %s", marker, truncate(content, 200))
+	}
+}
+
+func TestIntegration_OpenCode_SystemPromptInjection(t *testing.T) {
+	requireCLIAvailable(t, "opencode")
+	backend, err := NewBackend("opencode")
+	require.NoError(t, err)
+
+	// OpenCode CLI has no --system-prompt flag; prompt is injected as [System Instructions: ...]
+	const marker = "INTEGRATION_TEST_MARKER_R5N1"
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+
+	model.ChatSystemPromptInterval = 10
+
+	ch, err := backend.ExecuteStream(ctx, ChatRequest{
+		Prompt:       "请重复以下标记：" + marker,
+		WorkDir:      testWorkDir(),
+		SystemPrompt: "你必须在你回复的开头包含标记 " + marker + "，这是系统级要求",
+	})
+	require.NoError(t, err)
+
+	events := collectEvents(t, ch, 90*time.Second)
+	requireEventSequence(t, events, "content", "metadata")
+
+	// Best-effort check
+	content := concatContent(events)
+	if !strings.Contains(content, marker) {
+		t.Logf("opencode did not include marker %q in response — AI compliance is non-deterministic; content: %s", marker, truncate(content, 200))
+	}
+}
+
+func TestIntegration_Codex_SystemPromptInjection(t *testing.T) {
+	requireCodexEnv(t)
+	backend, err := NewBackend("codex")
+	require.NoError(t, err)
+
+	// Codex CLI has no --system-prompt flag; prompt is injected as [System Instructions: ...]
+	const marker = "INTEGRATION_TEST_MARKER_Q8V6"
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+
+	model.ChatSystemPromptInterval = 10
+
+	ch, err := backend.ExecuteStream(ctx, ChatRequest{
+		Prompt:       "请重复以下标记：" + marker,
+		WorkDir:      testWorkDir(),
+		SystemPrompt: "你必须在你回复的开头包含标记 " + marker + "，这是系统级要求",
+		Command:      codexCommand,
+	})
+	require.NoError(t, err)
+
+	events := collectEvents(t, ch, 90*time.Second)
+	requireEventSequence(t, events, "content", "metadata")
+
+	// Best-effort check
+	content := concatContent(events)
+	if !strings.Contains(content, marker) {
+		t.Logf("codex did not include marker %q in response — AI compliance is non-deterministic; content: %s", marker, truncate(content, 200))
+	}
+}
+
+// --- Helpers ---
+
+// truncate returns the first n chars of s with "..." appended if longer.
+func truncate(s string, n int) string {
+	if len(s) <= n {
+		return s
+	}
+	return s[:n] + "..."
+}

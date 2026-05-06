@@ -107,9 +107,11 @@ func TestCodebuddyStream_CommandArgs(t *testing.T) {
 		t.Error("expected --dangerously-skip-permissions in args")
 	}
 
-	// Prompt should be last arg
-	if args[len(args)-1] != req.Prompt {
-		t.Errorf("expected prompt as last arg, got %q", args[len(args)-1])
+	// Prompt is passed via stdin (not as positional arg)
+	for _, a := range args {
+		if a == req.Prompt {
+			t.Errorf("prompt should not appear in args — it is passed via stdin, got %q", a)
+		}
 	}
 }
 

@@ -46,6 +46,8 @@ func (b *AutoResumeBackend) ExecuteStream(ctx context.Context, req ChatRequest) 
 //	Phase 2: On ExitPlanMode, cancel first stream, start resume, forward resumed events
 //
 // If no ExitPlanMode is detected, acts as a transparent proxy.
+// The "done" event is always forwarded to the outer channel so that
+// downstream handlers can detect stream completion explicitly.
 func (b *AutoResumeBackend) mergeStreams(
 	ctx context.Context,
 	innerCtx context.Context,
@@ -64,7 +66,11 @@ func (b *AutoResumeBackend) mergeStreams(
 		case event, ok := <-innerCh:
 			if !ok {
 				// First stream channel closed normally (no ExitPlanMode).
-				goto phase1Done
+				// No explicit "done" event was received (the CLIBackend may close
+				// the channel after metadata without emitting "done" in some cases).
+				// Emit "done" ourselves so the downstream handler can finalize.
+				forwardEvent(outerCh, StreamEvent{Type: "done"})
+				return
 			}
 
 			// Detect ExitPlanMode: CLI hangs in --print mode because
@@ -95,15 +101,16 @@ func (b *AutoResumeBackend) mergeStreams(
 				goto phase1Done
 			}
 
-			// Normal forwarding — "done" means normal completion
+			// Normal forwarding — "done" means normal completion, forward it
 			if event.Type == "done" {
-				return // outerCh closed by defer
+				forwardEvent(outerCh, event)
+				return
 			}
 			forwardEvent(outerCh, event)
 
 		case <-ctx.Done():
 			// Outer context cancelled (real user cancel/disconnect)
-			return // outerCh closed by defer
+			return
 		}
 	}
 
@@ -143,14 +150,16 @@ phase1Done:
 		select {
 		case event2, ok := <-innerCh2:
 			if !ok {
-				// Channel closed without "done" — still end the outer stream
+				// Channel closed without "done" — emit done ourselves and end
+				forwardEvent(outerCh, StreamEvent{Type: "done"})
 				return
 			}
 			if event2.Type == "raw_output" {
 				continue // suppress raw_output from resume stream
 			}
 			if event2.Type == "done" {
-				return // outerCh closed by defer
+				forwardEvent(outerCh, event2) // forward "done" to outer
+				return
 			}
 			forwardEvent(outerCh, event2)
 
