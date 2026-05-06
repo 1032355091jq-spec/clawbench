@@ -69,7 +69,7 @@
         <div v-if="getBlockHtml(bi, block)" v-html="getBlockHtml(bi, block)"></div>
         <div class="chat-tool-call done" data-category="ask" @click.stop="$emit('toggle-tool', key(bi))">
           <component :is="getToolIcon('AskUserQuestion').icon" :size="12" class="tool-icon" />
-          <span class="tool-name">AskUserQuestion</span>
+          <span class="tool-name">{{ t('tool.askUser.name') }}</span>
           <span class="tool-summary">{{ askQuestionSummary(blockAskQuestions[blockProposalsKey(bi)]) }}</span>
           <CheckCircle2 :size="14" color="#f59e0b" class="tool-warn" />
         </div>

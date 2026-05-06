@@ -144,6 +144,7 @@
 <script setup>
 import { ref, computed, watch, onUnmounted, onMounted, inject, provide, toRef, nextTick } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { gt } from '@/composables/useLocale'
 import { MessageSquare } from 'lucide-vue-next'
 import BottomSheet from '@/components/common/BottomSheet.vue'
 import HeaderMarquee from '@/components/common/HeaderMarquee.vue'
@@ -487,7 +488,9 @@ async function sendMessageNow(text, filePaths, files) {
         })
         const data = await resp.json()
         if (!resp.ok) {
-            throw new Error(data.error || 'Unknown error')
+            const err = new Error(data.error || gt('chat.metadata.unknownError'))
+            err.msgKey = data.msgKey
+            throw err
         }
         // Update session ID if backend created a new one
         if (data.sessionId && !identity.currentSessionId.value) {
@@ -509,7 +512,7 @@ async function sendMessageNow(text, filePaths, files) {
         loading.value = false
         toast.show(t('toast.sendFailed'), { icon: '⚠️', type: 'error' })
         // Clear session ID on error to prevent using invalid session
-        if (err.message?.includes('Session backend not found') || err.message?.includes('session not found')) {
+        if (err.msgKey === 'SessionBackendNotFound' || err.msgKey === 'SessionNotFound') {
             identity.currentSessionId.value = ''
         }
     }

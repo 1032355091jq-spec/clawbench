@@ -40,7 +40,7 @@ function renderEditDiff(input: Record<string, any>): string {
     header += fileOpenButtonHtml(resolvedPath)
   }
   if (replaceAll) {
-    header += '<span class="edit-diff-replace-all" title="Replace all occurrences">replaceAll</span>'
+    header += '<span class="edit-diff-replace-all" title="' + escapeHtml(gt('tool.edit.replaceAllTitle')) + '">' + escapeHtml(gt('tool.edit.replaceAll')) + '</span>'
   }
   header += '</div>'
 
@@ -246,7 +246,7 @@ function renderGrepSearch(input: Record<string, any>): string {
 
   // Pattern line
   html += '<div class="grep-pattern-row">'
-  html += '<span class="grep-label">pattern</span>'
+  html += `<span class="grep-label">${escapeHtml(gt('tool.grep.pattern'))}</span>`
   try {
     html += `<span class="grep-pattern-text">${hljs.highlight(pattern, { language: 'bash', ignoreIllegals: true }).value}</span>`
   } catch {
@@ -260,7 +260,7 @@ function renderGrepSearch(input: Record<string, any>): string {
     const resolvedPath = resolveFilePath(path, projectRoot)
     const displayPath = resolvedPath || path.replace(/^\.\//, '')
     html += '<div class="grep-path-row">'
-    html += '<span class="grep-label">path</span>'
+    html += `<span class="grep-label">${escapeHtml(gt('tool.grep.path'))}</span>`
     html += `<span class="grep-path-text">${escapeHtml(displayPath)}</span>`
     if (resolvedPath) {
       html += fileOpenButtonHtml(resolvedPath)
@@ -289,7 +289,7 @@ function renderGlobPattern(input: Record<string, any>): string {
 
   // Pattern line
   html += '<div class="glob-pattern-row">'
-  html += '<span class="glob-label">pattern</span>'
+  html += `<span class="glob-label">${escapeHtml(gt('tool.glob.pattern'))}</span>`
   html += `<span class="glob-pattern-text">${escapeHtml(pattern)}</span>`
   html += '</div>'
 
@@ -299,7 +299,7 @@ function renderGlobPattern(input: Record<string, any>): string {
     const resolvedPath = resolveFilePath(path, projectRoot)
     const displayPath = resolvedPath || path.replace(/^\.\//, '')
     html += '<div class="glob-path-row">'
-    html += '<span class="glob-label">path</span>'
+    html += `<span class="glob-label">${escapeHtml(gt('tool.glob.path'))}</span>`
     html += `<span class="glob-path-text">${escapeHtml(displayPath)}</span>`
     if (resolvedPath) {
       html += fileOpenButtonHtml(resolvedPath)
@@ -339,7 +339,7 @@ function renderWebFetch(input: Record<string, any>): string {
   // URL line
   if (url) {
     html += '<div class="web-fetch-url-row">'
-    html += '<span class="web-fetch-label">URL</span>'
+    html += `<span class="web-fetch-label">${escapeHtml(gt('tool.webFetch.url'))}</span>`
     // Determine if it looks like a URL
     const isUrl = /^https?:\/\//i.test(url)
     if (isUrl) {

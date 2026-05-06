@@ -552,10 +552,26 @@ export default {
     write: {
       badge: 'Write',
     },
+    edit: {
+      replaceAll: 'Replace all',
+      replaceAllTitle: 'Replace all occurrences',
+    },
+    grep: {
+      pattern: 'pattern',
+      path: 'path',
+    },
+    glob: {
+      pattern: 'pattern',
+      path: 'path',
+    },
+    webFetch: {
+      url: 'URL',
+    },
     askUser: {
       noQuestions: '(No questions)',
       submit: 'Submit',
       submitted: 'Submitted',
+      name: 'Ask Question',
     },
   },
   agents: {

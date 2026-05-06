@@ -552,10 +552,26 @@ export default {
     write: {
       badge: '写入',
     },
+    edit: {
+      replaceAll: '全部替换',
+      replaceAllTitle: '替换所有匹配项',
+    },
+    grep: {
+      pattern: '搜索模式',
+      path: '路径',
+    },
+    glob: {
+      pattern: '匹配模式',
+      path: '路径',
+    },
+    webFetch: {
+      url: 'URL',
+    },
     askUser: {
       noQuestions: '（无问题）',
       submit: '提交',
       submitted: '已提交',
+      name: '提问',
     },
   },
   agents: {

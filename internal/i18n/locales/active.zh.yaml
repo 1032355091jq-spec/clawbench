@@ -1,7 +1,7 @@
 SessionNotRunning: 会话未在运行
 SessionStreamNotFound: 未找到会话流
 SessionLimitReached: 已达会话数量上限（{{.MaxCount}}），请先删除旧会话
-SessionIdRequired: session_id required
+SessionIdRequired: session_id 为必填项
 NewSession: 新会话
 NewSessionN: 新会话 {{.N}}
 FileMessage: 文件消息
@@ -11,23 +11,23 @@ SummarizeFailed: 摘要生成失败，请稍后重试
 SynthesizeFailed: 语音合成失败，请稍后重试
 BackendCreateFailed: "创建 AI Backend 失败: {{.Error}}"
 StreamStartFailed: "启动流式输出失败: {{.Error}}"
-MethodNotAllowed: Method not allowed
-InvalidRequestBody: Invalid request body
-NotADirectory: Not a directory
-NotAFile: Not a file
-NotAGitRepo: Not a git repository
-NoProjectSelected: no project selected
-AccessDenied: Access denied
-Unauthorized: unauthorized
-InvalidPath: invalid path
-PathTraversal: path traversal detected
-InternalError: internal server error
-SessionNotFound: session not found
-NoAgentsAvailable: no agents available
-MessageOrFilesRequired: Message or files required
-TextRequired: text is required
-JobIdRequired: job ID required
-FileNotFound: "File not found: {{.Path}}"
+MethodNotAllowed: 方法不允许
+InvalidRequestBody: 请求体无效
+NotADirectory: 不是目录
+NotAFile: 不是文件
+NotAGitRepo: 不是Git仓库
+NoProjectSelected: 未选择项目
+AccessDenied: 访问被拒绝
+Unauthorized: 未授权
+InvalidPath: 无效路径
+PathTraversal: 检测到路径穿越攻击
+InternalError: 内部服务器错误
+SessionNotFound: 会话未找到
+NoAgentsAvailable: 没有可用的智能体
+MessageOrFilesRequired: 消息或文件为必填项
+TextRequired: 文本为必填项
+JobIdRequired: 任务ID为必填项
+FileNotFound: "文件未找到: {{.Path}}"
 ClientIdRequired: 客户端ID为必填项
 FileWatcherNotAvailable: 文件监视器不可用
 InvalidRole: 无效的角色
