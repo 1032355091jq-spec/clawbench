@@ -1,7 +1,7 @@
 <template>
   <BottomSheet ref="bottomSheetRef" :open="open" :title="t('proxy.title')" @close="$emit('close')">
     <template #header>
-      <Waypoints :size="16" class="bs-header-icon" />
+      <EthernetPort :size="16" class="bs-header-icon" />
       <span class="bs-header-title">{{ t('proxy.title') }}</span>
     </template>
 
@@ -176,7 +176,7 @@
 </template>
 
 <script setup>
-import { Waypoints, XCircle, RotateCcw, AlertTriangle, Info, Plus, Search, Lock, Copy, Smartphone, ChevronDown } from 'lucide-vue-next'
+import { EthernetPort, XCircle, RotateCcw, AlertTriangle, Info, Plus, Search, Lock, Copy, Smartphone, ChevronDown } from 'lucide-vue-next'
 import { ref, computed, watch, nextTick } from 'vue'
 import { useI18n } from 'vue-i18n'
 import BottomSheet from '@/components/common/BottomSheet.vue'
