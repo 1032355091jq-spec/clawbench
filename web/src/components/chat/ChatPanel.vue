@@ -108,6 +108,7 @@
     :createdAt="metadataModal.createdAt"
     :relatedFile="metadataModal.relatedFile"
     :messageId="metadataModal.messageId"
+    :sessionId="metadataModal.sessionId"
     :formatDetailTime="render.formatDetailTime"
     @close="metadataModal.show = false"
   />
@@ -205,7 +206,8 @@ const metadataModal = ref({
   backend: '',
   createdAt: '',
   relatedFile: '',
-  messageId: null
+  messageId: null,
+  sessionId: ''
 })
 const toast = useToast()
 const notification = useNotification()
@@ -548,6 +550,7 @@ function showMetadata(msg) {
     metadataModal.value.createdAt = msg.createdAt || ''
     metadataModal.value.relatedFile = (msg.files && msg.files.length > 0) ? msg.files[0] : ''
     metadataModal.value.messageId = msg.id || null
+    metadataModal.value.sessionId = msg.sessionId || ''
     metadataModal.value.show = true
 }
 

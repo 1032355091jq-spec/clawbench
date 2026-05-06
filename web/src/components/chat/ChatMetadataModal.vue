@@ -52,11 +52,11 @@
             <span class="metadata-label">{{ t('chat.metadata.cost') }}</span>
             <span class="metadata-value">${{ data.costUsd.toFixed(6) }}</span>
           </div>
-          <div v-if="data.sessionId" class="metadata-item metadata-copyable" @click="copyValue(data.sessionId, $event)">
+          <div v-if="sessionId" class="metadata-item metadata-copyable" @click="copyValue(sessionId, $event)">
             <span class="metadata-label">{{ t('chat.metadata.sessionId') }}</span>
             <div class="metadata-value-wrap">
-              <span class="metadata-value metadata-session-id metadata-value-copyable">{{ data.sessionId }}</span>
-              <button class="metadata-copy-btn" @click.stop="copyValue(data.sessionId, $event)" :title="t('chat.metadata.copy')">
+              <span class="metadata-value metadata-session-id metadata-value-copyable">{{ sessionId }}</span>
+              <button class="metadata-copy-btn" @click.stop="copyValue(sessionId, $event)" :title="t('chat.metadata.copy')">
                 <Copy :size="13" />
               </button>
             </div>
@@ -90,6 +90,7 @@ const props = defineProps({
   createdAt: String,
   relatedFile: String,
   messageId: Number,
+  sessionId: String,
   formatDetailTime: Function,
 })
 
