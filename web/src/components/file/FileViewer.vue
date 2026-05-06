@@ -71,14 +71,20 @@
           <FileText />
           <div class="unsupported-title">{{ file.name }}</div>
           <div class="unsupported-desc">{{ t('file.viewer.binaryFile') }} {{ file.size ? '(' + formatSize(file.size) + ')' : '' }}</div>
-          <a v-if="!isAppMode" :href="'/api/local-file/' + encodeURIComponent(file.path)" class="download-btn" download>
-            <Download :size="14" color="#fff" />
-            {{ t('common.download') }}
-          </a>
-          <button v-else class="download-btn" @click="handleDownload(file.path)">
-            <Download :size="14" color="#fff" />
-            {{ t('common.download') }}
-          </button>
+          <div class="unsupported-actions">
+            <a v-if="!isAppMode" :href="'/api/local-file/' + encodeURIComponent(file.path)" class="download-btn" download>
+              <Download :size="14" color="#fff" />
+              {{ t('common.download') }}
+            </a>
+            <button v-else class="download-btn" @click="handleDownload(file.path)">
+              <Download :size="14" color="#fff" />
+              {{ t('common.download') }}
+            </button>
+            <button class="open-as-text-btn" @click="handleOpenAsText">
+              <Code2 :size="14" />
+              {{ t('file.header.openAsText') }}
+            </button>
+          </div>
         </div>
       </div>
 
@@ -109,7 +115,7 @@
 <script setup>
 import { ref, computed, watch, onBeforeUnmount } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { FileText, Download } from 'lucide-vue-next'
+import { FileText, Download, Code2 } from 'lucide-vue-next'
 import ImagePreview from '@/components/media/ImagePreview.vue'
 import AudioPreview from '@/components/media/AudioPreview.vue'
 import VideoPreview from '@/components/media/VideoPreview.vue'
@@ -325,6 +331,39 @@ function handleDownload(path) {
     font-size: 14px;
     color: var(--text-muted);
     margin-bottom: 20px;
+}
+
+.unsupported-actions {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+}
+
+.open-as-text-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 5px 12px;
+    background: transparent;
+    color: var(--text-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 14px;
+    font-size: 12px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.15s;
+    gap: 4px;
+    line-height: 1;
+}
+
+.open-as-text-btn svg {
+    flex-shrink: 0;
+}
+
+.open-as-text-btn:hover {
+    border-color: var(--accent-color);
+    color: var(--accent-color);
 }
 
 .download-btn {

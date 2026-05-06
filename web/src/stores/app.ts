@@ -289,6 +289,12 @@ async function selectFile(path: string, isImageFile = false, isAudioFile = false
             throw new Error(err.error || 'Failed')
         }
         const data = await resp.json() as CurrentFile
+        // When forceText=true, backend omits isBinary:false (Go zero value).
+        // Must explicitly clear it so the binary fallback view disappears.
+        if (forceText) {
+            data.isBinary = false
+            data.tooLarge = false
+        }
         // Backend may also mark as binary if the file somehow passes frontend check
         // When refreshing the same file (auto-refresh from file watcher),
         // update content in-place to avoid a full object replacement which
