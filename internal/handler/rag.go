@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"time"
 
+	"clawbench/internal/model"
 	"clawbench/internal/rag"
 	"clawbench/internal/service"
 )
@@ -101,4 +102,37 @@ func RAGMessage(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusOK, msg)
+}
+
+// RAGSession handles GET /api/rag/session
+// Returns all messages in a session by session_id.
+// No auth required — only accessible from localhost.
+func RAGSession(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+
+	sessionID := r.URL.Query().Get("session_id")
+	if sessionID == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "session_id parameter required"})
+		return
+	}
+
+	messages, err := service.GetMessagesBySessionID(sessionID)
+	if err != nil {
+		http.Error(w, `{"error":"session not found"}`, http.StatusNotFound)
+		return
+	}
+
+	if messages == nil {
+		messages = []model.ChatMessage{}
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{
+		"session_id": sessionID,
+		"messages":   messages,
+		"total":      len(messages),
+	})
 }

@@ -16,6 +16,12 @@ You can search all historical conversations to find past discussions, analyses, 
 - Example: curl "http://localhost:{{PORT}}/api/rag/message?id=42"
 - Use this when you need to see the full context around a search hit — especially tool calls and thinking process that were not included in the chunk
 
+**Session API:**
+- Endpoint: GET http://localhost:{{PORT}}/api/rag/session?session_id={session_id}
+- Returns all messages in a session (complete conversation including user messages, AI responses with thinking and tool_use blocks)
+- Example: curl "http://localhost:{{PORT}}/api/rag/session?session_id=abc-123"
+- Use this when you need the full conversation flow around a search hit — e.g., to understand the complete problem-solving process, not just one message
+
 **Usage Principles:**
 1. Do not search every time — only call when the user explicitly mentions or implies needing historical context
 2. Always pass exclude_session_id with the current session ID to avoid returning content already in context
@@ -23,4 +29,5 @@ You can search all historical conversations to find past discussions, analyses, 
 4. Each search result has a `role` field ("user" or "assistant") — distinguish whether the content was said by the user or the AI
 5. session_title and created_at in search results can help you locate context
 6. When a search hit is relevant but the chunk_text is incomplete, fetch the full message using the Message Detail API with its message_id — this reveals tool_use blocks and thinking process
-7. If search returns no results, answer based on your own knowledge without mentioning RAG
+7. For deeper context, use the Session API with session_id to retrieve the entire conversation — this shows the full problem-solving flow including all user messages, AI reasoning, and tool interactions
+8. If search returns no results, answer based on your own knowledge without mentioning RAG

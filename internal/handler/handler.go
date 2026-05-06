@@ -209,6 +209,7 @@ func RegisterRoutes(mux *http.ServeMux) {
 	// RAG history memory search (no auth required — localhost only, AI self-calls)
 	register("/api/rag/search", RAGSearch)
 	register("/api/rag/message", RAGMessage)
+	register("/api/rag/session", RAGSession)
 
 	if _, err := os.Stat("public"); err == nil {
 		mux.Handle("/assets/", http.StripPrefix("/assets/", http.FileServer(http.Dir("public"))))

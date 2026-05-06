@@ -115,6 +115,21 @@ func GetMessageByID(id int64) (*model.ChatMessage, error) {
 	return &msg, nil
 }
 
+// GetMessagesBySessionID fetches all messages for a session by session_id alone.
+// Unlike GetChatHistory, this does not require projectPath or backend — session_id is globally unique.
+// Returns messages in chronological order with all content blocks (text, thinking, tool_use).
+func GetMessagesBySessionID(sessionID string) ([]model.ChatMessage, error) {
+	rows, err := DB.Query(
+		"SELECT id, role, content, file_path, files, backend, streaming, created_at FROM chat_history WHERE session_id = ? AND streaming = 0 ORDER BY created_at ASC",
+		sessionID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	return scanMessages(rows, sessionID)
+}
+
 // AddChatMessage adds a message to the chat history for a given project path, backend, and session.
 func AddChatMessage(projectPath, backend, sessionID, role, content string, files []string, streaming bool, fallbackTitle string) (int64, error) {
 	var filesJSON string
