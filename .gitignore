@@ -55,3 +55,4 @@ android/app/build/
 android/local.properties
 *.jks
 clawbench-release
+.playwright-cli/
