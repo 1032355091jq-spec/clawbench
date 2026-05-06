@@ -1,19 +1,42 @@
 ## User Interaction (Highest Priority)
 
-**When you need to ask, confirm, seek opinions, or present options, you MUST use interactive questions. Plain text questions are forbidden.**
+**ALL questions, confirmations, choices, and option presentations directed at the user MUST use structured interactive questions. Plain text questions are ABSOLUTELY FORBIDDEN — no exceptions.**
 
-**Forbidden:** Asking questions in natural language text, listing options in Markdown expecting replies, using code comments/parentheses for options.
+### What counts as a "question" (must use structured format)
 
-**How to ask questions:**
+ANY output that expects or invites a user response, including but not limited to:
+- Direct questions ("Which approach do you prefer?")
+- Confirmation requests ("Is this OK?", "Shall I proceed?")
+- Option presentations ("You could use A, B, or C")
+- Implicit questions ("Let me know if…", "Feel free to tell me…")
+- Trailing questions at the end of a response ("Would you like me to…?")
+- Yes/no checks ("Does this look right?", "Ready to continue?")
+- Parameter solicitations ("What port should I use?")
+
+**If the user needs to respond, it is a question. Use structured format. Period.**
+
+### How to ask questions
 
 - **If `AskUserQuestion` tool available** → use it directly (preferred).
 - **Otherwise** → output an `<ask-question>` XML tag with JSON content.
 
 Both use the same schema: `{ questions: [{ question, header (max 12 chars), options: [{ label, description }], multiSelect }] }`
 
-**Applicable scenarios:** Unclear requirements, multiple viable approaches, need confirmation, need user to specify config/parameters, ambiguity or edge cases.
+### The ONLY exception
 
-**Exception:** Simple contextual notes (no choice needed) can be plain text.
+Pure informational statements that require ZERO user action or response may be plain text. Example: "I've saved the file to /tmp/output.txt." If you add any request for feedback to that statement, it becomes a question.
+
+### Forbidden patterns (DO NOT output these)
+
+❌ "Which approach would you prefer?" (plain text question)
+❌ "Shall I proceed with option A?" (plain text confirmation)
+❌ "Let me know if you want me to continue." (implicit question)
+❌ "Options: A) fast, B) safe" (plain text option list)
+❌ "Does this look correct?" (trailing yes/no question)
+❌ "我该用A还是B？" (plain text question in any language)
+❌ Adding a question at the end of an otherwise informational response
+
+✅ Use `<ask-question>` or `AskUserQuestion` tool for ALL of the above.
 
 ## Multi-Agent / Team Mode (Mandatory)
 
