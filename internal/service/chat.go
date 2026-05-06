@@ -91,6 +91,30 @@ func GetChatMessageCount(sessionID string) int {
 	return count
 }
 
+// GetMessageByID fetches a single chat message by its database ID.
+// Returns the complete message including all content blocks (text, thinking, tool_use).
+func GetMessageByID(id int64) (*model.ChatMessage, error) {
+	var msg model.ChatMessage
+	var filesJSON sql.NullString
+	var streaming int
+	var filePath string
+	var sessionID string
+
+	err := DB.QueryRow(
+		"SELECT id, role, content, file_path, files, backend, streaming, created_at, session_id FROM chat_history WHERE id = ?",
+		id,
+	).Scan(&msg.ID, &msg.Role, &msg.Content, &filePath, &filesJSON, &msg.Backend, &streaming, &msg.CreatedAt, &sessionID)
+	if err != nil {
+		return nil, err
+	}
+	msg.Streaming = streaming != 0
+	msg.SessionID = sessionID
+	if filesJSON.Valid && filesJSON.String != "" {
+		json.Unmarshal([]byte(filesJSON.String), &msg.Files)
+	}
+	return &msg, nil
+}
+
 // AddChatMessage adds a message to the chat history for a given project path, backend, and session.
 func AddChatMessage(projectPath, backend, sessionID, role, content string, files []string, streaming bool, fallbackTitle string) (int64, error) {
 	var filesJSON string

@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"clawbench/internal/rag"
+	"clawbench/internal/service"
 )
 
 // RAGSearch handles GET /api/rag/search
@@ -68,4 +69,36 @@ func SetRAGService(store *rag.Store, embedder *rag.EmbeddingClient, searchLimit 
 	ragGlobalStore = store
 	ragGlobalEmbedder = embedder
 	ragDefaultLimit = searchLimit
+}
+
+// RAGMessage handles GET /api/rag/message
+// Returns the full message content (including thinking and tool_use blocks)
+// for a given message_id from RAG search results.
+// No auth required — only accessible from localhost.
+func RAGMessage(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+
+	idStr := r.URL.Query().Get("id")
+	if idStr == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "id parameter required"})
+		return
+	}
+
+	id, err := strconv.ParseInt(idStr, 10, 64)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid id"})
+		return
+	}
+
+	msg, err := service.GetMessageByID(id)
+	if err != nil {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "message not found"})
+		return
+	}
+
+	writeJSON(w, http.StatusOK, msg)
 }
