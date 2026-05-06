@@ -22,6 +22,7 @@ func RAGSearch(w http.ResponseWriter, r *http.Request) {
 		Query:            r.URL.Query().Get("q"),
 		ProjectPath:      r.URL.Query().Get("project"),
 		Backend:          r.URL.Query().Get("backend"),
+		Role:             r.URL.Query().Get("role"),
 		SessionID:        r.URL.Query().Get("session_id"),
 		ExcludeSessionID: r.URL.Query().Get("exclude_session_id"),
 		FromTime:         r.URL.Query().Get("from"),

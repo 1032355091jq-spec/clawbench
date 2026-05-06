@@ -14,6 +14,7 @@ type SearchParams struct {
 	Limit             int    `json:"limit"`
 	ProjectPath       string `json:"project"`
 	Backend           string `json:"backend"`
+	Role              string `json:"role"`                // Filter by role: "user" or "assistant"
 	SessionID         string `json:"session_id"`          // Limit search to this session
 	ExcludeSessionID  string `json:"exclude_session_id"`  // Exclude this session from results (e.g., current session)
 	FromTime          string `json:"from"`
@@ -44,7 +45,7 @@ func RAGSearch(ctx context.Context, store *Store, embedder *EmbeddingClient, par
 	}
 
 	// Perform vector search
-	hits, err := store.SearchSimple(queryEmbedding, limit, params.ProjectPath, params.Backend, params.SessionID, params.ExcludeSessionID, params.FromTime, params.ToTime)
+	hits, err := store.SearchSimple(queryEmbedding, limit, params.ProjectPath, params.Backend, params.Role, params.SessionID, params.ExcludeSessionID, params.FromTime, params.ToTime)
 	if err != nil {
 		return nil, fmt.Errorf("search: %w", err)
 	}
