@@ -109,6 +109,7 @@
     :relatedFile="metadataModal.relatedFile"
     :messageId="metadataModal.messageId"
     :sessionId="metadataModal.sessionId"
+    :indexed="metadataModal.indexed"
     :formatDetailTime="render.formatDetailTime"
     @close="metadataModal.show = false"
   />
@@ -207,7 +208,8 @@ const metadataModal = ref({
   createdAt: '',
   relatedFile: '',
   messageId: null,
-  sessionId: ''
+  sessionId: '',
+  indexed: false
 })
 const toast = useToast()
 const notification = useNotification()
@@ -551,6 +553,7 @@ function showMetadata(msg) {
     metadataModal.value.relatedFile = (msg.files && msg.files.length > 0) ? msg.files[0] : ''
     metadataModal.value.messageId = msg.id || null
     metadataModal.value.sessionId = msg.sessionId || ''
+    metadataModal.value.indexed = !!msg.indexed
     metadataModal.value.show = true
 }
 

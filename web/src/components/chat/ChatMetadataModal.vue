@@ -61,6 +61,10 @@
               </button>
             </div>
           </div>
+          <div class="metadata-item">
+            <span class="metadata-label">{{ t('chat.metadata.ragIndexed') }}</span>
+            <span class="metadata-value" :class="indexed ? 'metadata-indexed-yes' : 'metadata-indexed-no'">{{ indexed ? t('chat.metadata.indexedYes') : t('chat.metadata.indexedNo') }}</span>
+          </div>
           <div v-if="data.stopReason" class="metadata-item">
             <span class="metadata-label">{{ t('chat.metadata.stopReason') }}</span>
             <span class="metadata-value">{{ data.stopReason }}</span>
@@ -91,6 +95,7 @@ const props = defineProps({
   relatedFile: String,
   messageId: Number,
   sessionId: String,
+  indexed: Boolean,
   formatDetailTime: Function,
 })
 
@@ -282,6 +287,14 @@ function copyValue(value, event) {
 
 .metadata-copy-btn.copied {
     color: #22c55e;
+}
+
+.metadata-indexed-yes {
+    color: #22c55e;
+}
+
+.metadata-indexed-no {
+    color: var(--text-muted, #999);
 }
 
 @keyframes fadeIn {
