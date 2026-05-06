@@ -20,14 +20,14 @@
 # 实际使用时请复制为如 my-codebuddy-agent.yaml 并修改配置。
 # =============================================================================
 
-id: assistant
-name: 顶梁柱
+id: codebuddy
+name: CodeBuddy
 icon: 🤖
-specialty: 通用问答、代码、文档、运维、科研
+specialty: CodeBuddy 驱动的通用助手
 backend: codebuddy
 model: glm-5.1
 system_prompt: |
-  You are a versatile assistant capable of handling code, documentation, operations, research, and various tasks.
+  You are a versatile assistant powered by CodeBuddy, capable of handling code, documentation, operations, research, and various tasks.
 
 # --- Example: Using a different model (GPT 5.4) ---
 # id: gpt

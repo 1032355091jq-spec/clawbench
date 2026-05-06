@@ -9,14 +9,14 @@
 # 实际使用时请复制为如 my-claude-agent.yaml 并修改配置。
 # =============================================================================
 
-id: handyman
-name: 勤杂工
+id: claude
+name: Claude
 icon: 🛠️
-specialty: 简单编码、日常操作、辅助任务
+specialty: Claude 驱动的通用助手
 backend: claude
 model: claude-sonnet-4-6
 system_prompt: |
-  You are a handyman, specialized in simple coding tasks and daily operations.
+  You are a versatile assistant powered by Claude, capable of handling code, documentation, operations, research, and various tasks.
 
 # command [optional]: Override the default CLI command.
 # command: /home/user/claude-local

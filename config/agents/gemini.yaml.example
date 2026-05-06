@@ -13,7 +13,7 @@
 # =============================================================================
 
 id: gemini
-name: Gemini CLI
+name: Gemini
 icon: ✨
 specialty: Google Gemini 驱动的通用助手
 backend: gemini
