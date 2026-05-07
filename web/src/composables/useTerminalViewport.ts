@@ -5,6 +5,9 @@ export function useTerminalViewport(terminal: Ref<Terminal | null>, containerRef
   const viewportHeight = ref(0)
   const keyboardHeight = ref(0)
 
+  let fitTimer: ReturnType<typeof setTimeout> | null = null
+  const FIT_DEBOUNCE_MS = 100
+
   function updateViewport() {
     if (!containerRef.value) return
 
@@ -19,7 +22,19 @@ export function useTerminalViewport(terminal: Ref<Terminal | null>, containerRef
       keyboardHeight.value = 0
     }
 
-    fitTerminal()
+    // Debounce fit() to prevent duplicate lines during keyboard animation.
+    // Without debounce, each resize event during the keyboard slide-up
+    // triggers fit() → PTY resize → SIGWINCH → shell redraws prompt,
+    // duplicating the current line.
+    scheduleFit()
+  }
+
+  function scheduleFit() {
+    if (fitTimer) clearTimeout(fitTimer)
+    fitTimer = setTimeout(() => {
+      fitTimer = null
+      fitTerminal()
+    }, FIT_DEBOUNCE_MS)
   }
 
   function fitTerminal() {
@@ -48,17 +63,21 @@ export function useTerminalViewport(terminal: Ref<Terminal | null>, containerRef
     // Watch visualViewport for keyboard changes
     if (window.visualViewport) {
       window.visualViewport.addEventListener('resize', updateViewport)
-      window.visualViewport.addEventListener('scroll', updateViewport)
+      // Don't watch scroll — it fires on every keyboard animation frame
+      // and causes excessive fit() calls that duplicate terminal content
     }
   }
 
   function stopWatching() {
+    if (fitTimer) {
+      clearTimeout(fitTimer)
+      fitTimer = null
+    }
     resizeObserver?.disconnect()
     resizeObserver = null
 
     if (window.visualViewport) {
       window.visualViewport.removeEventListener('resize', updateViewport)
-      window.visualViewport.removeEventListener('scroll', updateViewport)
     }
   }
 

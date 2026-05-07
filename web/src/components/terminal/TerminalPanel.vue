@@ -17,7 +17,7 @@
       </div>
 
       <!-- Terminal viewport -->
-      <div ref="terminalContainer" class="terminal-container" @click.self="focusTerminal">
+      <div ref="terminalContainer" class="terminal-container" @click.self="focusTerminal" @contextmenu.prevent>
         <!-- Error overlay -->
         <div v-if="showErrorOverlay" class="terminal-error-overlay">
           <p>{{ errorDisplayMessage }}</p>
