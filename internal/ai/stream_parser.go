@@ -136,8 +136,16 @@ type StreamParser struct {
 	receivedPartialToolUse bool
 	// model stores the model name extracted from message_start events
 	model string
-	// currentTool tracks the in-progress tool call
-	currentTool *ToolCall
+	// activeTools tracks in-progress tool calls keyed by content block index.
+	// The CLI stream events (content_block_start/delta/stop) all carry an index
+	// field identifying which content block they refer to. When AI models invoke
+	// multiple tools via parallel sub-agents, the CLI may interleave
+	// content_block_start/delta/stop events for different tools. Using a map
+	// keyed by index (instead of a single currentTool pointer) ensures that
+	// input_json_delta events are accumulated into the correct tool and
+	// content_block_stop closes the correct tool, even when events arrive
+	// out of the expected sequential order.
+	activeTools map[int]*ToolCall
 }
 
 // GetCapturedSessionID returns empty string for Claude/Codebuddy/Gemini backends
@@ -269,10 +277,12 @@ func (p *StreamParser) ParseLine(line string, ch chan<- StreamEvent) {
 				}
 			case "input_json_delta":
 				// Accumulate tool input JSON via partial_json field (canonical format).
-				if p.currentTool != nil {
+				// Use the index field to find the correct tool in activeTools,
+				// since parallel sub-agents may interleave events for different tools.
+				if tool, ok := p.activeTools[msg.Event.Index]; ok {
 					delta := msg.Event.Delta.PartialJSON
 					if delta != "" {
-						p.currentTool.Input += delta
+						tool.Input += delta
 					}
 				}
 			case "thinking_delta":
@@ -283,17 +293,8 @@ func (p *StreamParser) ParseLine(line string, ch chan<- StreamEvent) {
 			}
 		case "content_block_start":
 			if msg.Event.ContentBlock != nil && msg.Event.ContentBlock.Type == "tool_use" {
-				// If there's an in-progress tool that hasn't received content_block_stop,
-				// close it first. Codebuddy/Claude CLI may emit multiple tool_use
-				// content_block_start events in sequence without intervening stops
-				// when the AI invokes several tools concurrently.
-				if p.currentTool != nil {
-					closed := *p.currentTool // copy before mutating
-					closed.Done = true
-					ch <- StreamEvent{Type: "tool_use", Tool: &closed}
-				}
 				p.receivedPartialToolUse = true
-				p.currentTool = &ToolCall{
+				tool := &ToolCall{
 					Name: msg.Event.ContentBlock.Name,
 					ID:   msg.Event.ContentBlock.ID,
 				}
@@ -306,19 +307,40 @@ func (p *StreamParser) ParseLine(line string, ch chan<- StreamEvent) {
 				// cause JSON corruption when deltas are appended.
 				if len(msg.Event.ContentBlock.Input) > 0 &&
 					string(msg.Event.ContentBlock.Input) != "{}" {
-					p.currentTool.Input = string(msg.Event.ContentBlock.Input)
+					tool.Input = string(msg.Event.ContentBlock.Input)
 				}
+				// Track by content block index so that interleaved events from
+				// parallel sub-agents can be correctly routed to their tool.
+				if p.activeTools == nil {
+					p.activeTools = make(map[int]*ToolCall)
+				}
+				// If there's already a tool at this index that hasn't received
+				// content_block_stop (e.g., CLI reused the same index for a
+				// replacement tool without emitting stop), auto-close it first.
+				if existing, ok := p.activeTools[msg.Event.Index]; ok {
+					slog.Debug("stream: auto-closing tool at reused index", "index", msg.Event.Index, "tool_id", existing.ID, "tool_name", existing.Name)
+					closed := *existing // copy before mutating
+					closed.Done = true
+					ch <- StreamEvent{Type: "tool_use", Tool: &closed}
+				}
+				p.activeTools[msg.Event.Index] = tool
 				// Send a copy to the channel so that later mutations (Input accumulation,
 				// Done=true) don't affect events already queued for SSE consumption.
-				startCopy := *p.currentTool
+				startCopy := *tool
 				ch <- StreamEvent{Type: "tool_use", Tool: &startCopy}
 			}
 		case "content_block_stop":
-			if p.currentTool != nil {
-				closed := *p.currentTool // copy before mutating
+			// Use the index field to identify which content block is stopping,
+			// rather than assuming the last started block. When AI models invoke
+			// multiple tools via parallel sub-agents, content_block_stop events
+			// may arrive out of the sequential start order.
+			if tool, ok := p.activeTools[msg.Event.Index]; ok {
+				closed := *tool // copy before mutating
 				closed.Done = true
 				ch <- StreamEvent{Type: "tool_use", Tool: &closed}
-				p.currentTool = nil
+				delete(p.activeTools, msg.Event.Index)
+			} else {
+				slog.Debug("stream: content_block_stop for unknown index", "index", msg.Event.Index)
 			}
 		case "message_start":
 			// Extract model name from message_start

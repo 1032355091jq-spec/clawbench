@@ -1132,3 +1132,55 @@ func TestAIChat_EnqueuePath_FilesNoDuplicate(t *testing.T) {
 	assert.Len(t, messages, 1, "should have 1 user message")
 	assert.Len(t, messages[0].Files, 1, "files should have exactly 1 entry (no duplicate), got %v", messages[0].Files)
 }
+
+func TestAccumulateBlock_InterleavedToolUse(t *testing.T) {
+	// Regression test: when parallel sub-agents interleave tool calls at
+	// different content block indices, the StreamParser now correctly routes
+	// input_json_delta to the right tool. This test verifies that AccumulateBlock
+	// correctly builds the final content blocks from these interleaved events.
+	events := []ai.StreamEvent{
+		// Tool A starts (done=false, empty input)
+		{Type: "tool_use", Tool: &ai.ToolCall{Name: "Read", ID: "toolu_A", Input: "", Done: false}},
+		// Tool B starts (done=false, empty input) — interleaved
+		{Type: "tool_use", Tool: &ai.ToolCall{Name: "Bash", ID: "toolu_B", Input: "", Done: false}},
+		// Tool A stops (done=true, full input)
+		{Type: "tool_use", Tool: &ai.ToolCall{Name: "Read", ID: "toolu_A", Input: `{"file_path":"/a.go"}`, Done: true}},
+		// Tool B stops (done=true, full input)
+		{Type: "tool_use", Tool: &ai.ToolCall{Name: "Bash", ID: "toolu_B", Input: `{"command":"ls"}`, Done: true}},
+	}
+
+	blocks := feedEvents(events)
+
+	// Should have 2 tool_use blocks (deduped by ID: start+stop for each ID)
+	if len(blocks) != 2 {
+		t.Fatalf("expected 2 blocks (deduped), got %d", len(blocks))
+	}
+
+	// Block 0: Read tool A
+	if blocks[0].Name != "Read" {
+		t.Errorf("block 0: expected Name 'Read', got %q", blocks[0].Name)
+	}
+	if blocks[0].ID != "toolu_A" {
+		t.Errorf("block 0: expected ID 'toolu_A', got %q", blocks[0].ID)
+	}
+	if !blocks[0].Done {
+		t.Error("block 0: expected Done=true")
+	}
+	if blocks[0].Input["file_path"] != "/a.go" {
+		t.Errorf("block 0: expected input file_path='/a.go', got %v", blocks[0].Input)
+	}
+
+	// Block 1: Bash tool B
+	if blocks[1].Name != "Bash" {
+		t.Errorf("block 1: expected Name 'Bash', got %q", blocks[1].Name)
+	}
+	if blocks[1].ID != "toolu_B" {
+		t.Errorf("block 1: expected ID 'toolu_B', got %q", blocks[1].ID)
+	}
+	if !blocks[1].Done {
+		t.Error("block 1: expected Done=true")
+	}
+	if blocks[1].Input["command"] != "ls" {
+		t.Errorf("block 1: expected input command='ls', got %v", blocks[1].Input)
+	}
+}

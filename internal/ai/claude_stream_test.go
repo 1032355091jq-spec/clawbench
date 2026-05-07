@@ -965,3 +965,158 @@ func TestStreamParser_EmptyInputInStartDoesNotCorruptDelta(t *testing.T) {
 		t.Errorf("input is not valid JSON: %v, raw=%q", err, stopEvent.Tool.Input)
 	}
 }
+
+func TestStreamParser_InterleavedToolUse(t *testing.T) {
+	// When AI uses the Agent tool to launch parallel sub-agents, the CLI's
+	// --include-partial-messages output interleaves content_block_start/delta/stop
+	// events for different tools at different indices. Each tool has its own
+	// content block index. The parser must correctly route input_json_delta
+	// events to the right tool and close the right tool on content_block_stop.
+	lines := []string{
+		// Tool A (Read) starts at index 1
+		`{"type":"stream_event","event":{"type":"content_block_start","index":1,"content_block":{"type":"tool_use","id":"toolu_A","name":"Read"}}}`,
+		// Tool B (Bash) starts at index 2 (interleaved — A hasn't stopped yet)
+		`{"type":"stream_event","event":{"type":"content_block_start","index":2,"content_block":{"type":"tool_use","id":"toolu_B","name":"Bash"}}}`,
+		// Tool C (Read) starts at index 3 (also interleaved)
+		`{"type":"stream_event","event":{"type":"content_block_start","index":3,"content_block":{"type":"tool_use","id":"toolu_C","name":"Read"}}}`,
+		// Deltas for tool A
+		`{"type":"stream_event","event":{"type":"content_block_delta","index":1,"delta":{"type":"input_json_delta","partial_json":"{\"file_"}}}`,
+		`{"type":"stream_event","event":{"type":"content_block_delta","index":1,"delta":{"type":"input_json_delta","partial_json":"path\":\"/a.go\"}"}}}`,
+		// Deltas for tool B
+		`{"type":"stream_event","event":{"type":"content_block_delta","index":2,"delta":{"type":"input_json_delta","partial_json":"{\"comm"}}}`,
+		`{"type":"stream_event","event":{"type":"content_block_delta","index":2,"delta":{"type":"input_json_delta","partial_json":"and\":\"ls\"}"}}}`,
+		// Deltas for tool C
+		`{"type":"stream_event","event":{"type":"content_block_delta","index":3,"delta":{"type":"input_json_delta","partial_json":"{\"file_"}}}`,
+		`{"type":"stream_event","event":{"type":"content_block_delta","index":3,"delta":{"type":"input_json_delta","partial_json":"path\":\"/b.go\"}"}}}`,
+		// Stops arrive in different order: C first, then A, then B
+		`{"type":"stream_event","event":{"type":"content_block_stop","index":3}}`,
+		`{"type":"stream_event","event":{"type":"content_block_stop","index":1}}`,
+		`{"type":"stream_event","event":{"type":"content_block_stop","index":2}}`,
+	}
+
+	events := parseLines(lines)
+
+	// Should get 6 tool_use events: 3 starts + 3 stops
+	toolEvents := make([]StreamEvent, 0)
+	for _, e := range events {
+		if e.Type == "tool_use" {
+			toolEvents = append(toolEvents, e)
+		}
+	}
+
+	if len(toolEvents) != 6 {
+		t.Fatalf("expected 6 tool_use events (3 starts + 3 stops), got %d", len(toolEvents))
+	}
+
+	// Verify start events (done=false)
+	starts := []struct {
+		idx      int
+		id       string
+		name     string
+		wantDone bool
+	}{
+		{0, "toolu_A", "Read", false},
+		{1, "toolu_B", "Bash", false},
+		{2, "toolu_C", "Read", false},
+	}
+	for _, s := range starts {
+		if toolEvents[s.idx].Tool.ID != s.id {
+			t.Errorf("start event %d: expected ID %q, got %q", s.idx, s.id, toolEvents[s.idx].Tool.ID)
+		}
+		if toolEvents[s.idx].Tool.Name != s.name {
+			t.Errorf("start event %d: expected Name %q, got %q", s.idx, s.name, toolEvents[s.idx].Tool.Name)
+		}
+		if toolEvents[s.idx].Tool.Done != s.wantDone {
+			t.Errorf("start event %d: expected Done=%v, got %v", s.idx, s.wantDone, toolEvents[s.idx].Tool.Done)
+		}
+	}
+
+	// Verify stop events (done=true, input accumulated correctly)
+	// Stop order: C (index 3), A (index 1), B (index 2) → events 3, 4, 5
+	stops := []struct {
+		idx        int
+		id         string
+		input      string
+	}{
+		{3, "toolu_C", `{"file_path":"/b.go"}`},
+		{4, "toolu_A", `{"file_path":"/a.go"}`},
+		{5, "toolu_B", `{"command":"ls"}`},
+	}
+	for _, s := range stops {
+		if toolEvents[s.idx].Tool.ID != s.id {
+			t.Errorf("stop event %d: expected ID %q, got %q", s.idx, s.id, toolEvents[s.idx].Tool.ID)
+		}
+		if !toolEvents[s.idx].Tool.Done {
+			t.Errorf("stop event %d: expected Done=true", s.idx)
+		}
+		if toolEvents[s.idx].Tool.Input != s.input {
+			t.Errorf("stop event %d: expected input %q, got %q", s.idx, s.input, toolEvents[s.idx].Tool.Input)
+		}
+	}
+}
+
+func TestStreamParser_InterleavedToolUseNoInputLoss(t *testing.T) {
+	// Regression test for the bug where parallel sub-agent tool calls caused
+	// empty input tool_use blocks. In the old single-currentTool implementation,
+	// content_block_start for a new tool would prematurely close the previous
+	// tool (with empty input if deltas hadn't arrived yet), and deltas for the
+	// closed tool would be silently dropped or misrouted.
+	//
+	// With the activeTools map keyed by index, each tool independently tracks
+	// its input regardless of interleaving.
+	lines := []string{
+		// 5 tools start in rapid succession (simulating parallel Agent sub-agents)
+		`{"type":"stream_event","event":{"type":"content_block_start","index":1,"content_block":{"type":"tool_use","id":"toolu_1","name":"Read"}}}`,
+		`{"type":"stream_event","event":{"type":"content_block_start","index":2,"content_block":{"type":"tool_use","id":"toolu_2","name":"Read"}}}`,
+		`{"type":"stream_event","event":{"type":"content_block_start","index":3,"content_block":{"type":"tool_use","id":"toolu_3","name":"Bash"}}}`,
+		`{"type":"stream_event","event":{"type":"content_block_start","index":4,"content_block":{"type":"tool_use","id":"toolu_4","name":"Read"}}}`,
+		`{"type":"stream_event","event":{"type":"content_block_start","index":5,"content_block":{"type":"tool_use","id":"toolu_5","name":"Bash"}}}`,
+		// All deltas arrive after all starts (worst case for old implementation)
+		`{"type":"stream_event","event":{"type":"content_block_delta","index":1,"delta":{"type":"input_json_delta","partial_json":"{\"file_path\":\"/1.go\"}"}}}`,
+		`{"type":"stream_event","event":{"type":"content_block_delta","index":2,"delta":{"type":"input_json_delta","partial_json":"{\"file_path\":\"/2.go\"}"}}}`,
+		`{"type":"stream_event","event":{"type":"content_block_delta","index":3,"delta":{"type":"input_json_delta","partial_json":"{\"command\":\"ls\"}"}}}`,
+		`{"type":"stream_event","event":{"type":"content_block_delta","index":4,"delta":{"type":"input_json_delta","partial_json":"{\"file_path\":\"/4.go\"}"}}}`,
+		`{"type":"stream_event","event":{"type":"content_block_delta","index":5,"delta":{"type":"input_json_delta","partial_json":"{\"command\":\"pwd\"}"}}}`,
+		// All stops
+		`{"type":"stream_event","event":{"type":"content_block_stop","index":1}}`,
+		`{"type":"stream_event","event":{"type":"content_block_stop","index":2}}`,
+		`{"type":"stream_event","event":{"type":"content_block_stop","index":3}}`,
+		`{"type":"stream_event","event":{"type":"content_block_stop","index":4}}`,
+		`{"type":"stream_event","event":{"type":"content_block_stop","index":5}}`,
+	}
+
+	events := parseLines(lines)
+
+	// Collect stop events (done=true) and verify NONE have empty input
+	emptyStops := 0
+	for _, e := range events {
+		if e.Type == "tool_use" && e.Tool.Done {
+			if e.Tool.Input == "" || e.Tool.Input == "{}" {
+				emptyStops++
+				t.Errorf("tool %s (%s) has empty input on stop — input was lost!", e.Tool.ID, e.Tool.Name)
+			}
+		}
+	}
+
+	if emptyStops > 0 {
+		t.Fatalf("found %d tool stop events with empty input (input loss bug)", emptyStops)
+	}
+
+	// Verify all 5 tools have correct input
+	expectedInputs := map[string]string{
+		"toolu_1": `{"file_path":"/1.go"}`,
+		"toolu_2": `{"file_path":"/2.go"}`,
+		"toolu_3": `{"command":"ls"}`,
+		"toolu_4": `{"file_path":"/4.go"}`,
+		"toolu_5": `{"command":"pwd"}`,
+	}
+	for _, e := range events {
+		if e.Type == "tool_use" && e.Tool.Done {
+			if expected, ok := expectedInputs[e.Tool.ID]; ok {
+				if e.Tool.Input != expected {
+					t.Errorf("tool %s: expected input %q, got %q", e.Tool.ID, expected, e.Tool.Input)
+				}
+			}
+		}
+	}
+}
