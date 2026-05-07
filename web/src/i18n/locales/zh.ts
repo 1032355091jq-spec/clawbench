@@ -621,5 +621,6 @@ export default {
     reconnect: '重新连接',
     connected: '已连接',
     disconnected: '已断开',
+    resetFontSize: '重置字体大小',
   },
 } as const

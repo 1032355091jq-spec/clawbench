@@ -6,6 +6,7 @@ export interface GestureCallbacks {
   sendArrowLeft: () => void
   sendArrowRight: () => void
   sendTab: () => void
+  onPinchZoom?: (delta: number) => void
 }
 
 /**
@@ -13,6 +14,7 @@ export interface GestureCallbacks {
  * - Swipe left/right → arrow left/right
  * - Swipe up/down → arrow up/down
  * - Double-tap → Tab
+ * - Pinch (two-finger) → zoom font size
  *
  * Gestures are bound only to the xterm container element,
  * not the entire BottomSheet, to avoid conflicting with drawer drag.
@@ -24,6 +26,7 @@ export function useTerminalGestures(
   const SWIPE_THRESHOLD = 30 // minimum px for a swipe
   const SWIPE_MAX_TIME = 400 // max ms for a swipe gesture
   const DOUBLE_TAP_DELAY = 300 // max ms between taps for double-tap
+  const PINCH_THRESHOLD = 10 // minimum px change before triggering zoom
 
   let touchStartX = 0
   let touchStartY = 0
@@ -31,7 +34,27 @@ export function useTerminalGestures(
   let lastTapTime = 0
   let isActive = false
 
+  // Pinch zoom state
+  let initialPinchDistance = 0
+  let lastPinchDistance = 0
+  let accumulatedPinchDelta = 0
+
+  function getTouchDistance(t1: Touch, t2: Touch): number {
+    const dx = t1.clientX - t2.clientX
+    const dy = t1.clientY - t2.clientY
+    return Math.sqrt(dx * dx + dy * dy)
+  }
+
   function onTouchStart(e: TouchEvent) {
+    if (e.touches.length === 2) {
+      // Pinch gesture start
+      initialPinchDistance = getTouchDistance(e.touches[0], e.touches[1])
+      lastPinchDistance = initialPinchDistance
+      accumulatedPinchDelta = 0
+      isActive = false // cancel any single-finger gesture
+      return
+    }
+
     if (e.touches.length !== 1) return
 
     const touch = e.touches[0]
@@ -41,7 +64,29 @@ export function useTerminalGestures(
     isActive = true
   }
 
+  function onTouchMove(e: TouchEvent) {
+    if (e.touches.length === 2 && initialPinchDistance > 0) {
+      const currentDistance = getTouchDistance(e.touches[0], e.touches[1])
+      const delta = currentDistance - lastPinchDistance
+      accumulatedPinchDelta += delta
+      lastPinchDistance = currentDistance
+
+      // Trigger zoom every PINCH_THRESHOLD px of accumulated change
+      if (Math.abs(accumulatedPinchDelta) >= PINCH_THRESHOLD) {
+        const steps = Math.trunc(accumulatedPinchDelta / PINCH_THRESHOLD)
+        callbacks.onPinchZoom?.(steps)
+        accumulatedPinchDelta -= steps * PINCH_THRESHOLD
+      }
+    }
+  }
+
   function onTouchEnd(e: TouchEvent) {
+    // Reset pinch state when one or both fingers lift
+    if (e.touches.length < 2) {
+      initialPinchDistance = 0
+      lastPinchDistance = 0
+    }
+
     if (!isActive) return
     isActive = false
 
@@ -94,6 +139,7 @@ export function useTerminalGestures(
     // Use passive: true to avoid blocking scroll performance,
     // but we don't call preventDefault so this is safe
     el.addEventListener('touchstart', onTouchStart, { passive: true })
+    el.addEventListener('touchmove', onTouchMove, { passive: true })
     el.addEventListener('touchend', onTouchEnd, { passive: true })
   }
 
@@ -102,6 +148,7 @@ export function useTerminalGestures(
     if (!el) return
 
     el.removeEventListener('touchstart', onTouchStart)
+    el.removeEventListener('touchmove', onTouchMove)
     el.removeEventListener('touchend', onTouchEnd)
   }
 

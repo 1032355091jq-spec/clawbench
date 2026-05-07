@@ -9,6 +9,7 @@
           <span v-if="currentCwd" class="terminal-cwd" :title="currentCwd">{{ shortCwd }}</span>
         </div>
         <div class="terminal-header-right">
+          <span class="terminal-font-size" @click="applyFontSize(DEFAULT_FONT_SIZE)" :title="t('terminal.resetFontSize')">{{ fontSize }}</span>
           <span v-if="connectionState === 'connected'" class="terminal-status connected">{{ t('terminal.connected') }}</span>
           <span v-else-if="connectionState === 'connecting' || connectionState === 'reconnecting'" class="terminal-status connecting">{{ t('terminal.reconnecting') }}</span>
           <span v-else class="terminal-status disconnected">{{ t('terminal.disconnected') }}</span>
@@ -89,6 +90,32 @@ const emit = defineEmits<{
 const { t } = useI18n()
 const toast = useToast()
 
+// Font size with persistence
+const FONT_SIZE_KEY = 'clawbench-terminal-font-size'
+const DEFAULT_FONT_SIZE = 12
+const MIN_FONT_SIZE = 8
+const MAX_FONT_SIZE = 28
+
+const fontSize = ref(DEFAULT_FONT_SIZE)
+
+function loadFontSize(): number {
+  const saved = localStorage.getItem(FONT_SIZE_KEY)
+  if (saved) {
+    const n = parseInt(saved, 10)
+    if (n >= MIN_FONT_SIZE && n <= MAX_FONT_SIZE) return n
+  }
+  return DEFAULT_FONT_SIZE
+}
+
+function applyFontSize(size: number) {
+  fontSize.value = Math.max(MIN_FONT_SIZE, Math.min(MAX_FONT_SIZE, size))
+  localStorage.setItem(FONT_SIZE_KEY, String(fontSize.value))
+  if (xterm.value) {
+    xterm.value.options.fontSize = fontSize.value
+    viewport.fitTerminal()
+  }
+}
+
 // Refs
 const bottomSheetRef = ref<InstanceType<typeof BottomSheet> | null>(null)
 const terminalContainer = ref<HTMLElement | null>(null)
@@ -127,13 +154,14 @@ const viewport = useTerminalViewport(xterm, terminalContainer)
 // Terminal keys
 const terminalKeys = useTerminalKeys(session.sendInput)
 
-// Terminal gestures (Termius-style: swipe arrows, double-tap Tab)
+// Terminal gestures (Termius-style: swipe arrows, double-tap Tab, pinch zoom)
 const gestures = useTerminalGestures(terminalContainer, {
   sendArrowUp: terminalKeys.sendArrowUp,
   sendArrowDown: terminalKeys.sendArrowDown,
   sendArrowLeft: terminalKeys.sendArrowLeft,
   sendArrowRight: terminalKeys.sendArrowRight,
   sendTab: terminalKeys.sendTab,
+  onPinchZoom: (delta: number) => applyFontSize(fontSize.value + delta),
 })
 
 // Computed
@@ -205,7 +233,7 @@ function initTerminal() {
 
   const term = new Terminal({
     theme: getXtermTheme(),
-    fontSize: 14,
+    fontSize: loadFontSize(),
     fontFamily: "'JetBrains Mono', 'Fira Code', 'Cascadia Code', monospace",
     cursorBlink: true,
     convertEol: true,
@@ -262,6 +290,19 @@ async function mountTerminal() {
   if (xterm.value.element) return
 
   xterm.value.open(terminalContainer.value)
+
+  // Ctrl+Wheel to zoom font size (desktop)
+  const container = terminalContainer.value
+  const wheelHandler = (e: WheelEvent) => {
+    if (e.ctrlKey || e.metaKey) {
+      e.preventDefault()
+      const delta = e.deltaY < 0 ? 1 : -1
+      applyFontSize(fontSize.value + delta)
+    }
+  }
+  container.addEventListener('wheel', wheelHandler, { passive: false })
+  // Store for cleanup
+  ;(container as any).__terminalWheelHandler = wheelHandler
 
   await nextTick()
   viewport.startWatching()
@@ -322,6 +363,11 @@ onBeforeUnmount(() => {
   viewport.stopWatching()
   gestures.detach()
   session.disconnect()
+  // Cleanup wheel handler
+  if (terminalContainer.value) {
+    const handler = (terminalContainer.value as any).__terminalWheelHandler
+    if (handler) terminalContainer.value.removeEventListener('wheel', handler)
+  }
   xterm.value?.dispose()
   xterm.value = null
 })
@@ -415,6 +461,22 @@ function executeCommand(cmd: { label: string; command: string }) {
   align-items: center;
   gap: 6px;
   flex-shrink: 0;
+}
+
+.terminal-font-size {
+  font-size: 11px;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+  padding: 1px 4px;
+  border-radius: 4px;
+  min-width: 20px;
+  text-align: center;
+}
+
+.terminal-font-size:hover {
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
 }
 
 .terminal-status {

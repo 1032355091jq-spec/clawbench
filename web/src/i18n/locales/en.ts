@@ -621,5 +621,6 @@ export default {
     reconnect: 'Reconnect',
     connected: 'Connected',
     disconnected: 'Disconnected',
+    resetFontSize: 'Reset font size',
   },
 } as const
