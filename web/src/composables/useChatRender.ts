@@ -98,8 +98,42 @@ export function useChatRender(options) {
       const cleanText = text.replace(/<schedule-proposal\b[^>]*>[\s\S]*?<\/schedule-proposal>/g, '').trim()
       return cleanText ? renderMarkdown(cleanText) : ''
     }
-    // Detect <ask-question> tags — strip from text and store for interactive rendering
-    const askMatch = text.match(/<ask-question\b[^>]*>([\s\S]*?)<\/ask-question>/)
+    // Detect <ask-question> tags — strip from text and store for interactive rendering.
+    // Two-pass strategy:
+    //   1. Try the standard regex requiring a closing </ask-question> tag.
+    //   2. If that fails, try a fallback regex that treats end-of-text as the
+    //      implicit closing boundary — AI models sometimes omit the closing tag,
+    //      especially when the JSON payload ends at the text block boundary.
+    // The fallback iterates from the LAST <ask-question> occurrence backward,
+    // because earlier ones may be prose references (e.g. "Forces structured
+    // `<ask-question>` XML tags") rather than actual structured questions.
+    // It also validates that the captured content starts with '{' or '['
+    // (after stripping code fences) to avoid false positives.
+    let askMatch = text.match(/<ask-question\b[^>]*>([\s\S]*?)<\/ask-question>/)
+    let askFullTagRegex = /<ask-question\b[^>]*>[\s\S]*?<\/ask-question>/
+    if (!askMatch) {
+      // Fallback: unclosed <ask-question> — find the LAST occurrence and capture
+      // everything from it to end-of-text. Earlier matches are likely prose references.
+      const allOpenTags = [...text.matchAll(/<ask-question\b[^>]*>/g)]
+      for (let j = allOpenTags.length - 1; j >= 0; j--) {
+        const startIdx = allOpenTags[j].index
+        const afterTag = text.slice(startIdx)
+        const subMatch = afterTag.match(/<ask-question\b[^>]*>([\s\S]+)$/)
+        if (!subMatch) continue
+        let probe = subMatch[1].trim()
+        if (probe.startsWith('```')) {
+          const nlIdx = probe.indexOf('\n')
+          if (nlIdx !== -1) probe = probe.slice(nlIdx + 1).trim()
+        }
+        if (!probe.startsWith('{') && !probe.startsWith('[')) {
+          continue // Not a real payload, just prose mentioning the tag name
+        }
+        // Valid unclosed match found — record position and content
+        askMatch = subMatch
+        askMatch._startIdx = startIdx // custom property for cleanText extraction
+        break
+      }
+    }
     if (askMatch) {
       const askKey = `${msgId}-${blockIdx}`
       if (!blockAskQuestions[askKey]) {
@@ -120,7 +154,15 @@ export function useChatRender(options) {
           console.error('Failed to parse ask-question:', e)
         }
       }
-      const cleanText = text.replace(/<ask-question\b[^>]*>[\s\S]*?<\/ask-question>/, '').trim()
+      // Remove the matched tag from the rendered text.
+      // For standard matches (with closing tag), use regex replacement.
+      // For unclosed fallback matches, truncate from the tag position to end-of-text.
+      let cleanText
+      if (askMatch._startIdx !== undefined) {
+        cleanText = text.slice(0, askMatch._startIdx).trim()
+      } else {
+        cleanText = text.replace(askFullTagRegex, '').trim()
+      }
       return cleanText ? renderMarkdown(cleanText) : ''
     }
     return renderMarkdown(text)
@@ -197,10 +239,35 @@ export function useChatRender(options) {
                 console.error('Failed to parse schedule proposal:', e)
               }
             })
-            // Also extract <ask-question> tags for interactive rendering
+            // Also extract <ask-question> tags for interactive rendering.
+            // Same two-pass strategy as renderTextBlock: standard match first,
+            // then fallback for unclosed tags (missing </ask-question>).
+            // The fallback iterates from the LAST <ask-question> occurrence backward
+            // to skip prose references and find the real structured question.
             const askKey = `${msg.id}-${bi}`
             if (!blockAskQuestions[askKey]) {
-              const askMatch = block.text.match(/<ask-question\b[^>]*>([\s\S]*?)<\/ask-question>/)
+              let askMatch = block.text.match(/<ask-question\b[^>]*>([\s\S]*?)<\/ask-question>/)
+              if (!askMatch) {
+                // Fallback: unclosed tag — find the LAST <ask-question> and capture
+                // from it to end-of-text. Earlier matches are likely prose references.
+                const allOpenTags = [...block.text.matchAll(/<ask-question\b[^>]*>/g)]
+                for (let j = allOpenTags.length - 1; j >= 0; j--) {
+                  const startIdx = allOpenTags[j].index
+                  const afterTag = block.text.slice(startIdx)
+                  const subMatch = afterTag.match(/<ask-question\b[^>]*>([\s\S]+)$/)
+                  if (!subMatch) continue
+                  let probe = subMatch[1].trim()
+                  if (probe.startsWith('```')) {
+                    const nlIdx = probe.indexOf('\n')
+                    if (nlIdx !== -1) probe = probe.slice(nlIdx + 1).trim()
+                  }
+                  if (!probe.startsWith('{') && !probe.startsWith('[')) {
+                    continue // Prose reference, not a real payload
+                  }
+                  askMatch = subMatch
+                  break
+                }
+              }
               if (askMatch) {
                 try {
                   let askContent = askMatch[1].trim()

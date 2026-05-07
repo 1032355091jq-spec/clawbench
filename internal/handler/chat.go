@@ -1000,8 +1000,15 @@ func stringsContainsAnyBlock(blocks []model.ContentBlock, substr string) bool {
 // parses the JSON content, and converts them into tool_use ContentBlocks with
 // name="AskUserQuestion". Tags are stripped from text; if no text remains the
 // block is replaced entirely, otherwise a new tool_use block is appended.
+//
+// Tolerates unclosed tags: AI models sometimes omit the </ask-question> closing
+// tag (especially when the JSON payload ends at the text block boundary). When
+// the standard regex fails to match, a fallback regex treats end-of-text as the
+// implicit closing boundary and attempts JSON extraction on the trailing content.
+//
 // Returns the updated blocks slice.
 func convertAskQuestionBlocks(blocks []model.ContentBlock) []model.ContentBlock {
+	// Standard match: <ask-question>...</ask-question> with proper closing tag
 	re := regexp.MustCompile(`<ask-question\b[^>]*>([\s\S]*?)</ask-question>`)
 
 	// First pass: collect all conversions needed
@@ -1019,7 +1026,50 @@ func convertAskQuestionBlocks(blocks []model.ContentBlock) []model.ContentBlock 
 		if !strings.Contains(block.Text, "<ask-question") {
 			continue
 		}
+
 		matches := re.FindStringSubmatch(block.Text)
+		matchStartIdx := -1 // position of the <ask-question> tag in block.Text; -1 for standard match
+
+		// Fallback: AI models sometimes omit </ask-question>, especially when the
+		// JSON payload ends at the text block boundary. Try matching each
+		// <ask-question> tag and treat everything after it (up to end-of-text)
+		// as the tag content. We iterate from the LAST match backward, because
+		// earlier occurrences may be prose references to the tag name rather than
+		// actual structured questions (e.g. "Forces structured `<ask-question>` XML tags").
+		if len(matches) < 2 {
+			reUnclosed := regexp.MustCompile(`<ask-question\b[^>]*>`)
+			allIndices := reUnclosed.FindAllStringIndex(block.Text, -1)
+			// Try from last to first — the last <ask-question> is most likely
+			// the real interactive question; earlier ones tend to be prose mentions.
+			for j := len(allIndices) - 1; j >= 0; j-- {
+				startIdx := allIndices[j][0]
+				afterTag := block.Text[startIdx:]
+				subMatches := regexp.MustCompile(`<ask-question\b[^>]*>([\s\S]+)$`).FindStringSubmatch(afterTag)
+				if len(subMatches) < 2 {
+					continue
+				}
+				// Validate that the captured content is plausible JSON — it must
+				// start with '{' or '[' after trimming whitespace/code fences.
+				// This prevents false positives where "<ask-question>" appears
+				// in prose (e.g. "Forces structured `<ask-question>` XML tags").
+				trimmed := strings.TrimSpace(subMatches[1])
+				if strings.HasPrefix(trimmed, "```") {
+					if nl := strings.Index(trimmed, "\n"); nl != -1 {
+						trimmed = strings.TrimSpace(trimmed[nl+1:])
+					}
+				}
+				if !strings.HasPrefix(trimmed, "{") && !strings.HasPrefix(trimmed, "[") {
+					continue // Not a real ask-question payload, try previous match
+				}
+				// Found a valid unclosed match — record the position and content.
+				// matches[0] is unused for cleanText in the fallback path;
+				// matches[1] holds the JSON payload for extraction.
+				matches = []string{"", subMatches[1]}
+				matchStartIdx = startIdx
+				break
+			}
+		}
+
 		if len(matches) < 2 {
 			continue
 		}
@@ -1052,7 +1102,16 @@ func convertAskQuestionBlocks(blocks []model.ContentBlock) []model.ContentBlock 
 			continue
 		}
 
+		// Remove the matched <ask-question> tag content from the text.
+		// For standard matches (with closing tag), use the regex replacement.
+		// For unclosed fallback matches, we know the tag starts at the position
+		// stored in matchStartIdx — truncate everything from there onward.
 		cleanText := strings.TrimSpace(re.ReplaceAllString(block.Text, ""))
+		if matchStartIdx >= 0 && cleanText == strings.TrimSpace(block.Text) {
+			// Standard regex didn't remove anything — this is an unclosed tag.
+			// Truncate from the <ask-question> position to end-of-text.
+			cleanText = strings.TrimSpace(block.Text[:matchStartIdx])
+		}
 		conversions = append(conversions, conversion{index: i, input: input, cleanText: cleanText})
 	}
 
