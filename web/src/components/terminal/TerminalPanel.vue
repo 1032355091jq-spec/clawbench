@@ -17,7 +17,7 @@
       </div>
 
       <!-- Terminal viewport -->
-      <div ref="terminalContainer" class="terminal-container" @click.self="focusTerminal" @contextmenu.prevent>
+      <div ref="terminalContainer" class="terminal-container" @click.self="focusTerminal">
         <!-- Error overlay -->
         <div v-if="showErrorOverlay" class="terminal-error-overlay">
           <p>{{ errorDisplayMessage }}</p>
@@ -253,6 +253,7 @@ function initTerminal() {
     convertEol: true,
     scrollback: 5000,
     selectionStyle: 'line',
+    rightClickSelectsWord: true,
   })
 
   const fit = new FitAddon()
@@ -321,6 +322,14 @@ async function mountTerminal() {
   // Store for cleanup
   ;(container as any).__terminalWheelHandler = wheelHandler
 
+  // Suppress native context menu (paste/clipboard popup on mobile)
+  // but don't stopPropagation — xterm.js needs contextmenu for word selection
+  const contextMenuHandler = (e: Event) => {
+    e.preventDefault()
+  }
+  container.addEventListener('contextmenu', contextMenuHandler)
+  ;(container as any).__terminalContextMenuHandler = contextMenuHandler
+
   await nextTick()
   viewport.startWatching()
   gestures.attach()
@@ -380,10 +389,12 @@ onBeforeUnmount(() => {
   viewport.stopWatching()
   gestures.detach()
   session.disconnect()
-  // Cleanup wheel handler
+  // Cleanup wheel handler and contextmenu handler
   if (terminalContainer.value) {
-    const handler = (terminalContainer.value as any).__terminalWheelHandler
-    if (handler) terminalContainer.value.removeEventListener('wheel', handler)
+    const wheelH = (terminalContainer.value as any).__terminalWheelHandler
+    if (wheelH) terminalContainer.value.removeEventListener('wheel', wheelH)
+    const ctxH = (terminalContainer.value as any).__terminalContextMenuHandler
+    if (ctxH) terminalContainer.value.removeEventListener('contextmenu', ctxH)
   }
   xterm.value?.dispose()
   xterm.value = null
