@@ -214,10 +214,15 @@ export function useTerminalGestures(
   // Apply gesture state: attach when enabled, detach when disabled
   // so that xterm.js native touch selection works when gestures are off
   function applyState() {
+    const el = elementRef.value
     if (enabled.value) {
       attachListeners()
+      // Disable native scroll — gestures handle vertical via arrow keys
+      if (el) el.style.touchAction = 'none'
     } else {
       detachListeners()
+      // Enable native scroll — vertical drag scrolls the terminal
+      if (el) el.style.touchAction = 'pan-y'
     }
   }
 
