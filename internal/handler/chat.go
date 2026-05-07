@@ -330,7 +330,7 @@ func AIChat(w http.ResponseWriter, r *http.Request) {
 		defer service.UnregisterSessionCancel(sessionID)
 
 		// Build the first chat request
-		firstChatReq := buildChatRequest(prompt, sessionID, backendName, effectiveAgentID, req.ModelID, fileDir)
+		firstChatReq := buildChatRequest(prompt, sessionID, projectPath, backendName, effectiveAgentID, req.ModelID, fileDir)
 
 		// Execute first message
 		result := executeStreamRun(ctx, r, streamCh, projectPath, sessionID, backendName, effectiveAgentID, firstChatReq, fileDir)
@@ -742,7 +742,7 @@ saveRaw:
 
 // buildChatRequest constructs an ai.ChatRequest from the given parameters.
 // modelOverride, if non-empty, takes precedence over the agent's default model.
-func buildChatRequest(prompt, sessionID, backendName, agentID, modelOverride, fileDir string) ai.ChatRequest {
+func buildChatRequest(prompt, sessionID, projectPath, backendName, agentID, modelOverride, fileDir string) ai.ChatRequest {
 	systemPrompt := ""
 	agentModel := ""
 	agentCommand := ""
@@ -765,9 +765,16 @@ func buildChatRequest(prompt, sessionID, backendName, agentID, modelOverride, fi
 	// Inject RAG prompt if enabled
 	if model.RAGPrompt != "" {
 		ragPrompt := model.RAGPrompt
-		// Append current session ID so AI can exclude it from search
+		// Append current context so AI can use RAG search with correct filters
+		var contextParts []string
 		if sessionID != "" {
-			ragPrompt += fmt.Sprintf("\n\n**Current session ID:** %s — use this as exclude_session_id when searching.", sessionID)
+			contextParts = append(contextParts, fmt.Sprintf("**Current session ID:** %s — use this as exclude_session_id when searching.", sessionID))
+		}
+		if projectPath != "" {
+			contextParts = append(contextParts, fmt.Sprintf("**Current project path:** %s — use this as the project parameter when searching.", projectPath))
+		}
+		if len(contextParts) > 0 {
+			ragPrompt += "\n\n" + strings.Join(contextParts, "\n")
 		}
 		if systemPrompt != "" {
 			systemPrompt = systemPrompt + "\n\n" + ragPrompt
@@ -815,7 +822,7 @@ func buildChatRequestFromQueue(qMsg model.QueuedMessage, sessionID, projectPath,
 		prompt = fmt.Sprintf("[User uploaded %d file(s): %s]\n%s", len(qMsg.Files), strings.Join(qMsg.Files, ", "), prompt)
 	}
 
-	return buildChatRequest(prompt, sessionID, backendName, agentID, "", fileDir)
+	return buildChatRequest(prompt, sessionID, projectPath, backendName, agentID, "", fileDir)
 }
 
 // CancelChat handles POST to cancel an ongoing AI stream for a session.
