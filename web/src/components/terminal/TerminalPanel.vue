@@ -34,10 +34,10 @@
         <button class="toolbar-btn modifier" :class="{ active: terminalKeys.activeModifiers.value.ctrl !== 'inactive', locked: terminalKeys.activeModifiers.value.ctrl === 'locked' }" @pointerdown.prevent="handleModifier('ctrl')" @contextmenu.prevent>Ctl</button>
         <button class="toolbar-btn modifier" :class="{ active: terminalKeys.activeModifiers.value.alt !== 'inactive', locked: terminalKeys.activeModifiers.value.alt === 'locked' }" @pointerdown.prevent="handleModifier('alt')" @contextmenu.prevent>Alt</button>
         <button class="toolbar-btn" @pointerdown.prevent="terminalKeys.sendCtrlC(); focusTerminal()" :title="'Ctrl+C'">C-C</button>
-        <button class="toolbar-btn arrow" @pointerdown.prevent="terminalKeys.sendArrowLeft(); focusTerminal()">←</button>
-        <button class="toolbar-btn arrow" @pointerdown.prevent="terminalKeys.sendArrowDown(); focusTerminal()">↓</button>
-        <button class="toolbar-btn arrow" @pointerdown.prevent="terminalKeys.sendArrowUp(); focusTerminal()">↑</button>
-        <button class="toolbar-btn arrow" @pointerdown.prevent="terminalKeys.sendArrowRight(); focusTerminal()">→</button>
+        <button class="toolbar-btn" @pointerdown.prevent="session.sendInput('/'); focusTerminal()">/</button>
+        <button class="toolbar-btn" @pointerdown.prevent="session.sendInput('-'); focusTerminal()">-</button>
+        <button class="toolbar-btn" @pointerdown.prevent="session.sendInput('|'); focusTerminal()">|</button>
+        <button class="toolbar-btn" @pointerdown.prevent="session.sendInput('_'); focusTerminal()">_</button>
         <button class="toolbar-btn modifier" :class="{ active: gestures.enabled.value }" @pointerdown.prevent="gestures.toggle(); focusTerminal()" @contextmenu.prevent :title="t('terminal.gestures')">
           <HandIcon :size="14" />
         </button>
@@ -163,7 +163,6 @@ const gestures = useTerminalGestures(terminalContainer, {
   sendArrowDown: terminalKeys.sendArrowDown,
   sendArrowLeft: terminalKeys.sendArrowLeft,
   sendArrowRight: terminalKeys.sendArrowRight,
-  sendTab: terminalKeys.sendTab,
   onPinchZoom: (delta: number) => applyFontSize(fontSize.value + delta),
 })
 

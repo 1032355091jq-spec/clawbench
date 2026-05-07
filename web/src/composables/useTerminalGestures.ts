@@ -5,7 +5,6 @@ export interface GestureCallbacks {
   sendArrowDown: () => void
   sendArrowLeft: () => void
   sendArrowRight: () => void
-  sendTab: () => void
   onPinchZoom?: (delta: number) => void
 }
 
@@ -16,7 +15,6 @@ type Direction = 'up' | 'down' | 'left' | 'right'
  * - Swipe left/right → arrow left/right
  * - Swipe up/down → arrow up/down
  * - Hold direction → auto-repeat arrow keys
- * - Double-tap → Tab
  * - Pinch (two-finger) → zoom font size
  *
  * Gestures are bound only to the xterm container element,
@@ -27,7 +25,6 @@ export function useTerminalGestures(
   callbacks: GestureCallbacks
 ) {
   const SWIPE_THRESHOLD = 30 // minimum px for a swipe
-  const DOUBLE_TAP_DELAY = 300 // max ms between taps for double-tap
   const PINCH_THRESHOLD = 10 // minimum px change before triggering zoom
   const REPEAT_INITIAL_DELAY = 500 // ms before auto-repeat starts
   const REPEAT_INTERVAL = 150 // ms between repeated arrow keys
@@ -37,7 +34,6 @@ export function useTerminalGestures(
 
   let touchStartX = 0
   let touchStartY = 0
-  let lastTapTime = 0
   let isActive = false
 
   // Direction tracking for hold-to-repeat
@@ -173,25 +169,10 @@ export function useTerminalGestures(
     // skip the legacy swipe-on-touchend logic
     if (wasDirection) return
 
+    // Quick swipe that didn't trigger in touchmove (fast flick)
     const touch = e.changedTouches[0]
     const dx = touch.clientX - touchStartX
     const dy = touch.clientY - touchStartY
-    const absDx = Math.abs(dx)
-    const absDy = Math.abs(dy)
-
-    // Check for double-tap (small movement)
-    if (absDx < 10 && absDy < 10) {
-      const now = Date.now()
-      if (now - lastTapTime < DOUBLE_TAP_DELAY) {
-        callbacks.sendTab()
-        lastTapTime = 0 // reset to prevent triple-tap
-        return
-      }
-      lastTapTime = now
-      return
-    }
-
-    // Quick swipe that didn't trigger in touchmove (fast flick)
     const dir = detectDirection(dx, dy)
     if (dir) {
       sendArrow(dir)
