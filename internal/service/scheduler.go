@@ -141,13 +141,25 @@ func (s *Scheduler) LoadTasksFromDB(projectPath string) error {
 		}
 		// Validate agent_id against loaded agents
 		if _, ok := model.Agents[task.AgentID]; !ok {
-			slog.Warn("pausing task with invalid agent_id",
+			// Skip registration but do NOT pause — the agent may not be loaded yet
+			// (e.g., if LoadAgents hasn't run). The task stays active in DB and
+			// will be registered on next restart when agents are available.
+			// Runtime validation in executeTask() handles genuinely invalid agents.
+			slog.Warn("skipping task with unavailable agent_id",
 				slog.String("task_id", task.ID),
 				slog.String("name", task.Name),
 				slog.String("agent_id", task.AgentID),
 			)
-			s.PauseTask(task.ID)
 			continue
+		}
+		// Detect missed executions: if next_run_at is in the past, the server
+		// was likely down when the cron should have fired.
+		if task.NextRunAt != nil && task.NextRunAt.Before(time.Now()) {
+			slog.Warn("detected missed scheduled execution",
+				slog.String("task_id", task.ID),
+				slog.String("name", task.Name),
+				slog.Time("missed_run", *task.NextRunAt),
+			)
 		}
 		if err := s.registerTask(task); err != nil {
 			slog.Warn("failed to register task on load",

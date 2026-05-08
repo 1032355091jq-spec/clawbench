@@ -8,8 +8,11 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
+	"os/signal"
 	"path/filepath"
 	"strconv"
+	"syscall"
+	"time"
 
 	"gopkg.in/yaml.v3"
 
@@ -387,16 +390,7 @@ func main() {
 	// Always defer shutdown — cleanup worker may be running even without RAG
 	defer rag.Shutdown()
 
-	// Initialize and start scheduler
-	scheduler := service.NewScheduler()
-	// Load all tasks from all projects
-	if err := scheduler.LoadTasksFromDB(""); err != nil {
-		slog.Warn("failed to load scheduled tasks", slog.String("err", err.Error()))
-	}
-	scheduler.Start()
-	defer scheduler.Stop()
-	service.GlobalScheduler = scheduler
-
+	// Determine port before loading skills/agents (skills and agents need {{PORT}})
 	port := cfg.Port
 	// Dev mode: use dev-specific port from config
 	if devMode && cfg.Dev.Port > 0 {
@@ -463,6 +457,16 @@ func main() {
 		slog.Warn("no agents available, session creation will fail")
 	}
 
+	// Initialize and start scheduler (MUST be after LoadAgents so model.Agents is populated)
+	scheduler := service.NewScheduler()
+	// Load all tasks from all projects
+	if err := scheduler.LoadTasksFromDB(""); err != nil {
+		slog.Warn("failed to load scheduled tasks", slog.String("err", err.Error()))
+	}
+	scheduler.Start()
+	defer scheduler.Stop()
+	service.GlobalScheduler = scheduler
+
 	host := ""
 	if devMode && cfg.Dev.Host != "" {
 		host = cfg.Dev.Host
@@ -526,6 +530,22 @@ func main() {
 	mux := http.NewServeMux()
 	handler.RegisterRoutes(mux)
 
+	srv := &http.Server{Addr: addr, Handler: mux}
+
+	// Graceful shutdown on SIGINT/SIGTERM
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer stop()
+
+	go func() {
+		<-ctx.Done()
+		slog.Info("received shutdown signal, draining connections...")
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		if err := srv.Shutdown(shutdownCtx); err != nil {
+			slog.Error("server shutdown error", slog.String("err", err.Error()))
+		}
+	}()
+
 	if devMode || !cfg.TLS.Enabled {
 		// Dev mode or TLS disabled: plain HTTP
 		if !cfg.TLS.Enabled && !devMode {
@@ -533,7 +553,7 @@ func main() {
 		} else {
 			slog.Info("starting in dev mode (HTTP)")
 		}
-		if err := http.ListenAndServe(addr, mux); err != nil {
+		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			slog.Error("server failed", slog.String("err", err.Error()))
 			os.Exit(1)
 		}
@@ -552,9 +572,10 @@ func main() {
 			os.Exit(1)
 		}
 		slog.Info("starting with TLS", slog.String("cert", certFile))
-		if err := http.ListenAndServeTLS(addr, certFile, keyFile, mux); err != nil {
+		if err := srv.ListenAndServeTLS(certFile, keyFile); err != nil && err != http.ErrServerClosed {
 			slog.Error("server failed", slog.String("err", err.Error()))
 			os.Exit(1)
 		}
 	}
+	slog.Info("server stopped")
 }
