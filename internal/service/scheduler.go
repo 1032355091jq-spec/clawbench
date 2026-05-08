@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"strings"
 	"sync"
 	"time"
 
@@ -368,11 +369,28 @@ func (s *Scheduler) executeTask(task *model.ScheduledTask, projectPath string, t
 	// ScheduledExecution flag prevents recursive task creation at the
 	// handler level: even if the AI outputs a <schedule-proposal> tag,
 	// the handler will not create a task from it.
+	//
+	// Rebuild system prompt without task-scheduler skill to prevent
+	// the AI from discovering scheduled task capability (anti-recursion).
+	systemPrompt := agent.SystemPrompt
+	scheduledCommon := model.BuildCommonPrompt(true)
+	normalCommon := model.BuildCommonPrompt(false)
+	if normalCommon != "" && strings.HasPrefix(systemPrompt, normalCommon) {
+		// Replace the common prompt prefix with the scheduled version
+		remaining := systemPrompt[len(normalCommon):]
+		if scheduledCommon != "" {
+			systemPrompt = scheduledCommon + remaining
+		} else {
+			// No skills at all in scheduled mode — strip the common prefix
+			systemPrompt = strings.TrimPrefix(remaining, "\n\n")
+		}
+	}
+
 	chatReq := ai.ChatRequest{
 		Prompt:             task.Prompt,
 		SessionID:          execID, // use executionID to identify this run
 		WorkDir:            projectPath,
-		SystemPrompt:       agent.SystemPrompt,
+		SystemPrompt:       systemPrompt,
 		Model:              agent.DefaultModelID(),
 		Command:            agent.Command,
 		AgentID:            task.AgentID,

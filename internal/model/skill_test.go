@@ -96,6 +96,7 @@ func TestBuildCommonPrompt(t *testing.T) {
 		ServerPort = 0
 		Agents = nil
 		AgentList = nil
+		agentsDir = ""
 	})
 
 	Skills = []Skill{
@@ -109,11 +110,11 @@ func TestBuildCommonPrompt(t *testing.T) {
 
 	// Use temp dir with rules.md
 	tmpDir := t.TempDir()
-	agentsDir := filepath.Join(tmpDir, "agents")
+	agentsDir = filepath.Join(tmpDir, "agents")
 	require.NoError(t, os.MkdirAll(agentsDir, 0755))
 	// No rules.md — should still work, just no rules section
 
-	prompt := buildCommonPrompt(agentsDir)
+	prompt := BuildCommonPrompt(false)
 
 	assert.Contains(t, prompt, "## Skills")
 	assert.Contains(t, prompt, "Server port: 20000")
@@ -128,6 +129,7 @@ func TestBuildCommonPromptWithRules(t *testing.T) {
 		ServerPort = 0
 		Agents = nil
 		AgentList = nil
+		agentsDir = ""
 	})
 
 	Skills = nil
@@ -139,14 +141,14 @@ func TestBuildCommonPromptWithRules(t *testing.T) {
 
 	// Create temp dir with rules.md
 	tmpDir := t.TempDir()
-	agentsDir := filepath.Join(tmpDir, "agents")
+	agentsDir = filepath.Join(tmpDir, "agents")
 	require.NoError(t, os.MkdirAll(agentsDir, 0755))
 
 	rulesContent := "## Rules\n\nAlways use {{PORT}} for API calls.\nAgents:\n{{AVAILABLE_AGENTS}}\n"
 	err := os.WriteFile(filepath.Join(tmpDir, "rules.md"), []byte(rulesContent), 0644)
 	require.NoError(t, err)
 
-	prompt := buildCommonPrompt(agentsDir)
+	prompt := BuildCommonPrompt(false)
 
 	// Rules should be injected with placeholders replaced
 	assert.Contains(t, prompt, "## Rules")
@@ -154,6 +156,40 @@ func TestBuildCommonPromptWithRules(t *testing.T) {
 	assert.Contains(t, prompt, "coder: coding")
 	assert.NotContains(t, prompt, "{{PORT}}")
 	assert.NotContains(t, prompt, "{{AVAILABLE_AGENTS}}")
+}
+
+func TestBuildCommonPrompt_ScheduledExcludesTaskScheduler(t *testing.T) {
+	t.Cleanup(func() {
+		Skills = nil
+		ServerPort = 0
+		Agents = nil
+		AgentList = nil
+		agentsDir = ""
+	})
+
+	Skills = []Skill{
+		{Name: "task-scheduler", Description: "Schedule tasks", Triggers: []string{"schedule"}, Filename: "task-scheduler.md"},
+		{Name: "other-skill", Description: "Other", Triggers: []string{"other"}, Filename: "other-skill.md"},
+	}
+	ServerPort = 20000
+	Agents = map[string]*Agent{
+		"coder": {ID: "coder", Specialty: "coding"},
+	}
+	AgentList = []*Agent{{ID: "coder", Specialty: "coding"}}
+
+	tmpDir := t.TempDir()
+	agentsDir = filepath.Join(tmpDir, "agents")
+	require.NoError(t, os.MkdirAll(agentsDir, 0755))
+
+	// Normal: both skills present
+	normalPrompt := BuildCommonPrompt(false)
+	assert.Contains(t, normalPrompt, "task-scheduler")
+	assert.Contains(t, normalPrompt, "other-skill")
+
+	// Scheduled: task-scheduler filtered out
+	scheduledPrompt := BuildCommonPrompt(true)
+	assert.NotContains(t, scheduledPrompt, "task-scheduler")
+	assert.Contains(t, scheduledPrompt, "other-skill")
 }
 
 func TestParseSkillFrontmatter(t *testing.T) {

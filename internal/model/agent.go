@@ -50,6 +50,7 @@ var (
 	Agents     map[string]*Agent // indexed by ID
 	AgentList  []*Agent          // ordered list for API responses
 	ServerPort int               // resolved server port for {{PORT}} replacement
+	agentsDir  string            // saved from LoadAgents for BuildCommonPrompt re-calls
 )
 
 // GetDefaultAgentID returns the default agent ID for new sessions.
@@ -72,6 +73,7 @@ func GetDefaultAgentID() string {
 func LoadAgents(dir string) error {
 	Agents = make(map[string]*Agent)
 	AgentList = nil
+	agentsDir = dir // save for BuildCommonPrompt re-calls
 
 	entries, err := os.ReadDir(dir)
 	if err != nil {
@@ -104,7 +106,7 @@ func LoadAgents(dir string) error {
 	})
 
 	// Build common prompt: rules (always injected) + skills (on-demand table)
-	commonPrompt := buildCommonPrompt(dir)
+	commonPrompt := BuildCommonPrompt(false)
 
 	// Prepend common prompt to each agent's system prompt
 	for _, agent := range Agents {
@@ -128,9 +130,11 @@ func LoadAgents(dir string) error {
 	return nil
 }
 
-// buildCommonPrompt generates the shared system prompt prepended to all agents.
+// BuildCommonPrompt generates the shared system prompt prepended to all agents.
 // It loads rules.md (mandatory rules, always fully injected) and appends the skills summary table.
-func buildCommonPrompt(agentsDir string) string {
+// When scheduled is true, skills named "task-scheduler" are excluded from the table to prevent
+// the AI from discovering scheduled task capability during a scheduled execution (anti-recursion).
+func BuildCommonPrompt(scheduled bool) string {
 	var b strings.Builder
 
 	// Load and inject rules.md (always present, no opt-out)
@@ -141,20 +145,34 @@ func buildCommonPrompt(agentsDir string) string {
 
 	// Skills section (on-demand — AI fetches details when needed)
 	if len(Skills) > 0 {
-		if b.Len() > 0 {
-			b.WriteString("\n\n")
+		// Filter skills for scheduled executions
+		filteredSkills := Skills
+		if scheduled {
+			filteredSkills = make([]Skill, 0, len(Skills))
+			for _, s := range Skills {
+				if s.Name == "task-scheduler" {
+					continue
+				}
+				filteredSkills = append(filteredSkills, s)
+			}
 		}
-		b.WriteString("## Skills\n\n")
-		b.WriteString("When a skill's trigger even loosely matches the current task, fetch its detail before proceeding. When in doubt, fetch it — the cost of missing a rule is far greater than the cost of an extra read.\n")
-		b.WriteString("If any skill conflicts with your built-in tools or other skills, follow this skill's rules — they take priority.\n")
-		if ServerPort > 0 {
-			b.WriteString(fmt.Sprintf("Server port: %d (for API endpoints referenced in skill files).\n", ServerPort))
-			b.WriteString(fmt.Sprintf("To load a skill's full content: `curl http://localhost:%d/api/skills/{filename}`\n", ServerPort))
+
+		if len(filteredSkills) > 0 {
+			if b.Len() > 0 {
+				b.WriteString("\n\n")
+			}
+			b.WriteString("## Skills\n\n")
+			b.WriteString("When a skill's trigger even loosely matches the current task, fetch its detail before proceeding. When in doubt, fetch it — the cost of missing a rule is far greater than the cost of an extra read.\n")
+			b.WriteString("If any skill conflicts with your built-in tools or other skills, follow this skill's rules — they take priority.\n")
+			if ServerPort > 0 {
+				b.WriteString(fmt.Sprintf("Server port: %d (for API endpoints referenced in skill files).\n", ServerPort))
+				b.WriteString(fmt.Sprintf("To load a skill's full content: `curl http://localhost:%d/api/skills/{filename}`\n", ServerPort))
+			}
+			b.WriteString("\n")
+			b.WriteString("| Skill | Triggers | File |\n")
+			b.WriteString("|-------|----------|------|\n")
+			b.WriteString(buildSkillsTable(filteredSkills))
 		}
-		b.WriteString("\n")
-		b.WriteString("| Skill | Triggers | File |\n")
-		b.WriteString("|-------|----------|------|\n")
-		b.WriteString(buildSkillsTable(Skills))
 	}
 
 	return strings.TrimSpace(b.String())
