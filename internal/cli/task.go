@@ -21,49 +21,51 @@ func RunTaskCommand(args []string) int {
 		return 1
 	}
 
-	// Initialize config and database (same logic as cmd/server/main.go)
-	absBinPath, _ := filepath.Abs(os.Args[0])
-	model.BinDir = filepath.Dir(absBinPath)
+	// Initialize config and database if not already done (e.g. in tests)
+	if service.DB == nil {
+		absBinPath, _ := filepath.Abs(os.Args[0])
+		model.BinDir = filepath.Dir(absBinPath)
 
-	var cfg model.Config
-	var presence map[string]bool
-	configPath := filepath.Join(model.BinDir, "config", "config.yaml")
-	if _, err := os.Stat(configPath); os.IsNotExist(err) {
-		configPath = filepath.Join("config", "config.yaml")
+		var cfg model.Config
+		var presence map[string]bool
+		configPath := filepath.Join(model.BinDir, "config", "config.yaml")
 		if _, err := os.Stat(configPath); os.IsNotExist(err) {
-			configPath = filepath.Join(model.BinDir, "config.yaml")
+			configPath = filepath.Join("config", "config.yaml")
 			if _, err := os.Stat(configPath); os.IsNotExist(err) {
-				configPath = "config.yaml"
+				configPath = filepath.Join(model.BinDir, "config.yaml")
+				if _, err := os.Stat(configPath); os.IsNotExist(err) {
+					configPath = "config.yaml"
+				}
 			}
 		}
-	}
 
-	data, err := os.ReadFile(configPath)
-	if err == nil {
-		var raw map[string]any
-		if err := yaml.Unmarshal(data, &raw); err != nil {
-			fmt.Fprintf(os.Stderr, "Failed to parse config: %v\n", err)
+		data, err := os.ReadFile(configPath)
+		if err == nil {
+			var raw map[string]any
+			if err := yaml.Unmarshal(data, &raw); err != nil {
+				fmt.Fprintf(os.Stderr, "Failed to parse config: %v\n", err)
+				return 1
+			}
+			presence = model.ParsePresenceMap(raw)
+			if err := yaml.Unmarshal(data, &cfg); err != nil {
+				fmt.Fprintf(os.Stderr, "Failed to parse config: %v\n", err)
+				return 1
+			}
+		}
+		model.ApplyDefaults(&cfg, presence)
+		model.ConfigInstance = cfg
+
+		if err := service.InitDB(); err != nil {
+			fmt.Fprintf(os.Stderr, "Failed to initialize database: %v\n", err)
 			return 1
 		}
-		presence = model.ParsePresenceMap(raw)
-		if err := yaml.Unmarshal(data, &cfg); err != nil {
-			fmt.Fprintf(os.Stderr, "Failed to parse config: %v\n", err)
-			return 1
+
+		scheduler := service.NewScheduler()
+		if err := scheduler.LoadTasksFromDB(""); err != nil {
+			slog.Warn("failed to load existing tasks from DB", slog.String("error", err.Error()))
 		}
+		service.GlobalScheduler = scheduler
 	}
-	model.ApplyDefaults(&cfg, presence)
-	model.ConfigInstance = cfg
-
-	if err := service.InitDB(); err != nil {
-		fmt.Fprintf(os.Stderr, "Failed to initialize database: %v\n", err)
-		return 1
-	}
-
-	scheduler := service.NewScheduler()
-	if err := scheduler.LoadTasksFromDB(""); err != nil {
-		slog.Warn("failed to load existing tasks from DB", slog.String("error", err.Error()))
-	}
-	service.GlobalScheduler = scheduler
 
 	// Dispatch to subcommand
 	switch args[0] {
