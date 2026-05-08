@@ -24,6 +24,15 @@
           <span>{{ t('terminal.rebuilding') }}</span>
         </div>
 
+        <!-- Directory mismatch overlay -->
+        <div v-if="showReopenPrompt" class="terminal-error-overlay">
+          <p>{{ t('terminal.directoryMismatch') }}</p>
+          <div class="terminal-prompt-actions">
+            <button class="terminal-reconnect-btn" @click="dismissReopenPrompt">{{ t('terminal.continueHere') }}</button>
+            <button class="terminal-reconnect-btn" @click="handleRebuild">{{ t('terminal.reopenHere') }}</button>
+          </div>
+        </div>
+
         <!-- Error overlay -->
         <div v-if="showErrorOverlay" class="terminal-error-overlay">
           <p>{{ errorDisplayMessage }}</p>
@@ -94,11 +103,13 @@ import { useTerminalKeys } from '@/composables/useTerminalKeys'
 import { useTerminalGestures } from '@/composables/useTerminalGestures'
 import { useToast } from '@/composables/useToast'
 import { store } from '@/stores/app'
+import { resolveTerminalCwd, shouldPromptForTerminalReopen } from './terminalCwd'
 
 import { Terminal as TerminalIcon, Copy as CopyIcon, X as XIcon, List as ListIcon, Hand as HandIcon, RefreshCw as RefreshCwIcon } from 'lucide-vue-next'
 
 const props = defineProps<{
   open: boolean
+  requestedCwd?: string | null
 }>()
 
 const emit = defineEmits<{
@@ -145,9 +156,20 @@ const fitAddon = ref<FitAddon | null>(null)
 const showCommands = ref(false)
 const quickCommands = ref<{ label: string; command: string }[]>([])
 const rebuilding = ref(false)
-// Compute cwd from file manager's current directory (not the opened file)
+const showReopenPrompt = ref(false)
+
 function computeCwd(): string {
-  return store.state.currentDir || ''
+  return resolveTerminalCwd({
+    currentFilePath: store.state.currentFile?.path,
+    currentDir: store.state.currentDir,
+    requestedCwd: props.requestedCwd,
+  })
+}
+
+function targetAbsoluteCwd(): string {
+  const root = store.state.projectRoot.replace(/\/+$/, '')
+  const cwd = computeCwd()
+  return cwd ? `${root}/${cwd}` : root
 }
 
 // Terminal session
@@ -358,19 +380,17 @@ watch(() => props.open, async (isOpen) => {
   }
 }, { immediate: true })
 
-// Watch currentDir changes — rebuild session if terminal is already open
-// and the directory has changed (e.g. user clicked "Open terminal here"
-// on a different directory in the file manager)
-watch(() => store.state.currentDir, async (newDir) => {
-  console.log('[terminal watch] currentDir changed:', newDir, 'open:', props.open, 'connectionState:', connectionState.value, 'currentCwd:', currentCwd.value)
+// Watch target cwd changes. Do not automatically rebuild: a terminal may be
+// running a long-lived command, so changing files/directories must only show a
+// prompt and wait for explicit user confirmation before closing the PTY.
+watch([
+  () => props.requestedCwd,
+  () => store.state.currentDir,
+  () => store.state.currentFile?.path,
+  currentCwd,
+], () => {
   if (!props.open || connectionState.value !== 'connected') return
-  // currentCwd is absolute; compute expected absolute cwd from currentDir
-  const expectedCwd = newDir
-    ? store.state.projectRoot + '/' + newDir
-    : store.state.projectRoot
-  console.log('[terminal watch] expectedCwd:', expectedCwd, 'vs currentCwd:', currentCwd.value, 'match:', currentCwd.value === expectedCwd)
-  if (currentCwd.value === expectedCwd) return
-  await handleRebuild()
+  showReopenPrompt.value = shouldPromptForTerminalReopen(currentCwd.value, targetAbsoluteCwd())
 })
 
 // Watch theme changes
@@ -435,20 +455,25 @@ function handleClose() {
   session.sendClose()
   terminalKeys.reset()
   showCommands.value = false
+  showReopenPrompt.value = false
+}
+
+function dismissReopenPrompt() {
+  showReopenPrompt.value = false
+  focusTerminal()
 }
 
 async function handleRebuild() {
-  console.log('[terminal rebuild] starting, computeCwd:', computeCwd(), 'currentCwd:', currentCwd.value)
   terminalKeys.reset()
   showCommands.value = false
+  showReopenPrompt.value = false
   rebuilding.value = true
 
   // Close session via HTTP API (synchronous — ensures PTY is dead and m.session = nil)
   try {
-    const resp = await fetch('/api/terminal/close', { method: 'POST' })
-    console.log('[terminal rebuild] close response:', resp.status)
-  } catch (e) {
-    console.warn('[terminal rebuild] close failed:', e)
+    await fetch('/api/terminal/close', { method: 'POST' })
+  } catch {
+    // Reconnect below will surface any remaining terminal errors.
   }
 
   // Reset session state (closes WS, clears errors, resets reconnect counter)
@@ -460,14 +485,10 @@ async function handleRebuild() {
   }
 
   // Reconnect with current cwd — backend will create a new session
-  const wsUrl = getWsUrl()
-  console.log('[terminal rebuild] connecting to:', wsUrl)
   try {
     await session.connect()
-    console.log('[terminal rebuild] connected, currentCwd:', currentCwd.value)
     focusTerminal()
-  } catch (e) {
-    console.error('[terminal rebuild] connect failed:', e)
+  } catch {
     // Error will be shown via overlay
   } finally {
     rebuilding.value = false
@@ -659,6 +680,13 @@ function executeCommand(cmd: { label: string; command: string }) {
   z-index: 10;
   padding: 20px;
   text-align: center;
+}
+
+.terminal-prompt-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: center;
 }
 
 .terminal-reconnect-btn {

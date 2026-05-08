@@ -93,6 +93,44 @@ func TestManagerCloseSession(t *testing.T) {
 	}
 }
 
+func TestManagerClearsSessionAfterShellExit(t *testing.T) {
+	cwd := t.TempDir()
+	cfg := model.TerminalConfig{
+		Enabled:      true,
+		IdleTimeout:  "1m",
+		BufferLines:  100,
+		MaxLineBytes: 65536,
+		MaxBufferMB:  4,
+	}
+
+	mgr := NewManager(cfg, 20000)
+	defer mgr.Close()
+
+	session, err := NewSession(cwd, cwd, mgr.Config())
+	if err != nil {
+		t.Skipf("PTY not available in this environment: %v", err)
+	}
+	mgr.mu.Lock()
+	mgr.session = session
+	mgr.mu.Unlock()
+
+	if err := session.HandleInput("exit\r"); err != nil {
+		t.Fatalf("failed to send exit: %v", err)
+	}
+
+	deadline := time.Now().Add(3 * time.Second)
+	for time.Now().Before(deadline) {
+		hasSession, _, running := mgr.Status()
+		if !hasSession && !running {
+			return
+		}
+		time.Sleep(25 * time.Millisecond)
+	}
+
+	hasSession, cwdStatus, running := mgr.Status()
+	t.Fatalf("expected manager to clear exited shell session, got hasSession=%v cwd=%q running=%v", hasSession, cwdStatus, running)
+}
+
 func TestManagerIsEnabled(t *testing.T) {
 	cfg := model.TerminalConfig{
 		Enabled:      true,

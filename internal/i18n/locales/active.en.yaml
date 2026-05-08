@@ -18,6 +18,9 @@ NotAFile: Not a file
 NotAGitRepo: Not a git repository
 NoProjectSelected: no project selected
 AccessDenied: Access denied
+TerminalDisabled: Terminal feature is disabled
+TerminalError: Terminal error
+TerminalCwdInvalid: Terminal working directory is invalid
 Unauthorized: unauthorized
 InvalidPath: invalid path
 PathTraversal: path traversal detected

@@ -116,6 +116,7 @@
 
       <TerminalPanel
         :open="terminalOpen"
+        :requested-cwd="terminalRequestedCwd"
         @close="terminalOpen = false"
         @open="ensureDrawerOpen('terminal')"
       />
@@ -170,7 +171,7 @@
             <button class="dock-btn" :class="{ active: proxyOpen }" @click.stop="openDrawer('proxy')" :title="t('nav.portForward')">
               <EthernetPort />
             </button>
-            <button class="dock-btn" :class="{ active: terminalOpen }" @click.stop="openDrawer('terminal')" :title="t('terminal.title')">
+            <button class="dock-btn" :class="{ active: terminalOpen }" @click.stop="handleDockTerminal" :title="t('terminal.title')">
               <TerminalIcon />
             </button>
           </div>
@@ -280,6 +281,7 @@ const { isAppMode } = useAppMode()
 const { syncToNative } = usePortForward()
 const proxyOpen = ref(false)
 const terminalOpen = ref(false)
+const terminalRequestedCwd = ref(null)
 
 // File watch auto-refresh (fsnotify + SSE)
 
@@ -469,9 +471,15 @@ async function handleRefresh() {
     await refreshCurrentFile({ loadDir: true, clearOnError: true })
 }
 
+function handleDockTerminal() {
+    terminalRequestedCwd.value = null
+    openDrawer('terminal')
+}
+
 function handleOpenTerminal(cwd) {
-    // Force open terminal (not toggle) — if already open, the
-    // TerminalPanel watches currentDir changes and will auto-rebuild
+    terminalRequestedCwd.value = cwd || null
+    // Force open terminal (not toggle) — if already open, TerminalPanel will
+    // prompt before closing the existing PTY when the target cwd differs.
     terminalOpen.value = true
     ensureDrawerOpen('terminal')
 }

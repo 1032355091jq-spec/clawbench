@@ -18,6 +18,9 @@ NotAFile: 不是文件
 NotAGitRepo: 不是Git仓库
 NoProjectSelected: 未选择项目
 AccessDenied: 访问被拒绝
+TerminalDisabled: 终端功能已关闭
+TerminalError: 终端错误
+TerminalCwdInvalid: 终端工作目录无效
 Unauthorized: 未授权
 InvalidPath: 无效路径
 PathTraversal: 检测到路径穿越攻击

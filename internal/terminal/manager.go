@@ -65,11 +65,12 @@ func NewManager(cfg model.TerminalConfig, port int) *Manager {
 // Close shuts down the manager and all active sessions.
 func (m *Manager) Close() {
 	m.mu.Lock()
-	defer m.mu.Unlock()
+	session := m.session
+	m.session = nil
+	m.mu.Unlock()
 
-	if m.session != nil {
-		m.session.Close()
-		m.session = nil
+	if session != nil {
+		session.Close()
 	}
 	slog.Info("terminal: manager closed")
 }
@@ -113,9 +114,17 @@ func (m *Manager) HandleWebSocket(w http.ResponseWriter, r *http.Request, projec
 	session := m.session
 	m.mu.Unlock()
 
-	// Upgrade to WebSocket
+	// Upgrade to WebSocket. Keep this same-origin by default while allowing
+	// localhost development frontends that proxy to the backend.
 	conn, err := websocket.Accept(w, r, &websocket.AcceptOptions{
-		OriginPatterns: []string{"*"},
+		OriginPatterns: []string{
+			"http://" + r.Host,
+			"https://" + r.Host,
+			"http://localhost:*",
+			"https://localhost:*",
+			"http://127.0.0.1:*",
+			"https://127.0.0.1:*",
+		},
 	})
 	if err != nil {
 		return fmt.Errorf("websocket upgrade failed: %w", err)
@@ -176,11 +185,12 @@ func (m *Manager) handleClientMessages(session *Session, conn *websocket.Conn) {
 // CloseSession closes the current terminal session.
 func (m *Manager) CloseSession() {
 	m.mu.Lock()
-	defer m.mu.Unlock()
+	session := m.session
+	m.session = nil
+	m.mu.Unlock()
 
-	if m.session != nil {
-		m.session.Close()
-		m.session = nil
+	if session != nil {
+		session.Close()
 	}
 }
 
@@ -190,6 +200,10 @@ func (m *Manager) Status() (hasSession bool, cwd string, running bool) {
 	defer m.mu.Unlock()
 
 	if m.session == nil {
+		return false, "", false
+	}
+	if !m.session.IsRunning() {
+		m.session = nil
 		return false, "", false
 	}
 	return true, m.session.Cwd(), true

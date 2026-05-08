@@ -35,6 +35,8 @@ type Session struct {
 	idleTimeout time.Duration
 	cancelRead  context.CancelFunc
 	done        chan struct{}
+	running     bool
+	exitCode    int
 	closed      bool
 }
 
@@ -58,6 +60,7 @@ func NewSession(projectPath, cwd string, cfg TerminalConfig) (*Session, error) {
 		buffer:      NewRingBuffer(cfg.BufferLines, cfg.MaxLineBytes, cfg.MaxBufferMB*1024*1024),
 		idleTimeout: idleTimeout,
 		done:        make(chan struct{}),
+		running:     true,
 	}
 
 	// Start idle timer (will be stopped when a client connects)
@@ -80,6 +83,13 @@ func NewSession(projectPath, cwd string, cfg TerminalConfig) (*Session, error) {
 // readPTY reads output from the PTY and broadcasts it to the WebSocket client
 // while writing to the ring buffer.
 func (s *Session) readPTY(ctx context.Context) {
+	s.mu.Lock()
+	ptmx := s.ptmx
+	s.mu.Unlock()
+	if ptmx == nil {
+		return
+	}
+
 	buf := make([]byte, 4096)
 	for {
 		select {
@@ -88,7 +98,7 @@ func (s *Session) readPTY(ctx context.Context) {
 		default:
 		}
 
-		n, err := s.ptmx.Read(buf)
+		n, err := ptmx.Read(buf)
 		if n > 0 {
 			data := buf[:n]
 
@@ -112,6 +122,8 @@ func (s *Session) readPTY(ctx context.Context) {
 }
 
 // waitProcess waits for the PTY process to exit and notifies the client.
+// This is the only place that calls cmd.Wait(); Close() signals the process and
+// waits on s.done to avoid racing or double-waiting on exec.Cmd.
 func (s *Session) waitProcess() {
 	err := s.cmd.Wait()
 	exitCode := 0
@@ -121,10 +133,33 @@ func (s *Session) waitProcess() {
 		}
 	}
 
-	s.sendToClient(ServerMessage{
-		Type: "exit",
-		Code: exitCode,
-	})
+	s.mu.Lock()
+	alreadyClosed := s.closed
+	s.running = false
+	s.exitCode = exitCode
+	s.closed = true
+	if s.idleTimer != nil {
+		s.idleTimer.Stop()
+	}
+	if s.cancelRead != nil {
+		s.cancelRead()
+	}
+	ptmx := s.ptmx
+	s.ptmx = nil
+	s.mu.Unlock()
+
+	if !alreadyClosed {
+		s.sendToClient(ServerMessage{
+			Type: "exit",
+			Code: exitCode,
+		})
+	}
+
+	if ptmx != nil {
+		ptmx.Close()
+	}
+	s.buffer.Reset()
+	close(s.done)
 
 	slog.Info("terminal: process exited",
 		slog.String("project", s.projectPath),
@@ -226,52 +261,51 @@ func (s *Session) HandleResize(cols, rows uint16) error {
 // Close terminates the PTY process, closes the WebSocket, and cleans up resources.
 func (s *Session) Close() {
 	s.mu.Lock()
-	defer s.mu.Unlock()
-
 	if s.closed {
+		s.mu.Unlock()
 		return
 	}
 	s.closed = true
+	s.running = false
 
 	slog.Info("terminal: closing session", slog.String("project", s.projectPath))
 
-	// Stop idle timer
-	s.idleTimer.Stop()
-
-	// Cancel PTY reader
+	if s.idleTimer != nil {
+		s.idleTimer.Stop()
+	}
 	if s.cancelRead != nil {
 		s.cancelRead()
 	}
+	cmd := s.cmd
+	s.mu.Unlock()
 
-	// Signal the PTY process group
-	if s.cmd != nil && s.cmd.Process != nil {
-		killProcessGroup(s.cmd, syscall.SIGTERM)
-
-		// Wait briefly for graceful exit
-		done := make(chan error, 1)
-		go func() { done <- s.cmd.Wait() }()
+	if cmd != nil && cmd.Process != nil {
+		killProcessGroup(cmd, syscall.SIGTERM)
 
 		select {
-		case <-done:
-			// Process exited cleanly
+		case <-s.done:
+			// Process exited cleanly; waitProcess performed process wait.
 		case <-time.After(3 * time.Second):
-			// Force kill
-			killProcessGroup(s.cmd, syscall.SIGKILL)
+			killProcessGroup(cmd, syscall.SIGKILL)
+			select {
+			case <-s.done:
+			case <-time.After(1 * time.Second):
+				slog.Warn("terminal: process did not exit after SIGKILL", slog.String("project", s.projectPath))
+			}
 		}
 	}
 
-	// Close PTY
+	s.mu.Lock()
 	if s.ptmx != nil {
 		s.ptmx.Close()
+		s.ptmx = nil
 	}
-
-	// Close WebSocket
 	if s.wsConn != nil {
 		s.wsConn.Close(websocket.StatusNormalClosure, "session closed")
 		s.wsConn = nil
 	}
+	s.mu.Unlock()
 
-	// Clear buffer
 	s.buffer.Reset()
 }
 
@@ -313,4 +347,11 @@ func (s *Session) Cwd() string {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.cwd
+}
+
+// IsRunning reports whether the PTY process is still alive.
+func (s *Session) IsRunning() bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.running && !s.closed
 }

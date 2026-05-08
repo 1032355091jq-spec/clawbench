@@ -488,13 +488,10 @@ function doOpenAsProject() {
 
 function doOpenTerminal() {
     ctxMenu.visible = false
-    if (ctxMenu.entry && ctxMenu.entry.type === 'dir') {
-        // Navigate into the directory first (updates currentDir + dirEntries)
-        // then open the terminal — computeCwd() reads store.state.currentDir
-        emit('navigateDir', ctxMenu.entry.path)
-    }
-    // If no entry (blank area), currentDir is already correct
-    emit('openTerminal')
+    const targetCwd = ctxMenu.entry && ctxMenu.entry.type === 'dir'
+        ? ctxMenu.entry.path
+        : props.currentDir
+    emit('openTerminal', targetCwd || '')
 }
 
 async function doRename() {

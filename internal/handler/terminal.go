@@ -35,10 +35,11 @@ func TerminalWebSocket(w http.ResponseWriter, r *http.Request) {
 	cwd := projectPath
 	if relCwd := r.URL.Query().Get("cwd"); relCwd != "" {
 		absCwd, ok := model.ValidatePath(projectPath, relCwd)
-		if ok {
-			cwd = absCwd
+		if !ok {
+			writeLocalizedError(w, r, model.Forbidden(nil, "TerminalCwdInvalid"))
+			return
 		}
-		// If validation fails, fall back to projectPath
+		cwd = absCwd
 	}
 
 	if err := terminalMgr.HandleWebSocket(w, r, projectPath, cwd); err != nil {
