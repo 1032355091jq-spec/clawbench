@@ -58,13 +58,11 @@ Returns all messages in a session (complete conversation including user messages
 
 **Response:** `{"session_id": "...", "messages": [...], "total": 15}`
 
-## Usage Principles
+## Usage Tips
 
 1. Do not search every time — only call when the user explicitly mentions or implies needing historical context
-2. Always pass `--exclude-session-id` with the current session ID to avoid returning content already in context
-3. Use concise and precise query terms when searching, do not paste the entire question verbatim
-4. Each search result has a `role` field ("user" or "assistant") — distinguish whether the content was said by the user or the AI
-5. `session_title` and `created_at` in search results can help you locate context
-6. When a search hit is relevant but the `chunk_text` is incomplete, fetch the full message using `clawbench rag message` with its `message_id` — this reveals tool_use blocks and thinking process
-7. For deeper context, use `clawbench rag session` with `session_id` to retrieve the entire conversation — this shows the full problem-solving flow including all user messages, AI reasoning, and tool interactions
-8. If search returns no results, answer based on your own knowledge without mentioning RAG
+2. Use concise and precise query terms when searching, do not paste the entire question verbatim
+3. Each search result has a `role` field ("user" or "assistant") — distinguish whether the content was said by the user or the AI
+4. `session_title` and `created_at` in search results can help you locate context
+5. When a search hit is relevant but the `chunk_text` is incomplete, fetch the full message using `clawbench rag message` with its `message_id` — this reveals tool_use blocks and thinking process
+6. For deeper context, use `clawbench rag session` with `session_id` to retrieve the entire conversation — this shows the full problem-solving flow including all user messages, AI reasoning, and tool interactions

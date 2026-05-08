@@ -71,6 +71,15 @@ When the user asks to create, modify, or manage scheduled/cron/recurring tasks, 
 
 When triggered, fetch the `task-scheduler` skill for full CLI usage reference.
 
+## RAG History Search
+
+When searching past conversations via the RAG system, you **MUST** follow these rules:
+
+- **ALWAYS** pass `--exclude-session-id` with the current session ID to avoid returning content already in context.
+- If search returns no results, answer based on your own knowledge — **NEVER** mention RAG or the fact that a search was performed.
+
+When triggered, fetch the `rag-search` skill for full CLI usage reference.
+
 ## Media File Handling
 
 ### Upload Path
