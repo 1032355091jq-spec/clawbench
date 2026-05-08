@@ -13,7 +13,7 @@
       ref="messageListRef"
       :messages="messages"
       :expandedTools="render.expandedTools.value"
-      :blockProposals="render.blockProposals"
+      :blockTasks="render.blockTasks"
       :blockAskQuestions="render.blockAskQuestions"
       :agents="agentsList"
       :currentAgent="currentAgent"
@@ -29,6 +29,7 @@
       @file-tag-click="handleFileTagClick"
       @load-more="handleLoadMore"
       @edit-task="openTaskEdit"
+      @task-action="handleTaskAction"
       @send-message="handleToolSendMessage"
       @remove-pending="manager.handleRemovePending"
       @render-flush="scrollBottom()"
@@ -239,6 +240,23 @@ function handleTaskEditSaved() {
   taskDrawerRef.value?.loadTasks()
 }
 
+async function handleTaskAction(taskId, action) {
+  try {
+    if (action === 'delete') {
+      await fetch(`/api/tasks/${taskId}`, { method: 'DELETE' })
+    } else {
+      await fetch(`/api/tasks/${taskId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action })
+      })
+    }
+    render.refreshTaskData(taskId)
+  } catch (err) {
+    console.error(`Failed to ${action} task:`, err)
+  }
+}
+
 function handleFileTagClick(filePath) {
     if (filePath) {
         openFilePath(filePath)
@@ -253,11 +271,11 @@ const session = useChatSession({
   messages,
   loading,
   inputDisabled,
-  blockProposals: render.blockProposals,
+  blockTasks: render.blockTasks,
   blockAskQuestions: render.blockAskQuestions,
   expandedTools: render.expandedTools,
   onParseAssistantContent: (content) => render.parseAssistantContent(content),
-  onExtractScheduleProposals: (msgs) => render.extractScheduleProposals(msgs),
+  onExtractScheduledTasks: (msgs) => render.extractScheduledTasks(msgs),
   onRenderUpdate: (forceFull) => render.updateRenderedContents(forceFull),
   onScrollBottom: (force) => scrollBottom(force),
   onConnectStream: (sessionId) => stream.connectStream(sessionId),
@@ -307,7 +325,6 @@ const stream = useChatStream({
   onMessage: () => emit('message'),
   onOpen: () => emit('open'),
   isOpen: toRef(props, 'open'),
-  createScheduledTask: (proposal) => render.createScheduledTask(proposal),
   onParseAssistantContent: (content) => render.parseAssistantContent(content),
   onToast: (msg, opts) => toast.show(msg, opts),
   onNotification: (title, opts) => notification.show(title, opts),

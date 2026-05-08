@@ -11,12 +11,12 @@ export interface UseChatSessionOptions {
   messages: Ref<any[]>
   loading: Ref<boolean>
   inputDisabled: Ref<boolean>
-  blockProposals: Record<string, any>
+  blockTasks: Record<string, any>
   blockAskQuestions: Record<string, any>
   expandedTools: Ref<Record<string, boolean>>
   switching?: Ref<boolean>
   onParseAssistantContent: (content: string) => any
-  onExtractScheduleProposals: (msgs: any[]) => void
+  onExtractScheduledTasks: (msgs: any[]) => void
   onRenderUpdate: (forceFull: boolean) => void
   onScrollBottom: (force?: boolean) => void
   onConnectStream: (sessionId: string) => void
@@ -34,11 +34,11 @@ export function useChatSession(options: UseChatSessionOptions) {
     messages,
     loading,
     inputDisabled,
-    blockProposals,
+    blockTasks,
     blockAskQuestions,
     expandedTools,
     onParseAssistantContent,
-    onExtractScheduleProposals,
+    onExtractScheduledTasks,
     onRenderUpdate,
     onScrollBottom,
     onConnectStream,
@@ -174,7 +174,7 @@ export function useChatSession(options: UseChatSessionOptions) {
       expandedTools.value = {}
       // Clear stale blockAskQuestions — after backend converts <ask-question> text blocks
       // to tool_use blocks, old entries keyed by text-block indices would cause duplicate
-      // rendering. extractScheduleProposals below will re-populate from current DB state.
+      // rendering. extractScheduledTasks below will re-populate from current DB state.
       Object.keys(blockAskQuestions).forEach(k => delete blockAskQuestions[k])
       messages.value = parseMessages(rawMsgs)
       totalMessages.value = data.total || messages.value.length
@@ -183,7 +183,7 @@ export function useChatSession(options: UseChatSessionOptions) {
       currentBackend.value = data.backend || ''
       currentAgentId.value = data.agentId || ''
       syncModelFromData(currentAgentId.value, data.modelId)
-      onExtractScheduleProposals(messages.value)
+      onExtractScheduledTasks(messages.value)
       onRenderUpdate(true)
       if (data.running) {
         loading.value = true
@@ -218,7 +218,7 @@ export function useChatSession(options: UseChatSessionOptions) {
       if (olderMsgs.length > 0) {
         messages.value = [...olderMsgs, ...messages.value]
         totalMessages.value = data.total || totalMessages.value
-        onExtractScheduleProposals(olderMsgs)
+        onExtractScheduledTasks(olderMsgs)
         onRenderUpdate(true)
       }
     } catch (err) {
@@ -269,7 +269,7 @@ export function useChatSession(options: UseChatSessionOptions) {
       currentBackend.value = data.backend || ''
       currentAgentId.value = data.agentId || ''
       syncModelFromData(currentAgentId.value, data.modelId)
-      onExtractScheduleProposals(messages.value)
+      onExtractScheduledTasks(messages.value)
       onRenderUpdate(true)
       onScrollBottom(true)
       if (data.running) {
@@ -316,7 +316,7 @@ export function useChatSession(options: UseChatSessionOptions) {
       messages.value = []
       totalMessages.value = 0
       lastMessageSnapshot = ''  // New session — no messages yet
-      Object.keys(blockProposals).forEach(k => delete blockProposals[k])
+      Object.keys(blockTasks).forEach(k => delete blockTasks[k])
       Object.keys(blockAskQuestions).forEach(k => delete blockAskQuestions[k])
       loading.value = false
       const maxCount = store.state.sessionMaxCount

@@ -42,7 +42,7 @@
       :msg="msg"
       :index="i"
       :expandedTools="expandedTools"
-      :blockProposals="blockProposals"
+      :blockTasks="blockTasks"
       :blockAskQuestions="blockAskQuestions"
       :agents="agents"
       :shouldCollapse="isCollapsed(i, msg)"
@@ -50,6 +50,7 @@
       @show-metadata="$emit('show-metadata', $event)"
       @file-tag-click="$emit('file-tag-click', $event)"
       @edit-task="$emit('edit-task', $event)"
+      @task-action="(id, action) => $emit('task-action', id, action)"
       @send-message="$emit('send-message', $event)"
       @expand="handleExpand"
       @collapse="handleCollapse"
@@ -85,7 +86,7 @@ const { t } = useI18n()
 const props = defineProps({
   messages: Array,
   expandedTools: Object,
-  blockProposals: Object,
+  blockTasks: Object,
   blockAskQuestions: Object,
   agents: Array,
   currentAgent: Object,
@@ -96,7 +97,7 @@ const props = defineProps({
   pendingMessages: { type: Array, default: () => [] },
 })
 
-const emit = defineEmits(['toggle-tool', 'show-metadata', 'file-tag-click', 'file-open', 'load-more', 'edit-task', 'send-message', 'remove-pending', 'render-flush'])
+const emit = defineEmits(['toggle-tool', 'show-metadata', 'file-tag-click', 'file-open', 'load-more', 'edit-task', 'task-action', 'send-message', 'remove-pending', 'render-flush'])
 
 const messagesRef = ref(null)
 const { handleDblClick } = useDoubleClickCopy()

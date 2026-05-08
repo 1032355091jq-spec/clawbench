@@ -13,7 +13,6 @@ export interface UseChatStreamOptions {
   onMessage: () => void
   onOpen: () => void
   isOpen: Ref<boolean>
-  createScheduledTask: (proposal: any) => void
   onParseAssistantContent: (content: string) => { blocks: any[]; metadata?: any; cancelled?: boolean }
   onToast: (msg: string, opts?: any) => void
   onNotification: (title: string, opts?: any) => void
@@ -38,7 +37,6 @@ export function useChatStream(options: UseChatStreamOptions) {
     onMessage,
     onOpen,
     isOpen,
-    createScheduledTask,
     onParseAssistantContent,
     onToast,
     onNotification,

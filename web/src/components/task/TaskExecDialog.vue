@@ -69,7 +69,7 @@
         msgId="exec-detail"
         :msgIndex="0"
         :expandedTools="expandedTools"
-        :blockProposals="{}"
+        :blockTasks="{}"
         :renderTextBlock="chatRender.renderTextBlock"
         :formatToolInput="chatRender.formatToolInput"
         :toolCallSummary="chatRender.toolCallSummary"
@@ -159,7 +159,7 @@ function extractSummary(blocks) {
     if (block.type === 'text' && block.text) {
       // Strip schedule-proposal tags and markdown
       const clean = block.text
-        .replace(/<schedule-proposal>[\s\S]*?<\/schedule-proposal>/g, '')
+        .replace(/<scheduled-task\s+id="[^"]+"\s*\/>/g, '')
         .replace(/[#*`_~\[\]()]/g, '')
         .trim()
       if (clean) {
