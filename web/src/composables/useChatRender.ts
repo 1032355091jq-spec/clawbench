@@ -112,8 +112,11 @@ export function useChatRender(options) {
   }
 
   function renderTextBlock(text, msgId, blockIdx) {
-    // Detect <scheduled-task id="..." /> tags
-    const scheduledTaskRegex = /<scheduled-task\s+id="([^"]+)"\s*\/>/g
+    // Detect <scheduled-task id="..." /> tags — only match UUID-format IDs
+    // to avoid false positives when AI mentions the tag format in prose
+    // (e.g. `<scheduled-task id="..."/>` as documentation)
+    const UUID_RE = '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}'
+    const scheduledTaskRegex = new RegExp(`<scheduled-task\\s+id="(${UUID_RE})"\\s*/>`, 'gi')
     let tagIdx = 0
     let match
 
@@ -189,12 +192,12 @@ export function useChatRender(options) {
       } else {
         cleanText = text.replace(askFullTagRegex, '').trim()
       }
-      // Strip scheduled-task tags from the remaining text
-      cleanText = cleanText.replace(/<scheduled-task\s+id="[^"]+"\s*\/>/g, '').trim()
+      // Strip scheduled-task tags (UUID-only) from the remaining text
+      cleanText = cleanText.replace(/<scheduled-task\s+id="[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"\s*\/>/gi, '').trim()
       return cleanText ? renderMarkdown(cleanText) : ''
     }
-    // No ask-question: strip scheduled-task tags and render
-    const cleanText = text.replace(/<scheduled-task\s+id="[^"]+"\s*\/>/g, '').trim()
+    // No ask-question: strip scheduled-task tags (UUID-only) and render
+    const cleanText = text.replace(/<scheduled-task\s+id="[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"\s*\/>/gi, '').trim()
     return cleanText ? renderMarkdown(cleanText) : ''
   }
 
@@ -255,10 +258,10 @@ export function useChatRender(options) {
         for (let bi = 0; bi < msg.blocks.length; bi++) {
           const block = msg.blocks[bi]
           if (block.type === 'text') {
-            // Extract <scheduled-task id="..." /> tags only.
+            // Extract <scheduled-task id="..." /> tags only (UUID-format IDs).
             // <ask-question> parsing is handled lazily in renderTextBlock()
             // to avoid duplicating expensive regex work on every session load.
-            const scheduledTaskRegex = /<scheduled-task\s+id="([^"]+)"\s*\/>/g
+            const scheduledTaskRegex = /<scheduled-task\s+id="([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})"\s*\/>/gi
             let tagIdx = 0
             let match
             scheduledTaskRegex.lastIndex = 0
