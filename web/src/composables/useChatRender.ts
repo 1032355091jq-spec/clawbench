@@ -11,7 +11,7 @@ export function useChatRender(options) {
   const { messages, theme, currentSessionId } = options
   const { annotateFilePaths, verifyFilePaths } = useFilePathAnnotation()
 
-  const blockProposals = reactive({})
+  const blockTasks = reactive({})
   const blockAskQuestions = reactive({})
   const expandedTools = ref({})
   let lastRenderedCount = 0
@@ -21,34 +21,55 @@ export function useChatRender(options) {
     updateRenderedContents(true)
   })
 
-  // Sync blockProposals with latest task data from store (global polling updates store.state.tasks)
+  // Sync blockTasks with latest task data from store (global polling updates store.state.tasks)
   watch(() => store.state.tasks, (tasks) => {
     if (!tasks) return
-    for (const key of Object.keys(blockProposals)) {
-      const proposal = blockProposals[key].proposal
-      if (proposal.task_id) {
-        const task = tasks.find(t => t.id === proposal.task_id)
-        if (task) {
-          blockProposals[key] = {
-            proposal: {
-              ...proposal,
-              name: task.name,
-              cron_expr: task.cronExpr,
-              agent_id: task.agentId,
-              repeat_mode: task.repeatMode,
-              max_runs: task.maxRuns,
-              prompt: task.prompt,
-            }
-          }
-        } else {
-          // Task no longer in list — it was deleted
-          if (!blockProposals[key].deleted) {
-            blockProposals[key] = { ...blockProposals[key], deleted: true }
-          }
-        }
+    for (const key of Object.keys(blockTasks)) {
+      const entry = blockTasks[key]
+      if (entry.deleted || !entry.task) continue
+      const updated = tasks.find(t => t.id === entry.taskId)
+      if (!updated) {
+        entry.deleted = true
+      } else {
+        entry.task = updated
       }
     }
   }, { deep: true })
+
+  async function fetchTaskData(key, taskId) {
+    if (blockTasks[key]?.task || blockTasks[key]?.loading) return
+    blockTasks[key] = { taskId, task: null, loading: true, deleted: false }
+    try {
+      const resp = await fetch(`/api/tasks/${taskId}`)
+      if (resp.status === 404) {
+        blockTasks[key].deleted = true
+        blockTasks[key].loading = false
+        return
+      }
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
+      blockTasks[key].task = await resp.json()
+    } catch {
+      blockTasks[key].deleted = true
+    } finally {
+      blockTasks[key].loading = false
+    }
+  }
+
+  async function refreshTaskData(taskId) {
+    for (const key of Object.keys(blockTasks)) {
+      if (blockTasks[key].taskId === taskId && !blockTasks[key].deleted) {
+        try {
+          const resp = await fetch(`/api/tasks/${taskId}`)
+          if (resp.status === 404) {
+            blockTasks[key].deleted = true
+            blockTasks[key].task = null
+          } else if (resp.ok) {
+            blockTasks[key].task = await resp.json()
+          }
+        } catch { /* ignore */ }
+      }
+    }
+  }
 
   function renderMarkdown(text) {
     let html = marked.parse((text || '').trim())
@@ -80,24 +101,18 @@ export function useChatRender(options) {
   }
 
   function renderTextBlock(text, msgId, blockIdx) {
-    // Detect all <schedule-proposal> tags — support multiple proposals per block
-    const proposalRegex = /<schedule-proposal\b[^>]*>([\s\S]*?)<\/schedule-proposal>/g
-    const proposalMatches = [...text.matchAll(proposalRegex)]
-    if (proposalMatches.length > 0) {
-      proposalMatches.forEach((match, proposalIdx) => {
-        const proposalKey = `${msgId}-${blockIdx}-${proposalIdx}`
-        if (!blockProposals[proposalKey]) {
-          try {
-            const proposal = JSON.parse(match[1].trim())
-            blockProposals[proposalKey] = { proposal }
-          } catch (e) {
-            console.error('Failed to parse schedule proposal:', e)
-          }
-        }
-      })
-      const cleanText = text.replace(/<schedule-proposal\b[^>]*>[\s\S]*?<\/schedule-proposal>/g, '').trim()
-      return cleanText ? renderMarkdown(cleanText) : ''
+    // Detect <scheduled-task id="..." /> tags
+    const scheduledTaskRegex = /<scheduled-task\s+id="([^"]+)"\s*\/>/g
+    let tagIdx = 0
+    let match
+
+    while ((match = scheduledTaskRegex.exec(text)) !== null) {
+      const taskId = match[1]
+      const key = `${msgId}-${blockIdx}-${tagIdx}`
+      fetchTaskData(key, taskId)
+      tagIdx++
     }
+
     // Detect <ask-question> tags — strip from text and store for interactive rendering.
     // Two-pass strategy:
     //   1. Try the standard regex requiring a closing </ask-question> tag.
@@ -163,9 +178,13 @@ export function useChatRender(options) {
       } else {
         cleanText = text.replace(askFullTagRegex, '').trim()
       }
+      // Strip scheduled-task tags from the remaining text
+      cleanText = cleanText.replace(/<scheduled-task\s+id="[^"]+"\s*\/>/g, '').trim()
       return cleanText ? renderMarkdown(cleanText) : ''
     }
-    return renderMarkdown(text)
+    // No ask-question: strip scheduled-task tags and render
+    const cleanText = text.replace(/<scheduled-task\s+id="[^"]+"\s*\/>/g, '').trim()
+    return cleanText ? renderMarkdown(cleanText) : ''
   }
 
   function parseAssistantContent(content) {
@@ -219,26 +238,23 @@ export function useChatRender(options) {
     return { blocks: [{ type: 'text', text: content }], metadata: null }
   }
 
-  function extractScheduleProposals(msgs) {
+  function extractScheduledTasks(msgs) {
     for (const msg of msgs) {
       if (msg.role === 'assistant' && msg.blocks && !msg.streaming) {
         for (let bi = 0; bi < msg.blocks.length; bi++) {
           const block = msg.blocks[bi]
           if (block.type === 'text') {
-            // Extract all <schedule-proposal> tags (support multiple per block)
-            const proposalRegex = /<schedule-proposal\b[^>]*>([\s\S]*?)<\/schedule-proposal>/g
-            const proposalMatches = [...block.text.matchAll(proposalRegex)]
-            proposalMatches.forEach((match, proposalIdx) => {
-              const proposalKey = `${msg.id}-${bi}-${proposalIdx}`
-              const existing = blockProposals[proposalKey]
-              if (existing && existing.proposal.task_id) return // Don't overwrite if already has task_id
-              try {
-                const proposal = JSON.parse(match[1].trim())
-                blockProposals[proposalKey] = { proposal }
-              } catch (e) {
-                console.error('Failed to parse schedule proposal:', e)
-              }
-            })
+            // Extract all <scheduled-task id="..." /> tags
+            const scheduledTaskRegex = /<scheduled-task\s+id="([^"]+)"\s*\/>/g
+            let tagIdx = 0
+            let match
+            scheduledTaskRegex.lastIndex = 0
+            while ((match = scheduledTaskRegex.exec(block.text || '')) !== null) {
+              const taskId = match[1]
+              const key = `${msg.id}-${bi}-${tagIdx}`
+              fetchTaskData(key, taskId)
+              tagIdx++
+            }
             // Also extract <ask-question> tags for interactive rendering.
             // Same two-pass strategy as renderTextBlock: standard match first,
             // then fallback for unclosed tags (missing </ask-question>).
@@ -423,13 +439,14 @@ export function useChatRender(options) {
   }
 
   return {
-    blockProposals,
+    blockTasks,
     blockAskQuestions,
     expandedTools,
     renderMarkdown,
     renderTextBlock,
     parseAssistantContent,
-    extractScheduleProposals,
+    extractScheduledTasks,
+    refreshTaskData,
     updateRenderedContents,
     toggleToolDetail,
     formatToolInput,
