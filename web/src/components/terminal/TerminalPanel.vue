@@ -10,14 +10,12 @@
         </div>
         <div class="terminal-header-right">
           <span class="terminal-font-size" @click="applyFontSize(DEFAULT_FONT_SIZE)" :title="t('terminal.resetFontSize')">{{ fontSize }}</span>
-          <span v-if="connectionState === 'connected'" class="terminal-status connected">{{ t('terminal.connected') }}</span>
-          <span v-else-if="connectionState === 'connecting' || connectionState === 'reconnecting'" class="terminal-status connecting">{{ t('terminal.reconnecting') }}</span>
-          <span v-else class="terminal-status disconnected">{{ t('terminal.disconnected') }}</span>
+          <span class="terminal-status-dot" :class="connectionState"></span>
         </div>
       </div>
 
       <!-- Terminal viewport -->
-      <div ref="terminalContainer" class="terminal-container" :class="{ 'gesture-mode': gestures.enabled.value }" @click.self="focusTerminal">
+      <div ref="terminalContainer" class="terminal-container" @click.self="focusTerminal">
         <!-- Rebuild overlay -->
         <div v-if="rebuilding" class="terminal-rebuild-overlay">
           <span class="terminal-rebuild-spinner"></span>
@@ -321,7 +319,7 @@ function initTerminal() {
     cursorBlink: true,
     convertEol: true,
     scrollback: 5000,
-    selectionStyle: 'plain',
+    selectionStyle: 'line',
     rightClickSelectsWord: true,
   })
 
@@ -641,22 +639,31 @@ function openEditDialog() {
   color: var(--text-primary);
 }
 
-.terminal-status {
-  font-size: 11px;
-  padding: 1px 6px;
-  border-radius: 8px;
+.terminal-status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--text-muted);
 }
 
-.terminal-status.connected {
-  color: var(--color-green);
+.terminal-status-dot.connected {
+  background: var(--color-green);
 }
 
-.terminal-status.connecting {
-  color: var(--color-yellow);
+.terminal-status-dot.connecting,
+.terminal-status-dot.reconnecting {
+  background: var(--color-yellow);
+  animation: status-blink 1s ease-in-out infinite;
 }
 
-.terminal-status.disconnected {
-  color: var(--text-muted);
+.terminal-status-dot.disconnected,
+.terminal-status-dot.error {
+  background: var(--text-muted);
+}
+
+@keyframes status-blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.3; }
 }
 
 .terminal-container {
@@ -665,14 +672,6 @@ function openEditDialog() {
   overflow: hidden;
   position: relative;
   background: #1e1e2e;
-}
-
-/* Gesture mode: disable pointer events on xterm's internal elements so that
-   touch/mouse events target the container div instead. This prevents xterm's
-   built-in selection and gesture service from handling touches. Our capture-
-   phase touch listeners on the container still work normally. */
-.terminal-container.gesture-mode :deep(.xterm-screen) {
-  pointer-events: none;
 }
 
 /* Hide xterm.js scrollbar — mobile terminal uses gestures/swipe for navigation,
