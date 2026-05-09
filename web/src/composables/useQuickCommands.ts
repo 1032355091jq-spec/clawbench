@@ -14,7 +14,6 @@ export interface QuickCommand {
 const commands = ref<QuickCommand[]>([])
 const loaded = ref(false)
 const showEditDialog = ref(false)
-const autoExecFired = ref(false)
 
 export function useQuickCommands() {
   const visibleCommands = computed(() => commands.value.filter(c => !c.hidden))
@@ -78,10 +77,6 @@ export function useQuickCommands() {
     }
   }
 
-  function resetAutoExec() {
-    autoExecFired.value = false
-  }
-
   return {
     commands,
     visibleCommands,
@@ -92,8 +87,6 @@ export function useQuickCommands() {
     deleteCommand,
     reorderCommands,
     showEditDialog,
-    autoExecFired,
-    resetAutoExec,
     loaded,
   }
 }

@@ -229,8 +229,6 @@ const {
   autoExecCommand,
   fetchCommands,
   showEditDialog,
-  autoExecFired,
-  resetAutoExec,
 } = useQuickCommands()
 
 // Terminal viewport
@@ -361,10 +359,9 @@ function initTerminal() {
       term.write(data)
     },
     onStatus: (status) => {
-      // Auto-execute quick command on new PTY session
-      if (!autoExecFired.value && autoExecCommand.value) {
+      // Auto-execute quick command on every connect/reconnect
+      if (autoExecCommand.value) {
         session.sendInput(autoExecCommand.value.command + '\r')
-        autoExecFired.value = true
       }
     },
     onExit: (code) => {
@@ -536,7 +533,6 @@ async function handleRebuild() {
   showCommands.value = false
   showReopenPrompt.value = false
   rebuilding.value = true
-  resetAutoExec() // Allow auto-execute on new PTY
 
   // Close session via HTTP API (synchronous — ensures PTY is dead and m.session = nil)
   try {
