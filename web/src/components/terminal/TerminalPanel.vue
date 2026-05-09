@@ -422,13 +422,23 @@ function focusTerminal() {
   xterm.value?.focus()
 }
 
+// Track whether the user explicitly closed the session (❌ button).
+// On next open, we auto-rebuild instead of showing error overlay.
+const userClosedSession = ref(false)
+
 // Watch open/close
 watch(() => props.open, async (isOpen) => {
   if (isOpen) {
     emit('open')
     initTerminal()
     await nextTick()
-    await mountTerminal()
+    // If user previously closed the session (❌), auto-rebuild a fresh PTY
+    if (userClosedSession.value) {
+      userClosedSession.value = false
+      await autoRebuild()
+    } else {
+      await mountTerminal()
+    }
   } else {
     // Drawer closed (user swipe-down, parent hides, etc.)
     // Disconnect session and clean up so next open is fresh
@@ -499,6 +509,8 @@ function handleClose() {
   // Close PTY process on server
   session.sendClose()
   session.disconnect()
+  // Mark that user explicitly closed — next open will auto-rebuild
+  userClosedSession.value = true
   // Reset state
   terminalKeys.reset()
   showCommands.value = false
@@ -534,6 +546,18 @@ async function handleRebuild() {
   showReopenPrompt.value = false
   rebuilding.value = true
 
+  await rebuildSession()
+}
+
+// Auto-rebuild: called when opening terminal after user closed previous session.
+// Ensures old PTY is dead, resets session state, and creates a fresh PTY.
+async function autoRebuild() {
+  rebuilding.value = true
+
+  await rebuildSession()
+}
+
+async function rebuildSession() {
   // Close session via HTTP API (synchronous — ensures PTY is dead and m.session = nil)
   try {
     await fetch('/api/terminal/close', { method: 'POST' })
