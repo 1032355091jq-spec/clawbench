@@ -115,6 +115,9 @@ export function useTerminalGestures(
   }
 
   function onTouchStart(e: TouchEvent) {
+    // Block xterm.js internal touch handlers (selection) when gestures are active
+    e.stopPropagation()
+
     if (e.touches.length === 2) {
       // Pinch gesture start
       initialPinchDistance = getTouchDistance(e.touches[0], e.touches[1])
@@ -136,6 +139,9 @@ export function useTerminalGestures(
   }
 
   function onTouchMove(e: TouchEvent) {
+    // Block xterm.js internal touch handlers when gestures are active
+    e.stopPropagation()
+
     // Pinch zoom
     if (e.touches.length === 2 && initialPinchDistance > 0) {
       const currentDistance = getTouchDistance(e.touches[0], e.touches[1])
@@ -168,6 +174,9 @@ export function useTerminalGestures(
   }
 
   function onTouchEnd(e: TouchEvent) {
+    // Block xterm.js internal touch handlers when gestures are active
+    e.stopPropagation()
+
     // Reset pinch state when one or both fingers lift
     if (e.touches.length < 2) {
       initialPinchDistance = 0
@@ -219,9 +228,12 @@ export function useTerminalGestures(
     const el = elementRef.value
     if (!el) return
 
-    el.addEventListener('touchstart', onTouchStart, { passive: true })
-    el.addEventListener('touchmove', onTouchMove, { passive: true })
-    el.addEventListener('touchend', onTouchEnd, { passive: true })
+    // Use capture phase so our handlers fire BEFORE xterm.js internal handlers.
+    // This lets us preventDefault() + stopPropagation() to block xterm's
+    // native touch selection when gestures are active.
+    el.addEventListener('touchstart', onTouchStart, { capture: true, passive: false })
+    el.addEventListener('touchmove', onTouchMove, { capture: true, passive: false })
+    el.addEventListener('touchend', onTouchEnd, { capture: true, passive: false })
     listenersAttached = true
   }
 
@@ -231,9 +243,9 @@ export function useTerminalGestures(
     if (!el) return
 
     stopRepeat()
-    el.removeEventListener('touchstart', onTouchStart)
-    el.removeEventListener('touchmove', onTouchMove)
-    el.removeEventListener('touchend', onTouchEnd)
+    el.removeEventListener('touchstart', onTouchStart, { capture: true })
+    el.removeEventListener('touchmove', onTouchMove, { capture: true })
+    el.removeEventListener('touchend', onTouchEnd, { capture: true })
     listenersAttached = false
   }
 
@@ -243,12 +255,19 @@ export function useTerminalGestures(
     const el = elementRef.value
     if (enabled.value) {
       attachListeners()
-      // Disable native scroll — gestures handle vertical via arrow keys
+      // Disable native scroll & selection — gestures handle everything.
+      // touchAction: none also prevents the browser from synthesizing
+      // mouse events, so xterm.js won't get dblclick/selection events.
       if (el) el.style.touchAction = 'none'
     } else {
       detachListeners()
-      // Enable native scroll — vertical drag scrolls the terminal
-      if (el) el.style.touchAction = 'pan-y'
+      // Enable xterm.js native touch selection (long-press to select,
+      // drag to extend, double-tap for word select).
+      // touchAction: manipulation disables double-tap-zoom and pinch-zoom
+      // (annoying in terminal) but still allows the browser to synthesize
+      // mouse events which xterm.js uses for its selection model.
+      // Previous value 'pan-y' broke horizontal drag selection.
+      if (el) el.style.touchAction = 'manipulation'
     }
   }
 
@@ -265,10 +284,7 @@ export function useTerminalGestures(
 
   // Called by TerminalPanel on mount
   function attach() {
-    if (enabled.value) {
-      attachListeners()
-    }
-    // When disabled, don't attach — let xterm.js handle touch natively
+    applyState()
   }
 
   // Called by TerminalPanel on unmount
