@@ -44,9 +44,6 @@
           </template>
         </draggable>
       </div>
-      <div v-else class="qc-empty">
-        {{ t('terminal.addCommand') }}
-      </div>
 
       <button class="qc-add" @click="addNewCommand">
         <PlusIcon :size="16" />
