@@ -136,6 +136,7 @@ import { useTerminalKeys } from '@/composables/useTerminalKeys'
 import { shouldPreventTerminalContextMenu, useTerminalGestures } from '@/composables/useTerminalGestures'
 import { useToast } from '@/composables/useToast'
 import { useQuickCommands } from '@/composables/useQuickCommands'
+import { useAppMode } from '@/composables/useAppMode'
 import { store } from '@/stores/app'
 import { resolveTerminalCwd, shouldPromptForTerminalReopen } from './terminalCwd'
 
@@ -265,6 +266,37 @@ const gestures = useTerminalGestures(terminalContainer, {
     gestureHintTimer = setTimeout(() => { gestureHint.value = '' }, 600)
   },
 })
+
+// Volume key → arrow key mapping (Android app mode only)
+// When the terminal panel is open, volume up/down are remapped to arrow up/down
+// via the Android native bridge. On close, the default volume behavior is restored.
+const { isAppMode } = useAppMode()
+
+function enableVolumeKeys() {
+  if (!isAppMode.value) return
+  const native = (window as any).AndroidNative
+  if (native?.setVolumeKeyMode) {
+    native.setVolumeKeyMode(true)
+  }
+}
+
+function disableVolumeKeys() {
+  if (!isAppMode.value) return
+  const native = (window as any).AndroidNative
+  if (native?.setVolumeKeyMode) {
+    native.setVolumeKeyMode(false)
+  }
+}
+
+// Register the global callback that Android calls via evaluateJavascript
+// when a volume key is pressed while volumeKeyMode is active.
+;(window as any).__onVolumeKey = (direction: 'up' | 'down') => {
+  if (direction === 'up') {
+    terminalKeys.sendArrowUp()
+  } else {
+    terminalKeys.sendArrowDown()
+  }
+}
 
 // Computed
 const shortCwd = computed(() => {
@@ -443,11 +475,13 @@ watch(() => props.open, async (isOpen) => {
   if (isOpen) {
     emit('open')
     initTerminal()
+    enableVolumeKeys()
     await nextTick()
     await mountTerminal()
   } else {
     // Drawer closed (user swipe-down, parent hides, etc.)
     // Disconnect session and clean up so next open is fresh
+    disableVolumeKeys()
     session.disconnect()
     terminalKeys.reset()
     showCommands.value = false
@@ -492,6 +526,8 @@ onBeforeUnmount(() => {
   themeObserver?.disconnect()
   viewport.stopWatching()
   gestures.detach()
+  disableVolumeKeys()
+  delete (window as any).__onVolumeKey
   session.disconnect()
   cleanupTerminal()
 })

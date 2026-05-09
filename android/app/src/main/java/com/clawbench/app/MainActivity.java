@@ -18,6 +18,7 @@ import android.os.PowerManager;
 import android.provider.MediaStore;
 import android.provider.Settings;
 import android.util.Log;
+import android.view.KeyEvent;
 import android.view.View;
 import android.view.WindowManager;
 import android.webkit.CookieManager;
@@ -104,21 +105,32 @@ public class MainActivity extends AppCompatActivity {
                             results[i] = data.getClipData().getItemAt(i).getUri();
                         }
                     }
-                }
-                // If camera was used and no other result, use the saved camera URI
-                if (results == null && cameraImageUri != null) {
-                    results = new Uri[]{ cameraImageUri };
+                    // Only use camera URI as fallback when RESULT_OK — this means
+                    // the user actively chose the camera option and took a photo.
+                    // Without this guard, cancelling the picker would falsely report
+                    // the pre-created camera temp file as the "selected" file.
+                    if (results == null && cameraImageUri != null) {
+                        results = new Uri[]{ cameraImageUri };
+                    }
                 }
                 // Use empty array instead of null for cancellation — some WebView implementations
                 // fire the JS change event with stale file data when onReceiveValue(null) is called.
                 // An empty array explicitly means "0 files selected".
                 filePathCallback.onReceiveValue(results != null ? results : new Uri[0]);
                 filePathCallback = null;
+                // Clean up unused camera temp file if user didn't take a photo
+                if (cameraImageUri != null && (results == null || !cameraImageUri.equals(results[0]))) {
+                    new File(cameraImageUri.getPath()).delete();
+                }
                 cameraImageUri = null;
             });
 
     // Set of ports currently being forwarded (thread-safe for access from WebView background threads)
     final Set<Integer> forwardedPorts = java.util.concurrent.ConcurrentHashMap.newKeySet();
+
+    // Volume key interception mode: when true, volume up/down are forwarded to WebView
+    // as JS calls instead of adjusting system volume. Controlled by the terminal panel.
+    private volatile boolean volumeKeyMode = false;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -444,6 +456,28 @@ public class MainActivity extends AppCompatActivity {
         super.onDestroy();
     }
 
+    /**
+     * Intercept volume key events when volumeKeyMode is enabled (terminal panel open).
+     * Instead of adjusting system volume, dispatch them to the WebView as JS callbacks.
+     * All other keys fall through to the default handling.
+     */
+    @Override
+    public boolean dispatchKeyEvent(KeyEvent event) {
+        if (volumeKeyMode) {
+            int keyCode = event.getKeyCode();
+            if (keyCode == KeyEvent.KEYCODE_VOLUME_UP || keyCode == KeyEvent.KEYCODE_VOLUME_DOWN) {
+                // Only act on ACTION_DOWN to avoid double-firing on ACTION_UP
+                if (event.getAction() == KeyEvent.ACTION_DOWN) {
+                    String direction = keyCode == KeyEvent.KEYCODE_VOLUME_UP ? "up" : "down";
+                    webView.evaluateJavascript(
+                            "if(typeof __onVolumeKey==='function'){__onVolumeKey('" + direction + "')}", null);
+                }
+                return true; // consume the event — no system volume change
+            }
+        }
+        return super.dispatchKeyEvent(event);
+    }
+
     // --- WebView Client ---
 
     private class ClawBenchWebViewClient extends WebViewClient {
@@ -674,6 +708,18 @@ public class MainActivity extends AppCompatActivity {
                 // The DownloadListener will intercept and use DownloadManager
                 activity.webView.loadUrl(url);
             });
+        }
+
+        /**
+         * Enable or disable volume key interception mode.
+         * When enabled, volume up/down keys are forwarded to the WebView JS layer
+         * via __onVolumeKey() callback instead of adjusting system volume.
+         * Called by the terminal panel on open/close.
+         * @param enabled true to intercept volume keys, false to restore default behavior
+         */
+        @JavascriptInterface
+        public void setVolumeKeyMode(boolean enabled) {
+            activity.volumeKeyMode = enabled;
         }
     }
 }
