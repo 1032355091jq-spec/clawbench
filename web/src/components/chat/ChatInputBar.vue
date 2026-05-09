@@ -438,7 +438,13 @@ function handleAttachFile(filePath) {
 }
 
 function handleUploadClick() {
-  fileInputRef.value?.click()
+  showAttachMenu.value = false
+  if (fileInputRef.value) {
+    // Clear previous selection BEFORE opening picker to prevent stale
+    // file data on Android WebView when user cancels the picker
+    fileInputRef.value.value = ''
+    fileInputRef.value.click()
+  }
 }
 
 function toggleAttachMenu() {
