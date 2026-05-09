@@ -54,7 +54,6 @@
         v-for="agent in agents"
         :key="agent.id"
         class="agent-option"
-        :class="{ selected: selectedAgentId === agent.id }"
         @click="createSession(agent.id)"
       >
         <span class="agent-option-icon">{{ agent.icon }}</span>
@@ -110,7 +109,6 @@ function agentDefaultModelName(agentId) {
   const model = agent.models.find(m => m.id === modelId)
   return model?.name || modelId
 }
-const selectedAgentId = ref('')
 const showAgentSelector = ref(false)
 // Guard against accidental clicks right after opening the agent selector
 // (touch event propagation race: dialog appears under finger → click lands on option)
@@ -422,24 +420,25 @@ watch(() => props.open, async (val) => {
 }
 
 .agent-option:hover {
-  background: var(--accent-color, #0066cc);
-  color: #fff;
+  background: none;
+  border-left: 3px solid var(--accent-color, #0066cc);
+  padding-left: 5px;
 }
 
 .agent-option:hover .agent-option-name {
-  color: #fff;
+  color: var(--accent-color, #0066cc);
 }
 
 .agent-option:hover .agent-option-specialty {
-  color: rgba(255,255,255,0.75);
+  color: var(--text-secondary, #666);
 }
 
 .agent-option:hover .agent-tag {
-  opacity: 0.8;
+  opacity: 1;
 }
 
-.agent-option.selected {
-  background: rgba(0, 102, 204, 0.1);
+.agent-option:active {
+  border-left-color: color-mix(in srgb, var(--accent-color, #0066cc) 70%, transparent);
 }
 
 .agent-option-icon {
