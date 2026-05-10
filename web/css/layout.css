@@ -40,17 +40,17 @@
     overflow: hidden;
 }
 
-/* Content area fills the main-content */
+/* Content area fills the main-content — acts as tab panel container */
 .content-area {
     flex: 1;
     min-height: 0;
-    overflow-x: hidden;
-    overflow-y: hidden;
+    overflow: hidden;
     padding: 0;
     border-radius: 0;
     background: transparent;
     display: flex;
     flex-direction: column;
+    position: relative;
 }
 
 
