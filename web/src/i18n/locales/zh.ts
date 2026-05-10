@@ -352,6 +352,17 @@ export default {
       openAsProject: '打开为项目',
       openTerminal: '在此打开终端',
     },
+    multiSelect: {
+      enter: '多选',
+      exit: '退出多选',
+      tapToSelect: '点击选择文件',
+      selectedCount: '已选 {n} 项',
+      selectAll: '全选',
+      deselectAll: '取消全选',
+      confirmDelete: '确认删除 {n} 个文件？',
+      allCopied: '已复制 {n} 项',
+      allCut: '已剪切 {n} 项',
+    },
     toast: {
       copied: '已复制',
       cutDone: '已剪切',

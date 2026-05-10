@@ -331,6 +331,15 @@ async function deleteFile(filePath: string): Promise<void> {
     await loadFiles(state.currentDir)
 }
 
+async function deleteFiles(paths: string[]): Promise<void> {
+    if (!paths.length) return
+    await Promise.all(paths.map(p => apiPost('/api/file/delete', { path: p })))
+    if (state.currentFile && paths.includes(state.currentFile.path)) {
+        state.currentFile = null
+    }
+    await loadFiles(state.currentDir)
+}
+
 async function renameFile(path: string, newName: string): Promise<void> {
     await apiPost('/api/file/rename', { path, name: newName })
     await loadFiles(state.currentDir)
@@ -392,6 +401,7 @@ export const store = {
     loadFiles,
     selectFile,
     deleteFile,
+    deleteFiles,
     renameFile,
     navigateToDir,
     navigateUp,

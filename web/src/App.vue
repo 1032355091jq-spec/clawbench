@@ -55,6 +55,7 @@
               @toggle-hidden="toggleHidden"
               @rename="handleRename"
               @delete="handleDelete"
+              @batch-delete="handleBatchDelete"
               @refresh="handleRefresh"
               @open-terminal="handleOpenTerminal"
             />
@@ -402,6 +403,10 @@ async function handleRename({ path, name }) {
 
 async function handleDelete(path) {
     await store.deleteFile(path)
+}
+
+async function handleBatchDelete(paths) {
+    await store.deleteFiles(paths)
 }
 
 async function handleRefresh() {

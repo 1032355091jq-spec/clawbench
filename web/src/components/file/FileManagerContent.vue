@@ -31,9 +31,22 @@
         <button class="toolbar-btn" @click="$emit('refresh')" :title="t('nav.refresh')">
           <RotateCw :size="14" />
         </button>
+        <button class="toolbar-btn" :class="{ active: multiSelect.active }" @click="multiSelect.active ? exitMultiSelect() : enterMultiSelect()" :title="multiSelect.active ? t('file.multiSelect.exit') : t('file.multiSelect.enter')">
+          <CheckSquare :size="14" />
+        </button>
         <SearchInput v-model="searchQuery" :placeholder="t('search.defaultPlaceholder')" @dblclick="searchQuery = ''" />
       </div>
-      <DirBreadcrumb :path="currentDir" @navigate="$emit('navigateDir', $event)" />
+      <!-- Multi-select info bar -->
+      <div v-if="multiSelect.active" class="ms-info-bar">
+        <button class="ms-info-btn" @click="exitMultiSelect">
+          <X :size="14" />
+        </button>
+        <span class="ms-info-text">{{ multiSelect.selected.size > 0 ? t('file.multiSelect.selectedCount', { n: multiSelect.selected.size }) : t('file.multiSelect.tapToSelect') }}</span>
+        <button class="ms-info-btn ms-select-all-btn" @click="toggleSelectAll">
+          {{ isAllSelected ? t('file.multiSelect.deselectAll') : t('file.multiSelect.selectAll') }}
+        </button>
+      </div>
+      <DirBreadcrumb v-else :path="currentDir" @navigate="$emit('navigateDir', $event)" />
     </div>
 
     <!-- File list -->
@@ -59,30 +72,40 @@
         <!-- Directory -->
         <div v-if="entry.type === 'dir'"
           class="file-item dir-item"
+          :class="{ 'ms-selected': multiSelect.active && multiSelect.selected.has(itemPath(entry.name)) }"
           :data-action="'dir'"
-          :data-path="(currentDir ? currentDir + '/' : '') + entry.name"
+          :data-path="itemPath(entry.name)"
           @contextmenu.prevent="showCtx($event, entry)"
           @touchstart="onItemTouchStart($event, entry)"
           @touchmove="onItemTouchMove"
           @touchend="onItemTouchEnd"
           @touchcancel="onItemTouchEnd">
+          <div v-if="multiSelect.active" class="ms-check" :class="{ checked: multiSelect.selected.has(itemPath(entry.name)) }">
+            <Check v-if="multiSelect.selected.has(itemPath(entry.name))" :size="12" />
+          </div>
           <Folder class="file-icon" :size="16" />
           <span class="file-name">{{ entry.name }}</span>
-          <ChevronRight :size="14" class="chevron" />
+          <ChevronRight v-if="!multiSelect.active" :size="14" class="chevron" />
           <span class="file-meta">{{ formatDate(entry.modified) }}</span>
         </div>
 
         <!-- File -->
         <div v-else
           class="file-item"
-          :class="{ active: currentFile?.path === (currentDir ? currentDir + '/' : '') + entry.name }"
+          :class="{
+            active: !multiSelect.active && currentFile?.path === itemPath(entry.name),
+            'ms-selected': multiSelect.active && multiSelect.selected.has(itemPath(entry.name))
+          }"
           :data-action="'file'"
-          :data-path="(currentDir ? currentDir + '/' : '') + entry.name"
+          :data-path="itemPath(entry.name)"
           @contextmenu.prevent="showCtx($event, entry)"
           @touchstart="onItemTouchStart($event, entry)"
           @touchmove="onItemTouchMove"
           @touchend="onItemTouchEnd"
           @touchcancel="onItemTouchEnd">
+          <div v-if="multiSelect.active" class="ms-check" :class="{ checked: multiSelect.selected.has(itemPath(entry.name)) }">
+            <Check v-if="multiSelect.selected.has(itemPath(entry.name))" :size="12" />
+          </div>
           <FileImage v-if="isImage(entry)" class="file-icon" :size="16" color="#a855f7" />
           <FileMusic v-else-if="isAudio(entry)" class="file-icon" :size="16" color="#22c55e" />
           <FileText v-else class="file-icon" :size="16" :color="getFileType(entry.name).color" />
@@ -94,6 +117,22 @@
         {{ t('file.truncateHint', { max: MAX_VISIBLE_ENTRIES, total: filteredEntries.length }) }}
       </div>
       </template>
+    </div>
+
+    <!-- Multi-select bottom action bar -->
+    <div v-if="multiSelect.active && multiSelect.selected.size > 0" class="ms-action-bar">
+      <button class="ms-action-btn" @click="doBatchCopy">
+        <Copy :size="14" />
+        {{ t('file.context.copy') }}
+      </button>
+      <button class="ms-action-btn" @click="doBatchCut">
+        <Scissors :size="14" />
+        {{ t('file.context.cut') }}
+      </button>
+      <button class="ms-action-btn ms-danger" @click="doBatchDelete">
+        <Trash2 :size="14" />
+        {{ t('common.delete') }}
+      </button>
     </div>
 
     <!-- Context menu -->
@@ -110,7 +149,7 @@
             {{ t('file.context.cut') }}
           </div>
         </template>
-        <div class="context-menu-item" :class="{ disabled: !clipboard.entry }" @click.stop="clipboard.entry && doPaste()">
+        <div class="context-menu-item" :class="{ disabled: !clipboard.entries.length }" @click.stop="clipboard.entries.length && doPaste()">
           <ClipboardPaste :size="14" />
           {{ t('file.context.paste') }}
         </div>
@@ -159,7 +198,7 @@
 <script setup>
 import { ref, computed, reactive, inject, nextTick, Teleport, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { Folder, ArrowDownAz, ArrowUpDown, ChevronDown, ChevronUp, Clock, FileText, Eye, EyeOff, ArrowRightLeft, Loader, FileImage, FileMusic, ChevronRight, Copy, Scissors, ClipboardPaste, FilePlus, FolderPlus, Pencil, Download, Trash2, FolderOpen, RotateCw, Terminal as TerminalIcon } from 'lucide-vue-next'
+import { Folder, ArrowDownAz, ArrowUpDown, ChevronDown, ChevronUp, Clock, FileText, Eye, EyeOff, ArrowRightLeft, Loader, FileImage, FileMusic, ChevronRight, Copy, Scissors, ClipboardPaste, FilePlus, FolderPlus, Pencil, Download, Trash2, FolderOpen, RotateCw, Terminal as TerminalIcon, CheckSquare, Check, X } from 'lucide-vue-next'
 import { getFileType } from '@/utils/fileType.ts'
 import { dirName } from '@/utils/path.ts'
 import { store } from '@/stores/app.ts'
@@ -183,7 +222,7 @@ const props = defineProps({
     dirLoading: Boolean,
 })
 
-const emit = defineEmits(['navigateDir', 'selectFile', 'toggleSort', 'toggleHidden', 'rename', 'delete', 'refresh', 'openTerminal'])
+const emit = defineEmits(['navigateDir', 'selectFile', 'toggleSort', 'toggleHidden', 'rename', 'delete', 'refresh', 'openTerminal', 'batchDelete'])
 
 
 const searchQuery = ref('')
@@ -204,9 +243,54 @@ function syncToCurrentFile() {
     emit('navigateDir', targetDir)
 }
 
-// Clear search when directory changes
+// Helper: build item path from entry name
+function itemPath(name) {
+    return (props.currentDir ? props.currentDir + '/' : '') + name
+}
+
+// ── Multi-select ──
+const multiSelect = reactive({
+    active: false,
+    selected: new Set(),
+})
+
+function enterMultiSelect() {
+    multiSelect.active = true
+    multiSelect.selected.clear()
+}
+
+function exitMultiSelect() {
+    multiSelect.active = false
+    multiSelect.selected.clear()
+}
+
+function toggleSelect(path) {
+    if (multiSelect.selected.has(path)) {
+        multiSelect.selected.delete(path)
+    } else {
+        multiSelect.selected.add(path)
+    }
+}
+
+const isAllSelected = computed(() => {
+    if (!multiSelect.active || visibleEntries.value.length === 0) return false
+    return visibleEntries.value.every(e => multiSelect.selected.has(itemPath(e.name)))
+})
+
+function toggleSelectAll() {
+    if (isAllSelected.value) {
+        // Deselect all visible
+        visibleEntries.value.forEach(e => multiSelect.selected.delete(itemPath(e.name)))
+    } else {
+        // Select all visible
+        visibleEntries.value.forEach(e => multiSelect.selected.add(itemPath(e.name)))
+    }
+}
+
+// Auto-exit multi-select on directory change
 watch(() => props.currentDir, () => {
     searchQuery.value = ''
+    if (multiSelect.active) exitMultiSelect()
 })
 
 const ctxMenu = reactive({ visible: false, x: 0, y: 0, entry: null })
@@ -252,7 +336,7 @@ function onItemTouchStart(e, entry) {
     const touch = e.touches[0]
     itemPressTimer = setTimeout(() => {
         if (!itemPressMoved) {
-            const path = (props.currentDir ? props.currentDir + '/' : '') + entry.name
+            const path = itemPath(entry.name)
             ctxMenu.x = touch.clientX
             ctxMenu.y = touch.clientY + 10
             ctxMenu.entry = { ...entry, path }
@@ -271,7 +355,9 @@ function onItemTouchEnd() {
         itemPressTimer = null
     }
 }
-const clipboard = reactive({ entry: null, isCut: false })
+
+// Clipboard now supports multiple entries
+const clipboard = reactive({ entries: [], isCut: false })
 
 function getDestDir(entry) {
     if (!entry) return props.currentDir
@@ -282,7 +368,7 @@ function getDestDir(entry) {
 
 async function doCopy() {
     if (!ctxMenu.entry) return
-    clipboard.entry = ctxMenu.entry
+    clipboard.entries = [ctxMenu.entry]
     clipboard.isCut = false
     ctxMenu.visible = false
     if (toast) toast.show(t('common.copied'), { icon: '📋', type: 'success', duration: 1500 })
@@ -290,47 +376,46 @@ async function doCopy() {
 
 async function doCut() {
     if (!ctxMenu.entry) return
-    clipboard.entry = ctxMenu.entry
+    clipboard.entries = [ctxMenu.entry]
     clipboard.isCut = true
     ctxMenu.visible = false
     if (toast) toast.show(t('file.toast.cutDone'), { icon: '✂️', type: 'success', duration: 1500 })
 }
 
 async function doPaste() {
-    if (!clipboard.entry) return
+    if (!clipboard.entries.length) return
     ctxMenu.visible = false
     const destDir = getDestDir(ctxMenu.entry)
-    const destPath = (destDir ? destDir + '/' : '') + clipboard.entry.name
     const api = clipboard.isCut ? '/api/file/move' : '/api/file/copy'
-    try {
-        let finalDest = destPath
-        let resp = await fetch(api, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ path: clipboard.entry.path, dest: finalDest }),
-        })
-        // Name conflict: prompt user for a new name
-        if (resp.status === 409) {
-            const newName = await dialog.prompt(t('file.prompt.pasteNewName', { name: clipboard.entry.name }), { value: clipboard.entry.name })
-            if (!newName || !newName.trim()) return
-            finalDest = (destDir ? destDir + '/' : '') + newName.trim()
-            resp = await fetch(api, {
+    let allOk = true
+    for (const entry of clipboard.entries) {
+        try {
+            let destPath = (destDir ? destDir + '/' : '') + entry.name
+            let resp = await fetch(api, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ path: clipboard.entry.path, dest: finalDest }),
+                body: JSON.stringify({ path: entry.path, dest: destPath }),
             })
-        }
-        if (resp.ok) {
-            if (clipboard.isCut) {
-                clipboard.entry = null
+            if (resp.status === 409) {
+                const newName = await dialog.prompt(t('file.prompt.pasteNewName', { name: entry.name }), { value: entry.name })
+                if (!newName || !newName.trim()) continue
+                destPath = (destDir ? destDir + '/' : '') + newName.trim()
+                resp = await fetch(api, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ path: entry.path, dest: destPath }),
+                })
             }
-            emit('refresh')
-            if (toast) toast.show(clipboard.isCut ? t('file.toast.moved') : t('common.copied'), { icon: '✅', type: 'success', duration: 1500 })
-        } else {
-            const err = await resp.json()
-            if (toast) toast.show(t('file.toast.operationFailedDetail', { error: err.error || '' }), { icon: '❌', type: 'error', duration: 2000 })
+            if (!resp.ok) allOk = false
+        } catch {
+            allOk = false
         }
-    } catch (err) {
+    }
+    if (clipboard.isCut) clipboard.entries = []
+    emit('refresh')
+    if (allOk) {
+        if (toast) toast.show(clipboard.isCut ? t('file.toast.moved') : t('common.copied'), { icon: '✅', type: 'success', duration: 1500 })
+    } else {
         if (toast) toast.show(t('common.operationFailed'), { icon: '❌', type: 'error', duration: 2000 })
     }
 }
@@ -381,6 +466,39 @@ async function doNewFolder() {
     }
 }
 
+// ── Batch operations (multi-select) ──
+
+function doBatchCopy() {
+    const entries = [...multiSelect.selected].map(path => {
+        const name = path.split('/').pop()
+        const entry = props.entries.find(e => e.name === name)
+        return entry ? { ...entry, path } : null
+    }).filter(Boolean)
+    clipboard.entries = entries
+    clipboard.isCut = false
+    if (toast) toast.show(t('file.multiSelect.allCopied', { n: entries.length }), { icon: '📋', type: 'success', duration: 1500 })
+}
+
+function doBatchCut() {
+    const entries = [...multiSelect.selected].map(path => {
+        const name = path.split('/').pop()
+        const entry = props.entries.find(e => e.name === name)
+        return entry ? { ...entry, path } : null
+    }).filter(Boolean)
+    clipboard.entries = entries
+    clipboard.isCut = true
+    if (toast) toast.show(t('file.multiSelect.allCut', { n: entries.length }), { icon: '✂️', type: 'success', duration: 1500 })
+}
+
+async function doBatchDelete() {
+    const paths = [...multiSelect.selected]
+    if (!paths.length) return
+    const confirmed = await dialog.confirm(t('file.multiSelect.confirmDelete', { n: paths.length }), { dangerous: true })
+    if (!confirmed) return
+    emit('batchDelete', paths)
+    exitMultiSelect()
+}
+
 const MAX_VISIBLE_ENTRIES = 1000
 
 const filteredEntries = computed(() => {
@@ -418,6 +536,13 @@ function handleFileClick(e) {
     if (!item) return
     const action = item.dataset.action
     const path = item.dataset.path
+
+    // Multi-select mode: toggle selection on click
+    if (multiSelect.active) {
+        toggleSelect(path)
+        return
+    }
+
     if (action === 'dir') {
         emit('navigateDir', path)
     } else {
@@ -450,7 +575,7 @@ function formatSize(size) {
 }
 
 function showCtx(e, entry) {
-    const path = (props.currentDir ? props.currentDir + '/' : '') + entry.name
+    const path = itemPath(entry.name)
     ctxMenu.x = e.clientX
     ctxMenu.y = e.clientY
     ctxMenu.entry = { ...entry, path }
@@ -605,6 +730,126 @@ function doDelete() {
     padding: 0 6px;
 }
 
+/* ── Multi-select info bar ── */
+.ms-info-bar {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 0 6px;
+    font-size: 12px;
+    color: var(--text-secondary, #666);
+}
+
+.ms-info-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    border: none;
+    border-radius: 50%;
+    background: transparent;
+    color: var(--text-secondary, #666);
+    cursor: pointer;
+    flex-shrink: 0;
+    padding: 0;
+}
+
+.ms-info-btn:hover {
+    background: var(--bg-secondary, #e0e0e0);
+    color: var(--accent-color, #4a90d9);
+}
+
+.ms-select-all-btn {
+    width: auto;
+    height: auto;
+    padding: 2px 8px;
+    border-radius: 10px;
+    font-size: 11px;
+    background: var(--bg-secondary, #e0e0e0);
+    white-space: nowrap;
+}
+
+.ms-info-text {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* ── Multi-select checkbox ── */
+.ms-check {
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    border: 2px solid var(--border-color, #d0d0d0);
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.15s;
+}
+
+.ms-check.checked {
+    background: var(--accent-color, #4a90d9);
+    border-color: var(--accent-color, #4a90d9);
+    color: #fff;
+}
+
+.file-item.ms-selected {
+    background: color-mix(in srgb, var(--accent-color, #4a90d9) 8%, transparent);
+}
+
+/* ── Multi-select bottom action bar ── */
+.ms-action-bar {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    padding: 8px 12px;
+    padding-bottom: calc(8px + env(safe-area-inset-bottom, 0px));
+    border-top: 1px solid var(--border-color, #e5e5e5);
+    background: var(--bg-secondary, #fff);
+    flex-shrink: 0;
+}
+
+.ms-action-btn {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 6px 12px;
+    border: 1px solid var(--border-color, #e5e5e5);
+    border-radius: 16px;
+    background: var(--bg-tertiary, #f5f5f5);
+    color: var(--text-primary, #1a1a1a);
+    font-size: 12px;
+    cursor: pointer;
+    transition: all 0.15s;
+    white-space: nowrap;
+}
+
+.ms-action-btn:hover {
+    background: var(--bg-secondary, #e0e0e0);
+}
+
+.ms-action-btn.ms-danger {
+    color: #ef4444;
+    border-color: #fecaca;
+}
+
+.ms-action-btn.ms-danger:hover {
+    background: #fef2f2;
+}
+
+[data-theme="dark"] .ms-action-btn.ms-danger {
+    border-color: #7f1d1d;
+}
+
+[data-theme="dark"] .ms-action-btn.ms-danger:hover {
+    background: #2d1b1b;
+}
+
 /* ── File list area ── */
 .file-list {
     flex: 1;
@@ -633,6 +878,11 @@ function doDelete() {
 .toolbar-btn:hover {
     background: var(--bg-secondary, #e0e0e0);
     color: var(--accent-color, #4a90d9);
+}
+
+.toolbar-btn.active {
+    background: var(--accent-color, #4a90d9);
+    color: #fff;
 }
 
 .toolbar-btn:disabled {

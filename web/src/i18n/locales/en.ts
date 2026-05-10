@@ -352,6 +352,17 @@ export default {
       openAsProject: 'Open as project',
       openTerminal: 'Open terminal here',
     },
+    multiSelect: {
+      enter: 'Select',
+      exit: 'Cancel',
+      tapToSelect: 'Tap items to select',
+      selectedCount: '{n} selected',
+      selectAll: 'All',
+      deselectAll: 'None',
+      confirmDelete: 'Delete {n} items?',
+      allCopied: '{n} items copied',
+      allCut: '{n} items cut',
+    },
     toast: {
       copied: 'Copied',
       cutDone: 'Cut',

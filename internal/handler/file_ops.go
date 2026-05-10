@@ -177,6 +177,68 @@ func ServeFileDelete(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
 }
 
+// ServeFileBatchDelete handles deleting multiple files/directories in a single request.
+func ServeFileBatchDelete(w http.ResponseWriter, r *http.Request) {
+	if !requireMethod(w, r, http.MethodPost) {
+		return
+	}
+
+	var req struct {
+		Paths    []string `json:"paths"`
+		BasePath string   `json:"basePath,omitempty"`
+	}
+	if !decodeJSON(w, r, &req) {
+		return
+	}
+	if len(req.Paths) == 0 {
+		writeLocalizedErrorf(w, r, http.StatusBadRequest, "MissingPath")
+		return
+	}
+
+	basePath := req.BasePath
+	if basePath == "" {
+		basePath = middleware.GetProjectFromCookie(r)
+		if basePath == "" {
+			writeLocalizedError(w, r, model.Forbidden(model.ErrProjectNotSet, "NoProjectSelected"))
+			return
+		}
+	}
+
+	baseAbs, err := filepath.Abs(basePath)
+	if err != nil {
+		model.WriteError(w, model.Internal(fmt.Errorf("failed to resolve base path: %w", err)))
+		return
+	}
+
+	deleted := 0
+	var errs []string
+	for _, p := range req.Paths {
+		// Use model.ValidatePath directly (not validateAndResolvePath which writes HTTP error)
+		absPath, ok := model.ValidatePath(baseAbs, p)
+		if !ok {
+			errs = append(errs, p+": access denied")
+			continue
+		}
+		info, err := os.Stat(absPath)
+		if err != nil {
+			errs = append(errs, p+": not found")
+			continue
+		}
+		if info.IsDir() {
+			os.RemoveAll(absPath)
+		} else {
+			os.Remove(absPath)
+		}
+		deleted++
+	}
+
+	result := map[string]interface{}{"ok": true, "deleted": deleted}
+	if len(errs) > 0 {
+		result["errors"] = errs
+	}
+	writeJSON(w, http.StatusOK, result)
+}
+
 // validateCreatePath validates the path for file/directory creation operations.
 // Returns the absolute path of the item to create, or empty string on error (response already written).
 func validateCreatePath(w http.ResponseWriter, r *http.Request, projectPath, reqPath, reqName string) string {
