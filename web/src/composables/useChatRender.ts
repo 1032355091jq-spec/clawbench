@@ -110,8 +110,28 @@ export function useChatRender(options) {
 
     if (!skipEnhancements) {
       // Image styling, audio links, file path annotation: deferred to post-streaming
+      const projectRoot = store.state.projectRoot
       html = html.replace(/<img([^>]*)>/g, (match, attrs) => {
         let cleanAttrs = attrs.replace(/\s*style="[^"]*"/i, '').replace(/\s*class="[^"]*"/i, '')
+        // Convert local project file paths to /api/local-file/ URLs
+        const srcMatch = cleanAttrs.match(/\bsrc="([^"]*)"/)
+        if (srcMatch) {
+          const src = srcMatch[1]
+          // Skip absolute/external URLs
+          if (/^(https?:|\/\/|^\/)/i.test(src)) {
+            return `<img${cleanAttrs} style="max-width: 200px; max-height: 200px; object-fit: cover; border-radius: 6px; margin: 4px 0; cursor: pointer;" class="chat-img-thumbnail">`
+          }
+          // Try to resolve as a project-local path
+          if (projectRoot) {
+            const absolutePath = src.startsWith('/')
+              ? src
+              : `${projectRoot}/${src}`
+            if (absolutePath.startsWith(projectRoot + '/') || absolutePath === projectRoot) {
+              const rel = absolutePath.slice(projectRoot.length + 1)
+              cleanAttrs = cleanAttrs.replace(`src="${src}"`, `src="/api/local-file/${rel}?t=${Date.now()}"`)
+            }
+          }
+        }
         return `<img${cleanAttrs} style="max-width: 200px; max-height: 200px; object-fit: cover; border-radius: 6px; margin: 4px 0; cursor: pointer;" class="chat-img-thumbnail">`
       })
       const audioExts = ['.mp3', '.wav', '.ogg', '.m4a', '.aac', '.flac', '.wma', '.opus']
@@ -122,7 +142,7 @@ export function useChatRender(options) {
         }
         return match
       })
-      const { html: annotatedHtml, detectedPaths } = annotateFilePaths(html, { projectRoot: store.state.projectRoot })
+      const { html: annotatedHtml, detectedPaths } = annotateFilePaths(html, { projectRoot })
       html = annotatedHtml
       if (detectedPaths.length > 0) {
         const uniquePaths = [...new Set(detectedPaths)]
