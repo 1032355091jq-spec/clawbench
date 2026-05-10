@@ -452,8 +452,12 @@ export function useChatSession(options: UseChatSessionOptions) {
 
           if (sessionId === currentSessionId.value) {
             // Current session completed but UI may be stuck in loading state
-            // (e.g. done event was dropped) — force reset with full reload
+            // (e.g. done event was dropped) — force reset with full reload.
+            // Disconnect SSE and fallback polling BEFORE replacing messages
+            // to prevent orphaned connections from writing stale events.
             if (loading.value) {
+              onDisconnectStream()
+              onStopPolling()
               loadHistory(true, false, true)
             }
           } else {
