@@ -10,18 +10,20 @@
 
     <div class="toc-body">
       <SearchInput v-model="searchQuery" :placeholder="t('toc.searchPlaceholder')" @dblclick="clearSearch" />
-      <div v-if="filteredToc.length === 0" class="toc-empty">{{ searchQuery ? t('toc.noMatch') : t('toc.noHeadings') }}</div>
-      <a
-        v-for="item in filteredToc"
-        :key="item.id"
-        class="toc-item"
-        :class="{ active: activeId === item.id }"
-        :data-level="item.level"
-        @click.prevent="scrollTo(item)"
-      >
-        <span v-if="isPdfOutline" class="toc-page-badge">P{{ item.line }}</span>
-        {{ item.text }}
-      </a>
+      <div class="toc-list">
+        <div v-if="filteredToc.length === 0" class="toc-empty">{{ searchQuery ? t('toc.noMatch') : t('toc.noHeadings') }}</div>
+        <a
+          v-for="item in filteredToc"
+          :key="item.id"
+          class="toc-item"
+          :class="{ active: activeId === item.id }"
+          :data-level="item.level"
+          @click.prevent="scrollTo(item)"
+        >
+          <span v-if="isPdfOutline" class="toc-page-badge">P{{ item.line }}</span>
+          {{ item.text }}
+        </a>
+      </div>
     </div>
 
   </BottomSheet>
@@ -177,10 +179,19 @@ watch(() => props.open, (val) => {
 
 .toc-body {
     flex: 1;
-    overflow-y: auto;
-    padding: 8px 6px;
+    overflow: hidden;
     display: flex;
     flex-direction: column;
+    min-height: 0;
+    padding: 8px 6px 0;
+}
+
+.toc-list {
+    flex: 1;
+    overflow-y: auto;
+    min-height: 0;
+    -webkit-overflow-scrolling: touch;
+    padding-bottom: 8px;
 }
 
 .toc-empty {
