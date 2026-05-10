@@ -134,18 +134,11 @@ func TestDiscoverAgents_CreatesDirAndYAMLs(t *testing.T) {
 	require.NoError(t, err)
 	assert.True(t, info.IsDir())
 
-	// At least some YAML files should exist (the system has CLIs installed)
+	// Each YAML file (if any) should be parseable as an Agent.
+	// Note: in CI environments no AI CLIs may be installed, so
+	// we cannot assert yamlCount > 0; we only validate structure.
 	entries, err := os.ReadDir(dir)
 	require.NoError(t, err)
-	yamlCount := 0
-	for _, e := range entries {
-		if !e.IsDir() && strings.HasSuffix(e.Name(), ".yaml") {
-			yamlCount++
-		}
-	}
-	assert.Greater(t, yamlCount, 0, "expected at least one agent YAML to be generated")
-
-	// Each YAML should be parseable as an Agent
 	for _, e := range entries {
 		if e.IsDir() || !strings.HasSuffix(e.Name(), ".yaml") {
 			continue
@@ -168,9 +161,21 @@ func TestDiscoverAgents_GeneratedYAMLsLoadable(t *testing.T) {
 	})
 
 	dir := filepath.Join(t.TempDir(), "agents")
+	require.NoError(t, os.MkdirAll(dir, 0755))
 
-	err := model.DiscoverAgents(dir)
+	// Pre-generate a known agent YAML so the test does not depend
+	// on any AI CLI being installed on the system.
+	spec := model.BackendSpec{
+		ID:         "test-loadable",
+		Backend:    "claude",
+		DefaultCmd: "nonexistent_cli_for_test",
+		Name:       "Test Loadable",
+		Icon:       "🧪",
+		Specialty:  "Testing",
+	}
+	data, err := model.GenerateAgentYAML(spec)
 	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "test-loadable.yaml"), data, 0644))
 
 	// LoadAgents should successfully load the generated YAMLs
 	err = model.LoadAgents(dir)
