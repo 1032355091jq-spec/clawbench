@@ -44,7 +44,7 @@
     </div>
 
     <!-- Pages -->
-    <div class="pdf-pages-scroll" ref="scrollRef" @scroll="onScroll">
+    <div class="pdf-pages-scroll" ref="scrollRef" @scroll="onScroll" @touchstart.passive="onTouchStart" @touchmove="onTouchMove" @touchend="onTouchEnd" @touchcancel="onTouchEnd" @wheel.prevent="onWheel">
       <div class="pdf-pages-inner" :style="pagesInnerStyle">
         <div
           v-for="page in pageCount"
@@ -354,6 +354,47 @@ function fitWidth() {
   }
 }
 
+// Pinch-to-zoom (touch)
+const pinchStartDist = ref(0)
+const pinchStartScale = ref(1)
+
+function onTouchStart(e) {
+  if (e.touches.length === 2) {
+    pinchStartDist.value = Math.hypot(
+      e.touches[0].clientX - e.touches[1].clientX,
+      e.touches[0].clientY - e.touches[1].clientY,
+    )
+    pinchStartScale.value = scale.value
+  }
+}
+
+function onTouchMove(e) {
+  if (e.touches.length === 2 && pinchStartDist.value > 0) {
+    e.preventDefault()
+    const dist = Math.hypot(
+      e.touches[0].clientX - e.touches[1].clientX,
+      e.touches[0].clientY - e.touches[1].clientY,
+    )
+    const ratio = dist / pinchStartDist.value
+    const newScale = Math.max(MIN_SCALE, Math.min(pinchStartScale.value * ratio, MAX_SCALE))
+    scale.value = newScale
+  }
+}
+
+function onTouchEnd(e) {
+  if (e.touches.length < 2) {
+    pinchStartDist.value = 0
+  }
+}
+
+// Ctrl+scroll-to-zoom (desktop)
+function onWheel(e) {
+  if (e.ctrlKey || e.metaKey) {
+    const delta = e.deltaY > 0 ? -0.1 : 0.1
+    scale.value = Math.max(MIN_SCALE, Math.min(scale.value + delta, MAX_SCALE))
+  }
+}
+
 // Scroll tracking
 let scrollRafId = 0
 function onScroll() {
@@ -558,6 +599,8 @@ defineExpose({
   overflow: auto;
   padding: 16px;
   background: #525659;
+  touch-action: pan-x pan-y;
+  overscroll-behavior: contain;
 }
 
 .pdf-pages-inner {

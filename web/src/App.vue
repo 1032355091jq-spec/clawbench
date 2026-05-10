@@ -29,6 +29,7 @@
             <ChatPanelContent
               :active="activeTab === 'chat'"
               :current-file="currentFile"
+              @open="switchTab('chat')"
               @open-file="handleSelectFile"
             />
           </TabPanel>
@@ -64,6 +65,7 @@
               <WelcomeView v-if="!currentFile" />
               <FileViewer
                 v-if="currentFile"
+                ref="fileViewerRef"
                 :file="currentFile"
                 :toc-open="tocOpen"
                 :search-open="searchOpen"
@@ -80,9 +82,11 @@
             <!-- Auxiliary overlays for viewer tab -->
             <TocDrawer
               :file="tocFile"
+              :pdf-outline="pdfOutline"
               :open="tocOpen"
               @close="tocOpen = false"
               @jump="scrollToLine"
+              @jump-page="handleJumpPdfPage"
             />
             <SearchDrawer
               :file="currentFile"
@@ -334,11 +338,21 @@ const projectRoot = computed(() => store.state.projectRoot)
 
 const tocFile = computed(() => {
     const f = currentFile.value
-    if (!f || f.isImage || f.isPdf || f.isAudio || !f.content) return null
+    if (!f || f.isImage || f.isAudio) return null
+    // PDF: pass file even without content (outline comes from pdfOutline prop)
+    if (f.isPdf) return f
+    if (!f.content) return null
     const ft = getFileType(f.name)
     if (ft.isImage || ft.isAudio) return null
     return f
 })
+
+// PDF TOC integration
+const fileViewerRef = ref(null)
+const pdfOutline = computed(() => fileViewerRef.value?.pdfOutline || [])
+function handleJumpPdfPage(pageNum) {
+    fileViewerRef.value?.pdfScrollToPage(pageNum)
+}
 
 watch(() => currentFile.value, (f) => {
     tocOpen.value = false

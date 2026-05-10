@@ -66,12 +66,15 @@ function handleHeaderClick() {
   flex-direction: column;
   overflow: hidden;
   opacity: 0;
-  transition: opacity 150ms ease;
+  visibility: hidden;
+  transition: opacity 150ms ease, visibility 0s 150ms;
   pointer-events: none;
 }
 
 .tab-panel-active {
   opacity: 1;
+  visibility: visible;
   pointer-events: auto;
+  transition: opacity 150ms ease, visibility 0s 0s;
 }
 </style>
