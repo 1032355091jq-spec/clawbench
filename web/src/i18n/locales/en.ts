@@ -613,6 +613,8 @@ export default {
       submit: 'Submit',
       submitted: 'Submitted',
       name: 'Ask Question',
+      supplementary: 'Additional info',
+      supplementaryPlaceholder: 'Optional, add extra details…',
     },
   },
   agents: {

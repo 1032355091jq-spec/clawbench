@@ -1213,6 +1213,45 @@ onUnmounted(() => {
   background: #22c55e;
 }
 
+.content-blocks .tool-detail .ask-question-supplementary {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.content-blocks .tool-detail .ask-supplementary-label {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-secondary);
+}
+
+.content-blocks .tool-detail .ask-supplementary-input {
+  width: 100%;
+  padding: 5px 8px;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  font-size: 12px;
+  line-height: 1.4;
+  outline: none;
+  transition: border-color 0.15s;
+  box-sizing: border-box;
+}
+
+.content-blocks .tool-detail .ask-supplementary-input::placeholder {
+  color: var(--text-muted, #999);
+  font-size: 11px;
+}
+
+.content-blocks .tool-detail .ask-supplementary-input:focus {
+  border-color: #f97316;
+}
+
+:root[data-theme="dark"] .content-blocks .tool-detail .ask-supplementary-input:focus {
+  border-color: #fb923c;
+}
+
 /* ── Grep search view ── */
 .content-blocks .tool-detail .grep-search-view {
   display: flex;

@@ -227,6 +227,11 @@ function renderAskUserQuestion(input: Record<string, any>): string {
     html += '</div>'
   }
 
+  html += '<div class="ask-question-supplementary">'
+  html += `<label class="ask-supplementary-label">${escapeHtml(gt('tool.askUser.supplementary'))}</label>`
+  html += `<input class="ask-supplementary-input" type="text" placeholder="${escapeHtml(gt('tool.askUser.supplementaryPlaceholder'))}" />`
+  html += '</div>'
+
   html += `<button class="ask-question-submit" disabled>${gt('tool.askUser.submit')}</button>`
   html += '</div>'
 
@@ -610,6 +615,13 @@ registerToolActionHandler('AskUserQuestion', (event, emit) => {
       }
       if (answers.length === 0) return true
 
+      // Append supplementary text if provided
+      const supplementaryInput = view.querySelector('.ask-supplementary-input') as HTMLInputElement | null
+      const supplementaryText = supplementaryInput?.value?.trim()
+      if (supplementaryText) {
+        answers.push(supplementaryText)
+      }
+
       // Mark as submitted
       view.classList.add('ask-submitted')
       const allOptions = view.querySelectorAll('.ask-question-option')
@@ -618,6 +630,10 @@ registerToolActionHandler('AskUserQuestion', (event, emit) => {
         if (!opt.classList.contains('selected')) {
           ;(opt as HTMLElement).style.opacity = '0.4'
         }
+      }
+      if (supplementaryInput) {
+        supplementaryInput.disabled = true
+        supplementaryInput.style.opacity = '0.6'
       }
       submitBtn.textContent = gt('tool.askUser.submitted')
       ;(submitBtn as HTMLButtonElement).disabled = true

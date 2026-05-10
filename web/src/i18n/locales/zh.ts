@@ -613,6 +613,8 @@ export default {
       submit: '提交',
       submitted: '已提交',
       name: '提问',
+      supplementary: '补充信息',
+      supplementaryPlaceholder: '可选，添加额外补充说明…',
     },
   },
   agents: {
