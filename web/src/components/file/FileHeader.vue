@@ -100,11 +100,14 @@ const fileType = computed(() => props.file ? getFileType(props.file.name) : null
 const isMarkdown = computed(() => fileType.value?.isMarkdown || false)
 const isMarkdownRendered = computed(() => isMarkdown.value && props.viewMode === 'rendered')
 const hasToc = computed(() => {
-    if (!props.file || !props.file.content) return false
+    if (!props.file) return false
     const ft = fileType.value
     if (!ft) return false
+    // PDF: always show TOC button (outline may be available)
+    if (ft.isPdf) return true
+    // Other file types: need content
+    if (!props.file.content) return false
     if (ft.isImage || ft.isAudio || ft.isVideo) return false
-    if (props.file.isImage || props.file.isPdf || props.file.isAudio) return false
     return true
 })
 

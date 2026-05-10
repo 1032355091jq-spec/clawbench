@@ -42,9 +42,10 @@ describe('getFileType', () => {
     expect(ft.isVideo).toBe(true)
   })
 
-  it('detects PDF as image (viewable)', () => {
+  it('detects PDF files', () => {
     const ft = getFileType('doc.pdf')
-    expect(ft.isImage).toBe(true)
+    expect(ft.isPdf).toBe(true)
+    expect(ft.isImage).toBeFalsy()
   })
 
   it('detects YAML files', () => {

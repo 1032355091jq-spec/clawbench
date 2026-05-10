@@ -3,10 +3,7 @@
     @keydown="handleKeyDown"
     tabindex="0"
     ref="containerRef">
-    <div v-if="file.isPdf" class="image-preview-body pdf-preview-body">
-      <embed :src="mediaUrl" type="application/pdf" class="pdf-preview-embed" />
-    </div>
-    <div v-else class="image-preview-body"
+    <div class="image-preview-body"
       @mousedown="handleMouseDown"
       @touchstart.passive="handleTouchStart"
       @touchmove="handleTouchMove"
@@ -60,7 +57,7 @@ const touchLastX = ref(0)
 // Build list of image files in the same directory
 const siblingImages = computed(() => {
     const entries = store.state.dirEntries || []
-    return entries.filter(e => e.type !== 'dir' && getFileType(e.name)?.isImage && !e.name.toLowerCase().endsWith('.pdf'))
+    return entries.filter(e => e.type !== 'dir' && getFileType(e.name)?.isImage)
 })
 
 const imageCount = computed(() => siblingImages.value.length)
@@ -264,19 +261,5 @@ watch(() => props.file, () => {
     backdrop-filter: blur(4px);
     pointer-events: none;
     user-select: none;
-}
-
-.pdf-preview-body {
-    flex: 1;
-    overflow: auto;
-    padding: 0;
-    background: #525659;
-}
-
-.pdf-preview-embed {
-    width: 100%;
-    height: 100%;
-    min-height: 80vh;
-    border: none;
 }
 </style>

@@ -202,7 +202,7 @@ async function selectFile(path: string, isImageFile = false, isAudioFile = false
     }
 
     // Detect media files by extension (avoids dynamic import)
-    const imageExts = ['.png', '.jpg', '.jpeg', '.gif', '.webp', '.svg', '.bmp', '.ico', '.tiff', '.tif', '.avif', '.pdf']
+    const imageExts = ['.png', '.jpg', '.jpeg', '.gif', '.webp', '.svg', '.bmp', '.ico', '.tiff', '.tif', '.avif']
     const audioExts = ['.mp3', '.wav', '.ogg', '.m4a', '.aac', '.flac', '.wma', '.opus']
     const videoExts = ['.mp4', '.mkv', '.avi', '.mov', '.webm', '.flv', '.wmv', '.m4v', '.3gp', '.m3u8']
     // Only fetch content for known text file extensions; everything else is binary.
@@ -253,14 +253,19 @@ async function selectFile(path: string, isImageFile = false, isAudioFile = false
         '.regex', '.regexp',
     ]
     const lower = path.toLowerCase()
+    const isPdf = lower.endsWith('.pdf')
     const isImage = isImageFile || imageExts.some(ext => lower.endsWith(ext))
     const isAudio = isAudioFile || audioExts.some(ext => lower.endsWith(ext))
     const isVideo = videoExts.some(ext => lower.endsWith(ext))
     const isText = textExts.some(ext => lower.endsWith(ext))
+    if (isPdf) {
+        const fileName = baseName(path)
+        state.currentFile = { name: fileName, path, content: null, isPdf: true }
+        return
+    }
     if (isImage) {
         const fileName = baseName(path)
-        const isPdf = fileName.toLowerCase().endsWith('.pdf')
-        state.currentFile = { name: fileName, path, content: null, isImage: true, isPdf }
+        state.currentFile = { name: fileName, path, content: null, isImage: true }
         return
     }
     if (isAudio) {

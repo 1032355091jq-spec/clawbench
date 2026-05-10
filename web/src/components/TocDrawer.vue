@@ -18,7 +18,10 @@
         :class="{ active: activeId === item.id }"
         :data-level="item.level"
         @click.prevent="scrollTo(item)"
-      >{{ item.text }}</a>
+      >
+        <span v-if="isPdfOutline" class="toc-page-badge">P{{ item.line }}</span>
+        {{ item.text }}
+      </a>
     </div>
 
   </BottomSheet>
@@ -26,7 +29,7 @@
 
 <script setup>
 import { List } from 'lucide-vue-next'
-import { ref, watch, nextTick } from 'vue'
+import { ref, computed, watch, nextTick } from 'vue'
 import { useI18n } from 'vue-i18n'
 import BottomSheet from '@/components/common/BottomSheet.vue'
 import HeaderMarquee from '@/components/common/HeaderMarquee.vue'
@@ -38,17 +41,32 @@ const { t } = useI18n()
 
 const props = defineProps({
     file: Object,
+    pdfOutline: { type: Array, default: () => [] },
     open: Boolean,
 })
-const emit = defineEmits(['close', 'jump'])
+const emit = defineEmits(['close', 'jump', 'jumpPage'])
 
 const toc = ref([])
 const activeId = ref('')
 const isCode = ref(false)
+const isPdfOutline = ref(false)
 const searchQuery = ref('')
 const filteredToc = ref([])
 
-watch(() => props.file, (file) => {
+watch([() => props.file, () => props.pdfOutline], ([file, pdfOut]) => {
+    // PDF outline
+    if (file && pdfOut && pdfOut.length > 0) {
+        isPdfOutline.value = true
+        isCode.value = false
+        toc.value = pdfOut
+        activeId.value = toc.value[0]?.id || ''
+        searchQuery.value = ''
+        filteredToc.value = toc.value
+        return
+    }
+    isPdfOutline.value = false
+
+    // Text-based TOC
     if (!file?.content) {
         toc.value = []
         filteredToc.value = []
@@ -82,6 +100,14 @@ function clearSearch() {
 }
 
 function scrollTo(item) {
+    // PDF: jump to page number
+    if (isPdfOutline.value && item.line > 0) {
+        emit('jumpPage', item.line)
+        activeId.value = item.id
+        emit('close')
+        return
+    }
+
     const elById = document.getElementById(item.id)
     if (elById) {
         elById.scrollIntoView({ behavior: 'smooth', block: 'start' })
@@ -103,6 +129,9 @@ watch(() => props.open, (val) => {
         observer?.disconnect()
         return
     }
+    // No IntersectionObserver for PDF outline (pages are in PdfPreview's scroll container)
+    if (isPdfOutline.value) return
+
     nextTick(() => {
         observer?.disconnect()
         if (isCode.value) {
@@ -172,6 +201,8 @@ watch(() => props.open, (val) => {
     border-left: 2px solid transparent;
     white-space: nowrap;
     text-decoration: none;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 .toc-item:hover { background: var(--bg-tertiary); color: var(--accent-color); }
 .toc-item.active { color: var(--accent-color); border-left-color: var(--accent-color); background: var(--bg-tertiary); border-radius: 0; }
@@ -180,5 +211,23 @@ watch(() => props.open, (val) => {
 .toc-item[data-level="4"] { padding-left: 44px; }
 .toc-item[data-level="5"] { padding-left: 56px; }
 .toc-item[data-level="6"] { padding-left: 68px; }
+
+.toc-page-badge {
+    display: inline-block;
+    font-size: 10px;
+    font-weight: 600;
+    background: var(--bg-tertiary);
+    color: var(--text-muted);
+    padding: 1px 5px;
+    border-radius: 3px;
+    margin-right: 4px;
+    flex-shrink: 0;
+    vertical-align: middle;
+}
+
+.toc-item.active .toc-page-badge {
+    background: rgba(255,255,255,0.15);
+    color: var(--accent-color);
+}
 
 </style>

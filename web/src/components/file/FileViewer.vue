@@ -30,7 +30,14 @@
         <strong>Error loading file:</strong> {{ file.error }}
       </div>
 
-      <!-- Image / PDF -->
+      <!-- PDF -->
+      <PdfPreview
+        v-else-if="file.isPdf"
+        ref="pdfPreviewRef"
+        :file="file"
+      />
+
+      <!-- Image -->
       <ImagePreview
         v-else-if="file.isImage"
         :file="file"
@@ -117,6 +124,7 @@ import { ref, computed, watch, onBeforeUnmount } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { FileText, Download, Code2 } from 'lucide-vue-next'
 import ImagePreview from '@/components/media/ImagePreview.vue'
+import PdfPreview from '@/components/media/PdfPreview.vue'
 import AudioPreview from '@/components/media/AudioPreview.vue'
 import VideoPreview from '@/components/media/VideoPreview.vue'
 import MarkdownPreview from './MarkdownPreview.vue'
@@ -142,6 +150,11 @@ const rawFileLanguage = computed(() => getFileType(props.file?.name)?.lang || 'p
 const isMarkdown = computed(() => fileType.value?.isMarkdown || false)
 const loading = ref(false)
 const contentRef = ref(null)
+const pdfPreviewRef = ref(null)
+
+// Expose PDF outline and scrollToPage for TOC integration
+const pdfOutline = computed(() => pdfPreviewRef.value?.outline || [])
+const pdfScrollToPage = (pageNum) => pdfPreviewRef.value?.scrollToPage(pageNum)
 
 // Word wrap preference persisted to localStorage
 const wordWrap = ref(false)
@@ -241,7 +254,7 @@ watch(() => props.file, (f, oldF) => {
     clearRestoreTimer()
     if (!f) { currentFilePath = null; loading.value = true; return }
     currentFilePath = f.path
-    if (f.isImage || f.isAudio || f.isVideo || f.isBinary || f.tooLarge || f.error) {
+    if (f.isImage || f.isPdf || f.isAudio || f.isVideo || f.isBinary || f.tooLarge || f.error) {
         loading.value = false
     } else {
         loading.value = f.content == null
@@ -260,7 +273,7 @@ watch(() => props.file, (f, oldF) => {
 
 watch(() => props.file?.content, (content) => {
     if (!props.file) return
-    if (props.file.isImage || props.file.isAudio || props.file.isVideo || props.file.isBinary || props.file.tooLarge || props.file.error) return
+    if (props.file.isImage || props.file.isPdf || props.file.isAudio || props.file.isVideo || props.file.isBinary || props.file.tooLarge || props.file.error) return
     loading.value = content == null
     // Content loaded, try restore or attach listener
     if (content != null) {
@@ -283,6 +296,12 @@ function handleDownload(path) {
         native.downloadFile(path)
     }
 }
+
+// Expose for parent (App.vue) to access PDF TOC
+defineExpose({
+    pdfOutline,
+    pdfScrollToPage,
+})
 </script>
 
 <style scoped>

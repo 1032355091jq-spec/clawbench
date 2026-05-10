@@ -6,6 +6,7 @@ export interface FileType {
     color: string
     isMarkdown: boolean
     isImage?: boolean
+    isPdf?: boolean
     isAudio?: boolean
     isVideo?: boolean
 }
@@ -61,7 +62,7 @@ const FILE_TYPES: FileType[] = [
     { exts: ['.ico'], lang: 'image', label: 'ICO', color: '#a855f7', isMarkdown: false, isImage: true },
     { exts: ['.tiff', '.tif'], lang: 'image', label: 'TIFF', color: '#a855f7', isMarkdown: false, isImage: true },
     { exts: ['.avif'], lang: 'image', label: 'AVIF', color: '#a855f7', isMarkdown: false, isImage: true },
-    { exts: ['.pdf'], lang: 'pdf', label: 'PDF', color: '#e53e3e', isMarkdown: false, isImage: true },
+    { exts: ['.pdf'], lang: 'pdf', label: 'PDF', color: '#e53e3e', isMarkdown: false, isPdf: true },
     { exts: ['.mp3'], lang: 'audio', label: 'MP3', color: '#22c55e', isMarkdown: false, isAudio: true },
     { exts: ['.wav'], lang: 'audio', label: 'WAV', color: '#22c55e', isMarkdown: false, isAudio: true },
     { exts: ['.ogg'], lang: 'audio', label: 'OGG', color: '#22c55e', isMarkdown: false, isAudio: true },
