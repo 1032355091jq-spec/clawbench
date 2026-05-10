@@ -10,7 +10,6 @@
       @touchend="handleTouchEnd"
       @touchcancel="handleTouchEnd">
       <img :src="mediaUrl" :alt="file.name" class="image-preview-img"
-        @click.stop
         :style="{ transform: `translateX(${dragOffsetX}px)`, transition: isDragging ? 'none' : 'transform 0.25s ease-out' }" />
       <!-- Prev overlay -->
       <div v-if="hasPrev" class="img-nav-hint img-nav-prev" @click="goPrev">
@@ -202,7 +201,7 @@ watch(() => props.file, () => {
     max-height: 100%;
     object-fit: contain;
     border-radius: var(--radius-sm);
-    cursor: default;
+    cursor: zoom-in;
     box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
     will-change: transform;
 }
