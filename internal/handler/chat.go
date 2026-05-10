@@ -842,6 +842,38 @@ func stringsContainsAnyBlock(blocks []model.ContentBlock, substr string) bool {
 	return false
 }
 
+// extractJSONCandidate prepares a raw <ask-question> content string for JSON
+// parsing. It strips markdown code fences and trailing XML closing tags that
+// some models append after the JSON payload (e.g. "</user_query>"). Returns
+// the cleaned JSON string if the content looks like valid JSON (starts with
+// '{' or '['), or an empty string otherwise.
+func extractJSONCandidate(raw string) string {
+	trimmed := strings.TrimSpace(raw)
+	if trimmed == "" {
+		return ""
+	}
+	// Strip markdown code fences (```json ... ```)
+	if strings.HasPrefix(trimmed, "```") {
+		if nl := strings.Index(trimmed, "\n"); nl != -1 {
+			trimmed = strings.TrimSpace(trimmed[nl+1:])
+		}
+		if idx := strings.LastIndex(trimmed, "```"); idx != -1 {
+			trimmed = strings.TrimSpace(trimmed[:idx])
+		}
+	}
+	// Strip trailing XML closing tags that some models incorrectly append
+	// after the JSON payload (e.g. GLM-5.1 uses </user_query>).
+	reTrailingXML := regexp.MustCompile(`\s*</[a-zA-Z_][\w.-]*>\s*$`)
+	for reTrailingXML.MatchString(trimmed) {
+		trimmed = strings.TrimSpace(reTrailingXML.ReplaceAllString(trimmed, ""))
+	}
+	// Validate that the content looks like JSON — must start with '{' or '['.
+	if !strings.HasPrefix(trimmed, "{") && !strings.HasPrefix(trimmed, "[") {
+		return ""
+	}
+	return trimmed
+}
+
 // convertAskQuestionBlocks detects <ask-question> tags in text ContentBlocks,
 // parses the JSON content, and converts them into tool_use ContentBlocks with
 // name="AskUserQuestion". Tags are stripped from text; if no text remains the
@@ -873,8 +905,23 @@ func convertAskQuestionBlocks(blocks []model.ContentBlock) []model.ContentBlock 
 			continue
 		}
 
-		matches := re.FindStringSubmatch(block.Text)
+		var jsonContent string
 		matchStartIdx := -1 // position of the <ask-question> tag in block.Text; -1 for standard match
+
+		// Standard match: <ask-question>...</ask-question> with proper closing tag.
+		// Use FindAllStringSubmatch and iterate from the LAST match backward,
+		// because earlier occurrences may be prose references to the tag name
+		// rather than actual structured questions (e.g. "Forces structured
+		// `<ask-question>` XML tags"). The last match is most likely the real
+		// interactive question payload.
+		allMatches := re.FindAllStringSubmatch(block.Text, -1)
+		for j := len(allMatches) - 1; j >= 0; j-- {
+			candidate := extractJSONCandidate(allMatches[j][1])
+			if candidate != "" {
+				jsonContent = candidate
+				break
+			}
+		}
 
 		// Fallback: AI models sometimes omit </ask-question>, especially when the
 		// JSON payload ends at the text block boundary. Try matching each
@@ -882,7 +929,7 @@ func convertAskQuestionBlocks(blocks []model.ContentBlock) []model.ContentBlock 
 		// as the tag content. We iterate from the LAST match backward, because
 		// earlier occurrences may be prose references to the tag name rather than
 		// actual structured questions (e.g. "Forces structured `<ask-question>` XML tags").
-		if len(matches) < 2 {
+		if jsonContent == "" {
 			reUnclosed := regexp.MustCompile(`<ask-question\b[^>]*>`)
 			allIndices := reUnclosed.FindAllStringIndex(block.Text, -1)
 			// Try from last to first — the last <ask-question> is most likely
@@ -894,41 +941,19 @@ func convertAskQuestionBlocks(blocks []model.ContentBlock) []model.ContentBlock 
 				if len(subMatches) < 2 {
 					continue
 				}
-				// Validate that the captured content is plausible JSON — it must
-				// start with '{' or '[' after trimming whitespace/code fences.
-				// This prevents false positives where "<ask-question>" appears
-				// in prose (e.g. "Forces structured `<ask-question>` XML tags").
-				trimmed := strings.TrimSpace(subMatches[1])
-				if strings.HasPrefix(trimmed, "```") {
-					if nl := strings.Index(trimmed, "\n"); nl != -1 {
-						trimmed = strings.TrimSpace(trimmed[nl+1:])
-					}
-				}
-				if !strings.HasPrefix(trimmed, "{") && !strings.HasPrefix(trimmed, "[") {
+				candidate := extractJSONCandidate(subMatches[1])
+				if candidate == "" {
 					continue // Not a real ask-question payload, try previous match
 				}
 				// Found a valid unclosed match — record the position and content.
-				// matches[0] is unused for cleanText in the fallback path;
-				// matches[1] holds the JSON payload for extraction.
-				matches = []string{"", subMatches[1]}
+				jsonContent = candidate
 				matchStartIdx = startIdx
 				break
 			}
 		}
 
-		if len(matches) < 2 {
+		if jsonContent == "" {
 			continue
-		}
-
-		// Strip markdown code fences (```json ... ```) that some models wrap around the JSON
-		jsonContent := strings.TrimSpace(matches[1])
-		if strings.HasPrefix(jsonContent, "```") {
-			if nl := strings.Index(jsonContent, "\n"); nl != -1 {
-				jsonContent = strings.TrimSpace(jsonContent[nl+1:])
-			}
-			if idx := strings.LastIndex(jsonContent, "```"); idx != -1 {
-				jsonContent = strings.TrimSpace(jsonContent[:idx])
-			}
 		}
 
 		var input map[string]any

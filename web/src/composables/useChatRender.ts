@@ -111,6 +111,26 @@ export function useChatRender(options) {
     return html
   }
 
+  // Validate that <ask-question> content looks like a real JSON payload
+  // (not a prose reference like "Forces structured <ask-question> XML tags").
+  // Strips markdown code fences, then checks that JSON.parse succeeds and
+  // the result has a `questions` array.
+  function isValidAskContent(raw) {
+    let probe = raw.trim()
+    if (probe.startsWith('```')) {
+      const nlIdx = probe.indexOf('\n')
+      if (nlIdx !== -1) probe = probe.slice(nlIdx + 1).trim()
+      const lastFence = probe.lastIndexOf('```')
+      if (lastFence !== -1) probe = probe.slice(0, lastFence).trim()
+    }
+    try {
+      const parsed = JSON.parse(probe)
+      return parsed && parsed.questions && Array.isArray(parsed.questions)
+    } catch {
+      return false
+    }
+  }
+
   function renderTextBlock(text, msgId, blockIdx) {
     // Detect <scheduled-task id="..." /> tags — match optional "task-" prefix before UUID
     // to avoid false positives when AI mentions the tag format in prose
@@ -128,38 +148,43 @@ export function useChatRender(options) {
     }
 
     // Detect <ask-question> tags — strip from text and store for interactive rendering.
-    // Two-pass strategy:
-    //   1. Try the standard regex requiring a closing </ask-question> tag.
-    //   2. If that fails, try a fallback regex that treats end-of-text as the
-    //      implicit closing boundary — AI models sometimes omit the closing tag,
-    //      especially when the JSON payload ends at the text block boundary.
-    // The fallback iterates from the LAST <ask-question> occurrence backward,
-    // because earlier ones may be prose references (e.g. "Forces structured
-    // `<ask-question>` XML tags") rather than actual structured questions.
-    // It also validates that the captured content starts with '{' or '['
-    // (after stripping code fences) to avoid false positives.
-    let askMatch = text.match(/<ask-question\b[^>]*>([\s\S]*?)<\/ask-question>/)
-    let askFullTagRegex = /<ask-question\b[^>]*>[\s\S]*?<\/ask-question>/
-    if (!askMatch) {
-      // Fallback: unclosed <ask-question> — find the LAST occurrence and capture
-      // everything from it to end-of-text. Earlier matches are likely prose references.
-      const allOpenTags = [...text.matchAll(/<ask-question\b[^>]*>/g)]
-      for (let j = allOpenTags.length - 1; j >= 0; j--) {
-        const startIdx = allOpenTags[j].index
-        const afterTag = text.slice(startIdx)
-        const subMatch = afterTag.match(/<ask-question\b[^>]*>([\s\S]+)$/)
-        if (!subMatch) continue
-        let probe = subMatch[1].trim()
-        if (probe.startsWith('```')) {
-          const nlIdx = probe.indexOf('\n')
-          if (nlIdx !== -1) probe = probe.slice(nlIdx + 1).trim()
-        }
-        if (!probe.startsWith('{') && !probe.startsWith('[')) {
-          continue // Not a real payload, just prose mentioning the tag name
-        }
-        // Valid unclosed match found — record position and content
+    // Strategy: iterate ALL <ask-question> occurrences (last-to-first priority)
+    // and validate that the captured content parses as JSON with a `questions` array.
+    // This avoids false positives from prose references like:
+    //   "Forces structured `<ask-question>` XML tags"
+    // We try three patterns per occurrence, in order:
+    //   1. Properly closed: <ask-question>...</ask-question>
+    //   2. Wrong closing tag: <ask-question>...</user_query> (some models do this)
+    //   3. Unclosed: <ask-question>... (to end-of-text)
+    let askMatch = null
+    const allOpenTags = [...text.matchAll(/<ask-question\b[^>]*>/g)]
+    for (let j = allOpenTags.length - 1; j >= 0; j--) {
+      const startIdx = allOpenTags[j].index
+      const afterTag = text.slice(startIdx)
+
+      // Pattern 1: properly closed with </ask-question>
+      const closedMatch = afterTag.match(/<ask-question\b[^>]*>([\s\S]*?)<\/ask-question>/)
+      if (closedMatch && isValidAskContent(closedMatch[1])) {
+        askMatch = closedMatch
+        askMatch._startIdx = startIdx
+        askMatch._endIdx = startIdx + closedMatch[0].length
+        break
+      }
+
+      // Pattern 2: wrong closing tag (e.g. </user_query>, </ask>, etc.)
+      const wrongCloseMatch = afterTag.match(/<ask-question\b[^>]*>([\s\S]*?)<\/\w+>/)
+      if (wrongCloseMatch && isValidAskContent(wrongCloseMatch[1])) {
+        askMatch = wrongCloseMatch
+        askMatch._startIdx = startIdx
+        askMatch._endIdx = startIdx + wrongCloseMatch[0].length
+        break
+      }
+
+      // Pattern 3: unclosed — capture to end-of-text
+      const subMatch = afterTag.match(/<ask-question\b[^>]*>([\s\S]+)$/)
+      if (subMatch && isValidAskContent(subMatch[1])) {
         askMatch = subMatch
-        askMatch._startIdx = startIdx // custom property for cleanText extraction
+        askMatch._startIdx = startIdx
         break
       }
     }
@@ -184,13 +209,13 @@ export function useChatRender(options) {
         }
       }
       // Remove the matched tag from the rendered text.
-      // For standard matches (with closing tag), use regex replacement.
-      // For unclosed fallback matches, truncate from the tag position to end-of-text.
+      // For closed/wrong-close matches (_endIdx set), splice out the tag range.
+      // For unclosed matches, truncate from the tag position to end-of-text.
       let cleanText
-      if (askMatch._startIdx !== undefined) {
-        cleanText = text.slice(0, askMatch._startIdx).trim()
+      if (askMatch._endIdx !== undefined) {
+        cleanText = (text.slice(0, askMatch._startIdx) + text.slice(askMatch._endIdx)).trim()
       } else {
-        cleanText = text.replace(askFullTagRegex, '').trim()
+        cleanText = text.slice(0, askMatch._startIdx).trim()
       }
       // Strip scheduled-task tags (with optional task- prefix) from the remaining text
       cleanText = cleanText.replace(/<scheduled-task\s+id="(task-)?[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"\s*\/>/gi, '').trim()
