@@ -3,7 +3,7 @@
 # ClawBench —— 为移动端打造的AI工作台
 
 <p>
-  <img src="assets/logo.svg" alt="ClawBench" width="96" height="96" align="left" style="margin-right:16px;">
+  <img src="assets/logo.png" alt="ClawBench" width="96" height="96" align="left" style="margin-right:16px;">
 </p>
 
 **从终端到掌心** — 为移动端打造的 AI 工作台。

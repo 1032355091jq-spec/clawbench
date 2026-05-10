@@ -3,7 +3,7 @@
 # ClawBench — AI Workstation Built for Mobile
 
 <p>
-  <img src="assets/logo.svg" alt="ClawBench" width="96" height="96" align="left" style="margin-right:16px;">
+  <img src="assets/logo.png" alt="ClawBench" width="96" height="96" align="left" style="margin-right:16px;">
 </p>
 
 **From Terminal to Palm** — An AI workstation built for mobile.
