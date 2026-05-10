@@ -445,6 +445,19 @@ func main() {
 	if err := model.LoadAgents(agentsDir); err != nil {
 		slog.Warn("failed to load agents", slog.String("err", err.Error()))
 	}
+
+	// Auto-discover installed AI CLIs when no agents are configured (one-time generation)
+	if len(model.AgentList) == 0 {
+		slog.Info("no agents found, starting auto-discovery")
+		if err := model.DiscoverAgents(agentsDir); err != nil {
+			slog.Warn("auto-discovery failed", slog.String("err", err.Error()))
+		} else {
+			if err := model.LoadAgents(agentsDir); err != nil {
+				slog.Warn("failed to reload agents after discovery", slog.String("err", err.Error()))
+			}
+		}
+	}
+
 	slog.Info("agents loaded", slog.Int("count", len(model.AgentList)))
 
 	// Set default agent ID from config, or fall back to first agent
