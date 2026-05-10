@@ -347,6 +347,8 @@ export default {
       paste: 'Paste',
       newFile: 'New file',
       newFolder: 'New folder',
+      newFileInDir: 'New file in {name}',
+      newFolderInDir: 'New folder in {name}',
       openAsProject: 'Open as project',
       openTerminal: 'Open terminal here',
     },

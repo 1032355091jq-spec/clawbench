@@ -347,6 +347,8 @@ export default {
       paste: '粘贴',
       newFile: '新建文件',
       newFolder: '新建文件夹',
+      newFileInDir: '在 {name} 内新建文件',
+      newFolderInDir: '在 {name} 内新建文件夹',
       openAsProject: '打开为项目',
       openTerminal: '在此打开终端',
     },

@@ -61,7 +61,11 @@
           class="file-item dir-item"
           :data-action="'dir'"
           :data-path="(currentDir ? currentDir + '/' : '') + entry.name"
-          @contextmenu.prevent="showCtx($event, entry)">
+          @contextmenu.prevent="showCtx($event, entry)"
+          @touchstart="onItemTouchStart($event, entry)"
+          @touchmove="onItemTouchMove"
+          @touchend="onItemTouchEnd"
+          @touchcancel="onItemTouchEnd">
           <Folder class="file-icon" :size="16" />
           <span class="file-name">{{ entry.name }}</span>
           <ChevronRight :size="14" class="chevron" />
@@ -74,7 +78,11 @@
           :class="{ active: currentFile?.path === (currentDir ? currentDir + '/' : '') + entry.name }"
           :data-action="'file'"
           :data-path="(currentDir ? currentDir + '/' : '') + entry.name"
-          @contextmenu.prevent="showCtx($event, entry)">
+          @contextmenu.prevent="showCtx($event, entry)"
+          @touchstart="onItemTouchStart($event, entry)"
+          @touchmove="onItemTouchMove"
+          @touchend="onItemTouchEnd"
+          @touchcancel="onItemTouchEnd">
           <FileImage v-if="isImage(entry)" class="file-icon" :size="16" color="#a855f7" />
           <FileMusic v-else-if="isAudio(entry)" class="file-icon" :size="16" color="#22c55e" />
           <FileText v-else class="file-icon" :size="16" :color="getFileType(entry.name).color" />
@@ -91,47 +99,52 @@
     <!-- Context menu -->
     <Teleport to="body">
       <div v-if="ctxMenu.visible" class="context-menu visible" :style="{ left: ctxMenu.x + 'px', top: ctxMenu.y + 'px' }" @click.stop>
-        <div class="context-menu-item" @click.stop="doCopy">
-          <Copy :size="14" />
-          {{ t('file.context.copy') }}
-        </div>
-        <div class="context-menu-item" @click.stop="doCut">
-          <Scissors :size="14" />
-          {{ t('file.context.cut') }}
-        </div>
+        <!-- Group 1: Clipboard operations -->
+        <template v-if="ctxMenu.entry">
+          <div class="context-menu-item" @click.stop="doCopy">
+            <Copy :size="14" />
+            {{ t('file.context.copy') }}
+          </div>
+          <div class="context-menu-item" @click.stop="doCut">
+            <Scissors :size="14" />
+            {{ t('file.context.cut') }}
+          </div>
+        </template>
         <div class="context-menu-item" :class="{ disabled: !clipboard.entry }" @click.stop="clipboard.entry && doPaste()">
           <ClipboardPaste :size="14" />
           {{ t('file.context.paste') }}
         </div>
+        <!-- Group 2: Create -->
         <div class="context-menu-divider" />
         <div class="context-menu-item" @click.stop="doNewFile">
           <FilePlus :size="14" />
-          {{ t('file.context.newFile') }}
+          {{ ctxMenu.entry?.type === 'dir' ? t('file.context.newFileInDir', { name: ctxMenu.entry.name }) : t('file.context.newFile') }}
         </div>
         <div class="context-menu-item" @click.stop="doNewFolder">
           <FolderPlus :size="14" />
-          {{ t('file.context.newFolder') }}
+          {{ ctxMenu.entry?.type === 'dir' ? t('file.context.newFolderInDir', { name: ctxMenu.entry.name }) : t('file.context.newFolder') }}
         </div>
-        <div class="context-menu-divider" v-if="ctxMenu.entry" />
-        <div class="context-menu-item" v-if="ctxMenu.entry" @click.stop="doRename">
-          <Pencil :size="14" />
-          {{ t('common.rename') }}
-        </div>
-        <div class="context-menu-item" v-if="ctxMenu.entry && ctxMenu.entry.type !== 'dir'" @click.stop="doDownload">
-          <Download :size="14" />
-          {{ t('common.download') }}
-        </div>
-        <div class="context-menu-item danger" v-if="ctxMenu.entry" @click.stop="doDelete">
-          <Trash2 :size="14" />
-          {{ t('common.delete') }}
-        </div>
-        <template v-if="ctxMenu.entry && ctxMenu.entry.type === 'dir'">
+        <!-- Group 3: Entry actions -->
+        <template v-if="ctxMenu.entry">
           <div class="context-menu-divider" />
-          <div class="context-menu-item" @click.stop="doOpenAsProject">
+          <div class="context-menu-item" @click.stop="doRename">
+            <Pencil :size="14" />
+            {{ t('common.rename') }}
+          </div>
+          <div class="context-menu-item" v-if="ctxMenu.entry.type !== 'dir'" @click.stop="doDownload">
+            <Download :size="14" />
+            {{ t('common.download') }}
+          </div>
+          <div class="context-menu-item danger" @click.stop="doDelete">
+            <Trash2 :size="14" />
+            {{ t('common.delete') }}
+          </div>
+          <div class="context-menu-item" v-if="ctxMenu.entry.type === 'dir'" @click.stop="doOpenAsProject">
             <FolderOpen :size="14" />
             {{ t('file.context.openAsProject') }}
           </div>
         </template>
+        <!-- Group 4: Terminal -->
         <div class="context-menu-divider" />
         <div class="context-menu-item" @click.stop="doOpenTerminal">
           <TerminalIcon :size="14" />
@@ -227,6 +240,35 @@ function onContainerTouchEnd() {
     if (containerPressTimer) {
         clearTimeout(containerPressTimer)
         containerPressTimer = null
+    }
+}
+
+// File item long-press (mobile)
+let itemPressTimer = null
+let itemPressMoved = false
+
+function onItemTouchStart(e, entry) {
+    itemPressMoved = false
+    const touch = e.touches[0]
+    itemPressTimer = setTimeout(() => {
+        if (!itemPressMoved) {
+            const path = (props.currentDir ? props.currentDir + '/' : '') + entry.name
+            ctxMenu.x = touch.clientX
+            ctxMenu.y = touch.clientY + 10
+            ctxMenu.entry = { ...entry, path }
+            ctxMenu.visible = true
+            nextTick(() => clampCtxMenu())
+        }
+        itemPressTimer = null
+    }, 450)
+}
+
+function onItemTouchMove() { itemPressMoved = true }
+
+function onItemTouchEnd() {
+    if (itemPressTimer) {
+        clearTimeout(itemPressTimer)
+        itemPressTimer = null
     }
 }
 const clipboard = reactive({ entry: null, isCut: false })
