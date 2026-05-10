@@ -25,8 +25,8 @@ vi.mock('@/i18n', () => ({
         if (key === 'task.repeat.once') return 'Once'
         if (key === 'task.repeat.times') return `${params?.count} times`
         if (key === 'task.repeat.unlimited') return 'Unlimited'
-        if (key === 'task.status.active') return 'Active'
-        if (key === 'task.status.paused') return 'Paused'
+        if (key === 'task.status.active') return 'Enabled'
+        if (key === 'task.status.paused') return 'Disabled'
         if (key === 'task.status.completed') return 'Completed'
         return key
       },
@@ -110,12 +110,12 @@ describe('repeatLabel', () => {
 })
 
 describe('statusLabel', () => {
-  it('returns "Active" for active status', () => {
-    expect(statusLabel('active')).toBe('Active')
+  it('returns "Enabled" for active status', () => {
+    expect(statusLabel('active')).toBe('Enabled')
   })
 
-  it('returns "Paused" for paused status', () => {
-    expect(statusLabel('paused')).toBe('Paused')
+  it('returns "Disabled" for paused status', () => {
+    expect(statusLabel('paused')).toBe('Disabled')
   })
 
   it('returns "Completed" for completed status', () => {
