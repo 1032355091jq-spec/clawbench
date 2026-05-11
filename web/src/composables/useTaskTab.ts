@@ -36,6 +36,8 @@ export function useTaskTab() {
         } else if (execDetailOpen.value) {
             execDetailOpen.value = false
             selectedExecId.value = null
+        } else if (currentView.value === 'history') {
+            currentView.value = 'settings'
         } else {
             currentView.value = 'list'
             selectedTaskId.value = null

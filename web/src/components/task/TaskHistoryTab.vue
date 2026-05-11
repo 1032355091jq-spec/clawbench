@@ -80,7 +80,7 @@ const emit = defineEmits(['open-file'])
 const { t } = useI18n()
 const dialog = useDialog()
 const toast = useToast()
-const { openExecDetail, goBack } = useTaskTab()
+const { openExecDetail, goBack, navigateToTaskSettings, selectedTaskId } = useTaskTab()
 
 const chatRender = useChatRender({ messages: ref([]), theme: ref('light'), currentSessionId: ref('') })
 
@@ -203,6 +203,9 @@ async function markExecRead(execId) {
 function onBreadcrumbNavigate(view) {
   if (view === 'list') {
     goBack()
+  } else if (view === 'settings') {
+    const tid = selectedTaskId.value
+    if (tid) navigateToTaskSettings(tid)
   }
 }
 
