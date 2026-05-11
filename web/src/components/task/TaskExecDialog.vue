@@ -63,29 +63,62 @@
     </div>
 
     <!-- Detail view: reuse chat-message.assistant for consistent markdown/inline styles -->
-    <div v-if="view === 'detail' && selectedExec" class="chat-message assistant detail-content">
-      <ContentBlocks
-        :blocks="selectedExec.blocks"
-        msgId="exec-detail"
-        :msgIndex="0"
-        :expandedTools="expandedTools"
-        :blockTasks="{}"
-        :renderTextBlock="chatRender.renderTextBlock"
-        :formatToolInput="chatRender.formatToolInput"
-        :toolCallSummary="chatRender.toolCallSummary"
-        @toggle-tool="toggleTool"
-        @show-tool-detail="handleShowToolDetail"
-      />
-      <!-- Execution metadata bar -->
-      <div v-if="selectedExec.metadata" class="exec-detail-meta">
-        <span v-if="selectedExec.metadata.wallMs" class="exec-meta-tag exec-meta-duration">{{ t('chat.metadata.wallDuration') }} {{ formatDuration(selectedExec.metadata.wallMs) }}</span>
-        <span v-if="selectedExec.metadata.model" class="exec-meta-tag">{{ selectedExec.metadata.model }}</span>
-        <span v-if="selectedExec.metadata.inputTokens" class="exec-meta-tag">{{ t('chat.metadata.inputTokens') }} {{ selectedExec.metadata.inputTokens.toLocaleString() }}</span>
-        <span v-if="selectedExec.metadata.outputTokens" class="exec-meta-tag">{{ t('chat.metadata.outputTokens') }} {{ selectedExec.metadata.outputTokens.toLocaleString() }}</span>
-        <span v-if="selectedExec.metadata.costUsd" class="exec-meta-tag">{{ t('chat.metadata.cost') }} ${{ selectedExec.metadata.costUsd.toFixed(6) }}</span>
-        <span v-if="selectedExec.metadata.stopReason" class="exec-meta-tag">{{ selectedExec.metadata.stopReason }}</span>
+    <div v-if="view === 'detail' && selectedExec" ref="detailContentRef" class="chat-message assistant detail-content" @click="handleDetailClick">
+      <!-- Collapsible content wrapper -->
+      <div ref="detailWrapperRef" class="msg-content-wrapper" :class="{ collapsed: detailCollapsed }" :style="detailCollapsed ? { maxHeight: store.state.chatCollapsedHeight + 'px' } : {}">
+        <ContentBlocks
+          :blocks="selectedExec.blocks"
+          msgId="exec-detail"
+          :msgIndex="0"
+          :expandedTools="expandedTools"
+          :blockTasks="{}"
+          :renderTextBlock="chatRender.renderTextBlock"
+          :formatToolInput="chatRender.formatToolInput"
+          :toolCallSummary="chatRender.toolCallSummary"
+          @toggle-tool="toggleTool"
+          @show-tool-detail="handleShowToolDetail"
+        />
+      </div>
+
+      <!-- Collapse overlay + expand button -->
+      <div v-if="detailCollapsed" class="msg-collapse-overlay" @click="detailUserExpanded = true">
+        <div class="msg-collapse-gradient"></div>
+        <button class="msg-expand-btn">
+          <ChevronDown :size="14" />
+          {{ t('chat.message.expandFull') }}
+        </button>
+      </div>
+
+      <!-- Collapse button (shown when content is expanded and overflows) -->
+      <div v-if="!detailCollapsed && detailCanCollapse" class="msg-collapse-action">
+        <button class="msg-collapse-btn" @click="detailUserExpanded = false">
+          <ChevronUp :size="14" />
+          {{ t('chat.message.collapse') }}
+        </button>
+      </div>
+
+      <!-- Bottom metadata bar (same as chat) -->
+      <div v-if="selectedExec.metadata || selectedExec.blocks?.length" class="chat-meta-bar">
+        <span class="chat-meta-info">
+          <span v-if="selectedExec.metadata?.wallMs" class="chat-meta-duration">{{ formatDuration(selectedExec.metadata.wallMs) }}</span>
+          <span :class="selectedExec.metadata?.wallMs ? 'chat-meta-sep' : ''">{{ chatRender.formatMessageTime(selectedExec.createdAt) }}</span>
+        </span>
+        <div class="chat-meta-actions">
+          <button class="chat-info-btn" @click="showExecMetadata = true" :title="t('chat.message.viewDetails')">
+            <Info :size="14" />
+          </button>
+        </div>
       </div>
     </div>
+
+    <!-- Execution metadata detail modal -->
+    <ChatMetadataModal
+      :show="showExecMetadata"
+      :data="selectedExec?.metadata || {}"
+      :createdAt="selectedExec?.createdAt"
+      :formatDetailTime="formatAbsoluteTime"
+      @close="showExecMetadata = false"
+    />
 
     <template #footer>
       <button class="btn btn-primary" @click="triggerTask" :disabled="triggering || runningExecutions.length > 0">
@@ -111,17 +144,20 @@
 </template>
 
 <script setup>
-import { ref, watch, onUnmounted, inject } from 'vue'
+import { ref, computed, watch, nextTick, onUnmounted, inject } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { Clock, ChevronLeft, ChevronRight, Square } from 'lucide-vue-next'
+import { Clock, ChevronLeft, ChevronRight, ChevronDown, ChevronUp, Square, Info } from 'lucide-vue-next'
 import ModalDialog from '@/components/common/ModalDialog.vue'
 import ContentBlocks from '@/components/chat/ContentBlocks.vue'
 import ToolDetailOverlay from '@/components/chat/ToolDetailOverlay.vue'
+import ChatMetadataModal from '@/components/chat/ChatMetadataModal.vue'
 import { useChatRender } from '@/composables/useChatRender.ts'
 import { formatToolOutput } from '@/utils/renderToolDetail.ts'
 import { useToast } from '@/composables/useToast.ts'
 import { useDialog } from '@/composables/useDialog.ts'
 import { formatDuration } from '@/utils/format.ts'
+import { store } from '@/stores/app.ts'
+import { openFilePath, verifyFilePaths } from '@/composables/useFilePathAnnotation.ts'
 
 const props = defineProps({
   open: Boolean,
@@ -147,10 +183,31 @@ const runningExecutions = ref([])
 const expandedTools = ref({})
 const view = ref('list')  // 'list' | 'detail'
 const selectedExec = ref(null)
+const showExecMetadata = ref(false)
 let pollTimer = null
+
+// Detail view collapse/expand state (same pattern as ChatMessageItem)
+const detailWrapperRef = ref(null)
+const detailContentRef = ref(null)
+const detailOverflows = ref(false)
+const detailUserExpanded = ref(false)
+
+const detailCollapsed = computed(() => {
+  if (detailUserExpanded.value) return false
+  return detailOverflows.value
+})
+
+const detailCanCollapse = computed(() => detailOverflows.value)
+
+function checkDetailOverflow() {
+  if (!detailWrapperRef.value) return
+  if (!detailWrapperRef.value.offsetParent) return
+  detailOverflows.value = detailWrapperRef.value.scrollHeight > store.state.chatCollapsedHeight
+}
 
 // Create chatRender instance for rendering execution blocks
 const renderTheme = inject('theme', ref('light'))
+const chatUI = inject('chatUI', {})
 const chatRender = useChatRender({ messages: ref([]), theme: renderTheme, currentSessionId: ref('') })
 const toast = useToast()
 
@@ -211,7 +268,42 @@ function extractSummary(blocks) {
 function openDetail(exec) {
   selectedExec.value = exec
   expandedTools.value = {}
+  showExecMetadata.value = false
+  detailOverflows.value = false
+  detailUserExpanded.value = false
   view.value = 'detail'
+  nextTick(() => {
+    checkDetailOverflow()
+    requestAnimationFrame(checkDetailOverflow)
+    // Verify file path annotations in the detail content.
+    // This container is teleported to <body> via ModalDialog, so the default
+    // verifyFilePaths in renderMarkdown (which targets #aiChatMessages) won't
+    // find these elements. Run verification against our own container instead.
+    if (detailContentRef.value) {
+      const paths = [...detailContentRef.value.querySelectorAll('.chat-file-open-btn[data-file-path]')]
+        .map(btn => btn.getAttribute('data-file-path'))
+        .filter(Boolean)
+      if (paths.length > 0) verifyFilePaths([...new Set(paths)], detailContentRef.value)
+    }
+  })
+}
+
+/** Handle clicks on .chat-file-open-btn inside the teleported detail content.
+ *  The ChatMessageList delegated handler only covers #aiChatMessages, so
+ *  clicks inside this modal won't reach it. */
+function handleDetailClick(event) {
+  const btn = event.target.closest('.chat-file-open-btn')
+  if (btn) {
+    event.preventDefault()
+    event.stopPropagation()
+    const filePath = btn.getAttribute('data-file-path')
+    if (filePath) {
+      openFilePath(filePath)
+      // Close modal + chat sheet so the file view is visible
+      emit('close')
+      chatUI.closeSheet?.()
+    }
+  }
 }
 
 function handleClose() {
@@ -329,6 +421,9 @@ watch(() => props.open, (isOpen) => {
   view.value = 'list'
   selectedExec.value = null
   expandedTools.value = {}
+  showExecMetadata.value = false
+  detailOverflows.value = false
+  detailUserExpanded.value = false
   loadExecutions()
   loadRunningStatus()
   markTaskRead()
@@ -358,10 +453,149 @@ onUnmounted(() => {
   flex: 1;
   min-height: 0;
   overflow-y: auto !important;
-  /* Override .chat-message.assistant styles that conflict with modal context */
-  background: transparent !important;
-  border-radius: 0 !important;
+  /* Keep chat-message.assistant bubble styling in modal context */
   align-self: stretch !important;
+}
+
+/* ── Collapse styles (same as ChatMessageItem) ── */
+.msg-content-wrapper {
+  position: relative;
+}
+
+.msg-content-wrapper.collapsed {
+  overflow: hidden;
+}
+
+.msg-collapse-overlay {
+  position: relative;
+  margin-top: -40px;
+  padding-top: 40px;
+  cursor: pointer;
+}
+
+.msg-collapse-gradient {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(to bottom, transparent 0%, var(--bg-tertiary) 80%);
+  pointer-events: none;
+}
+
+.msg-expand-btn {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  width: 100%;
+  padding: 6px 0;
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 12px;
+  cursor: pointer;
+  transition: color 0.2s;
+}
+
+.msg-expand-btn:hover {
+  color: var(--accent-color, #0066cc);
+}
+
+.msg-expand-btn svg {
+  flex-shrink: 0;
+}
+
+.msg-collapse-action {
+  display: flex;
+  justify-content: center;
+  margin-top: 2px;
+}
+
+.msg-collapse-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 4px 12px;
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 12px;
+  cursor: pointer;
+  border-radius: 4px;
+  transition: color 0.2s, background 0.2s;
+}
+
+.msg-collapse-btn:hover {
+  color: var(--accent-color, #0066cc);
+  background: var(--bg-tertiary);
+}
+
+.msg-collapse-btn svg {
+  flex-shrink: 0;
+}
+
+/* Chat Meta Bar (same as ChatMessageItem) */
+.chat-meta-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 4px;
+  gap: 6px;
+}
+
+.chat-meta-info {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: color-mix(in srgb, var(--text-secondary) 70%, transparent);
+  min-width: 0;
+  overflow: hidden;
+}
+
+.chat-meta-sep::before {
+  content: '·';
+  margin-right: 6px;
+}
+
+.chat-meta-duration {
+  font-variant-numeric: tabular-nums;
+}
+
+.chat-meta-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.chat-info-btn {
+  flex-shrink: 0;
+  min-width: 22px;
+  height: 22px;
+  padding: 0 6px;
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  opacity: 0.5;
+  transition: opacity 0.2s, background 0.2s;
+  font-size: 11px;
+}
+
+.chat-info-btn:hover {
+  opacity: 1;
+  background: var(--bg-tertiary);
+}
+
+.chat-info-btn svg {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
 }
 
 .execution-item {
@@ -514,20 +748,6 @@ onUnmounted(() => {
 .exec-chevron {
   flex-shrink: 0;
   color: var(--text-muted, #ccc);
-}
-
-.exec-detail-meta {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
-  padding: 8px 12px;
-  border-top: 1px solid var(--border-color, #e5e5e5);
-  margin-top: 4px;
-}
-
-.exec-detail-meta .exec-meta-tag {
-  font-size: 11px;
 }
 
 /* Running execution indicator */
