@@ -5,6 +5,7 @@ import { useNotification } from '@/composables/useNotification.ts'
 import { useSessionIdentity } from '@/composables/useSessionIdentity.ts'
 import { useAgents } from '@/composables/useAgents.ts'
 import { store } from '@/stores/app.ts'
+import { buildMessageSnapshot, parseMessages } from '@/utils/chatSessionUtils.ts'
 
 export interface UseChatSessionOptions {
   currentSessionId: Ref<string>
@@ -106,35 +107,11 @@ export function useChatSession(options: UseChatSessionOptions) {
   // Guard against concurrent switchSession calls — only the last one wins
   let switchSessionSeq = 0
 
-  function parseMessages(rawMsgs) {
-    return rawMsgs.map(msg => {
-      if (msg.role === 'assistant') {
-        const { blocks, metadata, cancelled } = onParseAssistantContent(msg.content)
-        msg.blocks = blocks
-        if (metadata) msg.metadata = metadata
-        if (cancelled) msg.cancelled = cancelled
-        if (msg.streaming) { msg.streaming = true; msg.fromDB = true }
-      } else if (msg.role === 'user' && !msg.blocks) {
-        // User messages also use ContentBlocks for unified rendering & auto-collapse
-        msg.blocks = msg.content ? [{ type: 'text', text: msg.content }] : []
-      }
-      return msg
-    })
-  }
-
   // ── Change detection for polling ──
   // Tracks a lightweight fingerprint of the last loaded messages.
   // When polling-triggered reloads find no change, the UI is not refreshed,
   // preventing expandedTools collapse, scroll reset, and unnecessary re-renders.
   let lastMessageSnapshot = ''
-
-  function buildMessageSnapshot(rawMsgs: any[]): string {
-    // Fingerprint: each message's ID + role + content length + createdAt + streaming flag
-    // Detects new/deleted messages and content changes without comparing full content.
-    return rawMsgs.map(m =>
-      `${m.id ?? ''}:${m.role}:${(m.content || '').length}:${m.createdAt || ''}:${m.streaming ? 1 : 0}`
-    ).join('|')
-  }
 
   // forceScrollBottom: true = always scroll to bottom (switch session, first load)
   //                   false = only scroll if already near bottom (re-open panel, polling)
@@ -183,7 +160,7 @@ export function useChatSession(options: UseChatSessionOptions) {
       // to tool_use blocks, old entries keyed by text-block indices would cause duplicate
       // rendering. extractScheduledTasks below will re-populate from current DB state.
       Object.keys(blockAskQuestions).forEach(k => delete blockAskQuestions[k])
-      messages.value = parseMessages(rawMsgs)
+      messages.value = parseMessages(rawMsgs, onParseAssistantContent)
       totalMessages.value = data.total || messages.value.length
       currentSessionId.value = data.sessionId || ''
       currentSessionTitle.value = data.sessionTitle || ''
@@ -221,7 +198,7 @@ export function useChatSession(options: UseChatSessionOptions) {
       const resp = await fetch(`/api/ai/chat?session_id=${encodeURIComponent(currentSessionId.value)}&limit=${pageSize}&before=${encodeURIComponent(before)}`)
       if (!resp.ok) return
       const data = await resp.json()
-      const olderMsgs = parseMessages(data.messages || [])
+      const olderMsgs = parseMessages(data.messages || [], onParseAssistantContent)
       if (olderMsgs.length > 0) {
         messages.value = [...olderMsgs, ...messages.value]
         totalMessages.value = data.total || totalMessages.value
@@ -269,7 +246,7 @@ export function useChatSession(options: UseChatSessionOptions) {
       // (the newer switch will set switching=false when it completes)
       if (switchSessionSeq !== mySeq) return
 
-      messages.value = parseMessages(data.messages || [])
+      messages.value = parseMessages(data.messages || [], onParseAssistantContent)
       totalMessages.value = data.total || messages.value.length
       currentSessionId.value = data.sessionId || sessionId
       currentSessionTitle.value = data.sessionTitle || ''

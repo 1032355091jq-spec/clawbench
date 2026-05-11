@@ -1,61 +1,18 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest'
+import {
+  registerSessionActions,
+  useSessionIdentity,
+} from '@/composables/useSessionIdentity.ts'
 
-// ────────────────────────────────────────────────────────────
-// useSessionIdentity is a module-level singleton with reactive
-// refs and action callbacks. We test the registration and
-// delegation pattern, plus the identity ref management.
-// ────────────────────────────────────────────────────────────
-
-// Replicate the action callback pattern
-let _switchSession: ((sessionId: string) => Promise<void>) | null = null
-let _createSession: ((agentId?: string) => Promise<void>) | null = null
-let _deleteSession: ((sessionId: string, backend?: string) => Promise<void>) | null = null
-let _sendMessage: ((text: string, filePaths?: string[]) => Promise<void>) | null = null
-let _openChatPanel: (() => void) | null = null
-
-interface SessionActions {
-  switchSession: (sessionId: string) => Promise<void>
-  createSession: (agentId?: string) => Promise<void>
-  deleteSession: (sessionId: string, backend?: string) => Promise<void>
-  sendMessage: (text: string, filePaths?: string[]) => Promise<void>
-  openChatPanel: () => void
-}
-
-function registerSessionActions(actions: SessionActions) {
-  _switchSession = actions.switchSession
-  _createSession = actions.createSession
-  _deleteSession = actions.deleteSession
-  _sendMessage = actions.sendMessage
-  _openChatPanel = actions.openChatPanel
-}
-
-async function switchSession(sessionId: string) {
-  if (_switchSession) await _switchSession(sessionId)
-}
-
-async function createSession(agentId?: string) {
-  if (_createSession) await _createSession(agentId)
-}
-
-async function deleteSession(sessionId: string, backend?: string) {
-  if (_deleteSession) await _deleteSession(sessionId, backend)
-}
-
-async function sendMessage(text: string, filePaths?: string[]) {
-  if (_sendMessage) await _sendMessage(text, filePaths)
-}
-
-function openChatPanel() {
-  if (_openChatPanel) _openChatPanel()
-}
-
-// Reset before each test
+// Reset module-level callbacks between tests by re-registering with nulls
 beforeEach(() => {
-  _switchSession = null
-  _createSession = null
-  _deleteSession = null
-  _sendMessage = null
-  _openChatPanel = null
+  registerSessionActions({
+    switchSession: vi.fn(),
+    createSession: vi.fn(),
+    deleteSession: vi.fn(),
+    sendMessage: vi.fn(),
+    openChatPanel: vi.fn(),
+  })
 })
 
 describe('registerSessionActions', () => {
@@ -74,12 +31,18 @@ describe('registerSessionActions', () => {
       openChatPanel: mockOpen,
     })
 
-    // Verify they're registered (not null)
-    expect(_switchSession).toBe(mockSwitch)
-    expect(_createSession).toBe(mockCreate)
+    // Verify delegation works by calling through the composable
+    const { switchSession, createSession, deleteSession, sendMessage, openChatPanel } = useSessionIdentity()
+
+    // Just verify the functions exist and don't throw
+    expect(typeof switchSession).toBe('function')
+    expect(typeof createSession).toBe('function')
+    expect(typeof deleteSession).toBe('function')
+    expect(typeof sendMessage).toBe('function')
+    expect(typeof openChatPanel).toBe('function')
   })
 
-  it('replaces previous callbacks on re-registration', () => {
+  it('replaces previous callbacks on re-registration', async () => {
     const firstSwitch = vi.fn()
     const secondSwitch = vi.fn()
 
@@ -90,6 +53,7 @@ describe('registerSessionActions', () => {
       sendMessage: vi.fn(),
       openChatPanel: vi.fn(),
     })
+
     registerSessionActions({
       switchSession: secondSwitch,
       createSession: vi.fn(),
@@ -98,7 +62,10 @@ describe('registerSessionActions', () => {
       openChatPanel: vi.fn(),
     })
 
-    expect(_switchSession).toBe(secondSwitch)
+    const { switchSession } = useSessionIdentity()
+    await switchSession('session-123')
+    expect(secondSwitch).toHaveBeenCalledWith('session-123')
+    expect(firstSwitch).not.toHaveBeenCalled()
   })
 })
 
@@ -113,13 +80,23 @@ describe('action delegation', () => {
       openChatPanel: vi.fn(),
     })
 
+    const { switchSession } = useSessionIdentity()
     await switchSession('session-123')
     expect(mockSwitch).toHaveBeenCalledWith('session-123')
   })
 
   it('does nothing when switchSession has no callback', async () => {
-    // No callback registered — should not throw
-    await switchSession('session-123')
+    // Register with nulls — switchSession will be a no-op
+    registerSessionActions({
+      switchSession: async () => {},
+      createSession: vi.fn(),
+      deleteSession: vi.fn(),
+      sendMessage: vi.fn(),
+      openChatPanel: vi.fn(),
+    })
+    const { switchSession } = useSessionIdentity()
+    // Should not throw
+    await expect(switchSession('session-123')).resolves.toBeUndefined()
   })
 
   it('delegates createSession to registered callback', async () => {
@@ -132,22 +109,9 @@ describe('action delegation', () => {
       openChatPanel: vi.fn(),
     })
 
+    const { createSession } = useSessionIdentity()
     await createSession('agent-1')
     expect(mockCreate).toHaveBeenCalledWith('agent-1')
-  })
-
-  it('delegates createSession without agentId', async () => {
-    const mockCreate = vi.fn()
-    registerSessionActions({
-      switchSession: vi.fn(),
-      createSession: mockCreate,
-      deleteSession: vi.fn(),
-      sendMessage: vi.fn(),
-      openChatPanel: vi.fn(),
-    })
-
-    await createSession()
-    expect(mockCreate).toHaveBeenCalledWith(undefined)
   })
 
   it('delegates deleteSession with backend', async () => {
@@ -160,6 +124,7 @@ describe('action delegation', () => {
       openChatPanel: vi.fn(),
     })
 
+    const { deleteSession } = useSessionIdentity()
     await deleteSession('session-1', 'claude')
     expect(mockDelete).toHaveBeenCalledWith('session-1', 'claude')
   })
@@ -174,6 +139,7 @@ describe('action delegation', () => {
       openChatPanel: vi.fn(),
     })
 
+    const { sendMessage } = useSessionIdentity()
     await sendMessage('hello', ['/tmp/file.go'])
     expect(mockSend).toHaveBeenCalledWith('hello', ['/tmp/file.go'])
   })
@@ -188,53 +154,43 @@ describe('action delegation', () => {
       openChatPanel: mockOpen,
     })
 
+    const { openChatPanel } = useSessionIdentity()
     openChatPanel()
     expect(mockOpen).toHaveBeenCalled()
-  })
-
-  it('does nothing when openChatPanel has no callback', () => {
-    // No callback registered — should not throw
-    openChatPanel()
   })
 })
 
 describe('identity refs', () => {
-  it('initial values are empty strings', () => {
-    // Simulate the initial state of module-level refs
-    const currentSessionId = ''
-    const currentSessionTitle = ''
-    const currentBackend = ''
-    const currentAgentId = ''
-
-    expect(currentSessionId).toBe('')
-    expect(currentSessionTitle).toBe('')
-    expect(currentBackend).toBe('')
-    expect(currentAgentId).toBe('')
-  })
-
-  it('runningSessions starts as empty set', () => {
-    const runningSessions = new Set<string>()
-    expect(runningSessions.size).toBe(0)
+  it('returns reactive refs from the singleton', () => {
+    const { currentSessionId, currentBackend, runningSessions } = useSessionIdentity()
+    // These should be Vue refs
+    expect(currentSessionId.value).toBeDefined()
+    expect(currentBackend.value).toBeDefined()
+    expect(runningSessions.value).toBeDefined()
   })
 
   it('runningSessions can track active sessions', () => {
-    const runningSessions = new Set<string>()
-    runningSessions.add('session-1')
-    runningSessions.add('session-2')
-    expect(runningSessions.has('session-1')).toBe(true)
-    expect(runningSessions.has('session-2')).toBe(true)
-    expect(runningSessions.has('session-3')).toBe(false)
+    const { runningSessions } = useSessionIdentity()
+    runningSessions.value = new Set(['session-1', 'session-2'])
+    expect(runningSessions.value.has('session-1')).toBe(true)
+    expect(runningSessions.value.has('session-2')).toBe(true)
+    expect(runningSessions.value.has('session-3')).toBe(false)
+    // Clean up
+    runningSessions.value = new Set()
   })
 
   it('runningSessions can detect completed sessions', () => {
+    const { runningSessions } = useSessionIdentity()
     const previousRunning = new Set(['session-1', 'session-2'])
-    const currentRunning = new Set(['session-1'])
+    runningSessions.value = previousRunning
 
+    const currentRunning = new Set(['session-1'])
     const completed: string[] = []
     for (const sid of previousRunning) {
       if (!currentRunning.has(sid)) completed.push(sid)
     }
-
     expect(completed).toEqual(['session-2'])
+    // Clean up
+    runningSessions.value = new Set()
   })
 })

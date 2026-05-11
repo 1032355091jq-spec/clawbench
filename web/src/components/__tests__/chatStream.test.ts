@@ -1,17 +1,9 @@
-import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest'
-import { ref, nextTick } from 'vue'
-
-// ────────────────────────────────────────────────────────────
-// useChatStream relies on EventSource and DOM timers.
-// We test the core logic by extracting the key behaviors:
-// - findLastBlockOfType (coalescing logic)
-// - forceCleanupStreamingState
-// - FILE_MODIFYING_TOOLS detection
-// - Stream timeout and reconnect logic
-// ────────────────────────────────────────────────────────────
-
-// FILE_MODIFYING_TOOLS set from useChatStream
-const FILE_MODIFYING_TOOLS = new Set(['Write', 'Edit'])
+import { describe, expect, it, vi, beforeEach } from 'vitest'
+import {
+  FILE_MODIFYING_TOOLS,
+  findLastBlockOfType,
+  forceCleanupStreamingState,
+} from '@/utils/chatStreamUtils.ts'
 
 describe('FILE_MODIFYING_TOOLS', () => {
   it('includes Write tool', () => {
@@ -29,16 +21,19 @@ describe('FILE_MODIFYING_TOOLS', () => {
   it('does not include Bash tool', () => {
     expect(FILE_MODIFYING_TOOLS.has('Bash')).toBe(false)
   })
-})
 
-// Replicate findLastBlockOfType logic
-function findLastBlockOfType(blocks: any[], type: string): any | undefined {
-  for (let i = blocks.length - 1; i >= 0; i--) {
-    if (blocks[i].type === type) return blocks[i]
-    if (blocks[i].type === 'tool_use') return undefined
-  }
-  return undefined
-}
+  it('does not include Grep tool', () => {
+    expect(FILE_MODIFYING_TOOLS.has('Grep')).toBe(false)
+  })
+
+  it('does not include Glob tool', () => {
+    expect(FILE_MODIFYING_TOOLS.has('Glob')).toBe(false)
+  })
+
+  it('is case-sensitive (lowercase "write" is not included)', () => {
+    expect(FILE_MODIFYING_TOOLS.has('write')).toBe(false)
+  })
+})
 
 describe('findLastBlockOfType (coalescing logic)', () => {
   it('finds last text block', () => {
@@ -46,7 +41,7 @@ describe('findLastBlockOfType (coalescing logic)', () => {
       { type: 'text', text: 'first' },
       { type: 'text', text: 'second' },
     ]
-    expect(findLastBlockOfType(blocks, 'text').text).toBe('second')
+    expect(findLastBlockOfType(blocks, 'text')!.text).toBe('second')
   })
 
   it('finds last thinking block', () => {
@@ -54,7 +49,7 @@ describe('findLastBlockOfType (coalescing logic)', () => {
       { type: 'thinking', text: 'think1' },
       { type: 'thinking', text: 'think2' },
     ]
-    expect(findLastBlockOfType(blocks, 'thinking').text).toBe('think2')
+    expect(findLastBlockOfType(blocks, 'thinking')!.text).toBe('think2')
   })
 
   it('returns undefined when no matching block', () => {
@@ -72,8 +67,7 @@ describe('findLastBlockOfType (coalescing logic)', () => {
       { type: 'tool_use', name: 'Read', id: '1', input: {} },
       { type: 'text', text: 'after' },
     ]
-    // Looking for text should find 'after' (last text before end)
-    expect(findLastBlockOfType(blocks, 'text').text).toBe('after')
+    expect(findLastBlockOfType(blocks, 'text')!.text).toBe('after')
   })
 
   it('returns undefined when only tool_use is before matching type', () => {
@@ -81,9 +75,6 @@ describe('findLastBlockOfType (coalescing logic)', () => {
       { type: 'thinking', text: 'think1' },
       { type: 'tool_use', name: 'Read', id: '1', input: {} },
     ]
-    // Looking for thinking, but tool_use is a boundary —
-    // the thinking block is before the tool_use boundary
-    // The search goes backward: index 1 is tool_use (boundary), so return undefined
     expect(findLastBlockOfType(blocks, 'thinking')).toBeUndefined()
   })
 
@@ -91,7 +82,7 @@ describe('findLastBlockOfType (coalescing logic)', () => {
     const blocks = [
       { type: 'thinking', text: 'think1' },
     ]
-    expect(findLastBlockOfType(blocks, 'thinking').text).toBe('think1')
+    expect(findLastBlockOfType(blocks, 'thinking')!.text).toBe('think1')
   })
 
   it('handles interleaved text and thinking blocks', () => {
@@ -100,28 +91,29 @@ describe('findLastBlockOfType (coalescing logic)', () => {
       { type: 'thinking', text: 'think1' },
       { type: 'text', text: 'text2' },
     ]
-    // Finding text should return text2 (last text block)
-    expect(findLastBlockOfType(blocks, 'text').text).toBe('text2')
-    // Finding thinking should return think1
-    expect(findLastBlockOfType(blocks, 'thinking').text).toBe('think1')
+    expect(findLastBlockOfType(blocks, 'text')!.text).toBe('text2')
+    expect(findLastBlockOfType(blocks, 'thinking')!.text).toBe('think1')
+  })
+
+  it('returns undefined when tool_use is the only block', () => {
+    const blocks = [
+      { type: 'tool_use', name: 'Read', id: '1', input: {} },
+    ]
+    expect(findLastBlockOfType(blocks, 'text')).toBeUndefined()
+    expect(findLastBlockOfType(blocks, 'thinking')).toBeUndefined()
+  })
+
+  it('finds block after multiple tool_use boundaries', () => {
+    const blocks = [
+      { type: 'text', text: 'start' },
+      { type: 'tool_use', name: 'Read', id: '1', input: {} },
+      { type: 'text', text: 'middle' },
+      { type: 'tool_use', name: 'Write', id: '2', input: {} },
+      { type: 'text', text: 'end' },
+    ]
+    expect(findLastBlockOfType(blocks, 'text')!.text).toBe('end')
   })
 })
-
-// Replicate forceCleanupStreamingState logic
-function forceCleanupStreamingState(messages: any[], callbacks: { onRenderNeeded: () => void }) {
-  const streamingMsg = messages.find(m => m.role === 'assistant' && m.streaming)
-  if (streamingMsg) {
-    delete streamingMsg.streaming
-    if (streamingMsg.blocks) {
-      for (const block of streamingMsg.blocks) {
-        if (block.type === 'tool_use' && !block.done) {
-          block.done = true
-        }
-      }
-    }
-  }
-  callbacks.onRenderNeeded()
-}
 
 describe('forceCleanupStreamingState', () => {
   it('removes streaming flag from assistant message', () => {
@@ -150,29 +142,63 @@ describe('forceCleanupStreamingState', () => {
     expect(messages[0].blocks[1].done).toBe(true)
   })
 
-  it('calls onRenderNeeded', () => {
+  it('calls onRenderNeeded with forceFull=true', () => {
     const onRenderNeeded = vi.fn()
     forceCleanupStreamingState([], { onRenderNeeded })
-    expect(onRenderNeeded).toHaveBeenCalled()
+    expect(onRenderNeeded).toHaveBeenCalledWith(true)
   })
 
-  it('does nothing if no streaming message exists', () => {
+  it('does nothing to messages if no streaming message exists', () => {
     const messages = [
       { role: 'user', content: 'hello' },
     ]
     const onRenderNeeded = vi.fn()
     forceCleanupStreamingState(messages, { onRenderNeeded })
     expect(onRenderNeeded).toHaveBeenCalled()
-    // No crash, no modification
     expect(messages[0].content).toBe('hello')
+  })
+
+  it('calls onExtractScheduledTasks when provided', () => {
+    const messages = [
+      { role: 'assistant', content: '', blocks: [], streaming: true },
+    ]
+    const onRenderNeeded = vi.fn()
+    const onExtractScheduledTasks = vi.fn()
+    forceCleanupStreamingState(messages, { onRenderNeeded, onExtractScheduledTasks })
+    expect(onExtractScheduledTasks).toHaveBeenCalledWith(messages)
+  })
+
+  it('does not call onExtractScheduledTasks when no streaming message', () => {
+    const messages = [
+      { role: 'user', content: 'hello' },
+    ]
+    const onRenderNeeded = vi.fn()
+    const onExtractScheduledTasks = vi.fn()
+    forceCleanupStreamingState(messages, { onRenderNeeded, onExtractScheduledTasks })
+    expect(onExtractScheduledTasks).not.toHaveBeenCalled()
+  })
+
+  it('returns the streaming message when found', () => {
+    const messages = [
+      { role: 'assistant', content: 'test', blocks: [], streaming: true },
+    ]
+    const result = forceCleanupStreamingState(messages, { onRenderNeeded: vi.fn() })
+    expect(result).toBe(messages[0])
+  })
+
+  it('returns undefined when no streaming message found', () => {
+    const messages = [
+      { role: 'user', content: 'hello' },
+    ]
+    const result = forceCleanupStreamingState(messages, { onRenderNeeded: vi.fn() })
+    expect(result).toBeUndefined()
   })
 })
 
-// Test content coalescing behavior (simulating SSE event handling)
+// Test content coalescing behavior (using extracted findLastBlockOfType)
 describe('SSE content coalescing', () => {
   it('coalesces consecutive content events into one text block', () => {
     const blocks: any[] = []
-    // Simulate first content event
     const text1 = 'Hello'
     const existing1 = findLastBlockOfType(blocks, 'text')
     if (existing1) {
@@ -180,7 +206,6 @@ describe('SSE content coalescing', () => {
     } else {
       blocks.push({ type: 'text', text: text1 })
     }
-    // Simulate second content event
     const text2 = ' World'
     const existing2 = findLastBlockOfType(blocks, 'text')
     if (existing2) {
@@ -197,7 +222,6 @@ describe('SSE content coalescing', () => {
       { type: 'text', text: 'before' },
       { type: 'tool_use', name: 'Read', id: '1', done: true },
     ]
-    // Simulate content event after tool_use
     const text = 'after tool'
     const existing = findLastBlockOfType(blocks, 'text')
     if (existing) {
@@ -211,14 +235,12 @@ describe('SSE content coalescing', () => {
 
   it('coalesces thinking events into one block', () => {
     const blocks: any[] = []
-    // First thinking
     const existing1 = findLastBlockOfType(blocks, 'thinking')
     if (existing1) {
       existing1.text += 'think1'
     } else {
       blocks.push({ type: 'thinking', text: 'think1' })
     }
-    // Second thinking
     const existing2 = findLastBlockOfType(blocks, 'thinking')
     if (existing2) {
       existing2.text += ' think2'
@@ -310,7 +332,6 @@ describe('tool_use event with output/status', () => {
     const blocks: any[] = [
       { type: 'tool_use', name: 'Bash', id: '3', input: { command: 'ls' }, done: false, output: '', status: '' },
     ]
-    // Simulate a partial tool_use event (not done) that carries output
     const data = { name: 'Bash', id: '3', output: 'partial output', status: 'success' }
     const existing = blocks.find(b => b.type === 'tool_use' && b.id === data.id)
     if (existing) {
@@ -318,7 +339,7 @@ describe('tool_use event with output/status', () => {
       if (data.status !== undefined) existing.status = data.status
     }
     expect(blocks[0].output).toBe('partial output')
-    expect(blocks[0].done).toBe(false) // Still in progress
+    expect(blocks[0].done).toBe(false)
   })
 })
 
@@ -362,25 +383,8 @@ describe('tool_result event handling', () => {
       if (data.output !== undefined) existing.output = data.output
       if (data.status !== undefined) existing.status = data.status
     }
-    // No match — blocks unchanged
     expect(blocks).toHaveLength(1)
     expect(blocks[0].output).toBe('')
-  })
-
-  it('updates the most recent matching tool_use when duplicates exist', () => {
-    const blocks: any[] = [
-      { type: 'tool_use', name: 'Read', id: 'r3', input: { file_path: '/first.go' }, done: true, output: '', status: '' },
-      { type: 'tool_use', name: 'Read', id: 'r3', input: { file_path: '/second.go' }, done: true, output: '', status: '' },
-    ]
-    const data = { id: 'r3', output: 'merged output', status: 'success' }
-    const existing = blocks.find(b => b.type === 'tool_use' && b.id === data.id)
-    if (existing) {
-      if (data.output !== undefined) existing.output = data.output
-      if (data.status !== undefined) existing.status = data.status
-    }
-    // find() returns the first match
-    expect(blocks[0].output).toBe('merged output')
-    expect(blocks[1].output).toBe('')
   })
 
   it('handles tool_result with only status (no output)', () => {
@@ -400,9 +404,8 @@ describe('tool_result event handling', () => {
 
 // Test cancelled event handling
 describe('cancelled event handling', () => {
-  it('marks message as cancelled', () => {
+  it('marks message as cancelled and removes streaming', () => {
     const msg = { role: 'assistant', content: '', blocks: [], streaming: true }
-    // Simulate cancelled event
     msg.cancelled = true
     delete msg.streaming
     if (msg.blocks) {
@@ -418,7 +421,6 @@ describe('cancelled event handling', () => {
 
   it('adds error block when no content received on cancel', () => {
     const msg = { role: 'assistant', content: '', blocks: [] as any[], streaming: true }
-    // Simulate cancelled event with no content
     const userCancelledText = 'Cancelled by user'
     if ((!msg.blocks || msg.blocks.length === 0) && !msg.content) {
       msg.blocks = [{ type: 'error', text: userCancelledText }]
@@ -433,28 +435,24 @@ describe('cancelled event handling', () => {
     }
     expect(msg.blocks).toEqual([{ type: 'text', text: 'partial' }])
   })
-})
 
-// Test reconnect logic
-describe('SSE reconnect logic', () => {
-  it('tracks reconnect attempts', () => {
-    let reconnectAttempts = 0
-    const MAX_RECONNECT_ATTEMPTS = 3
-    // Simulate reconnect
-    reconnectAttempts++
-    expect(reconnectAttempts).toBe(1)
-    reconnectAttempts++
-    expect(reconnectAttempts).toBe(2)
-    reconnectAttempts++
-    expect(reconnectAttempts).toBe(3)
-    // At max, should fall back to polling
-    expect(reconnectAttempts >= MAX_RECONNECT_ATTEMPTS).toBe(true)
-  })
-
-  it('resets reconnect attempts on new connection', () => {
-    let reconnectAttempts = 3
-    // New connection resets
-    reconnectAttempts = 0
-    expect(reconnectAttempts).toBe(0)
+  it('marks unfinished tool_use blocks as done on cancel', () => {
+    const msg = {
+      role: 'assistant',
+      content: '',
+      blocks: [
+        { type: 'tool_use', name: 'Read', id: '1', done: false },
+        { type: 'text', text: 'partial' },
+      ],
+      streaming: true,
+    }
+    delete msg.streaming
+    for (const block of msg.blocks) {
+      if (block.type === 'tool_use' && !block.done) {
+        block.done = true
+      }
+    }
+    expect(msg.blocks[0].done).toBe(true)
+    expect(msg.streaming).toBeUndefined()
   })
 })

@@ -1,44 +1,5 @@
-import { describe, expect, it, vi } from 'vitest'
-import { baseName } from '@/utils/path.ts'
-
-// ────────────────────────────────────────────────────────────
-// toolCallSummary logic (extracted from useChatRender for testing)
-// The actual function lives inside useChatRender composable.
-// We replicate the logic here to test the field priority chain.
-// ────────────────────────────────────────────────────────────
-
-function toolCallSummary(block: { input?: any; name?: string }): string {
-  if (!block.input) return ''
-  const name = (block.name || '').toLowerCase()
-  // AskUserQuestion: show first question header
-  if (name === 'askuserquestion' && Array.isArray(block.input.questions) && block.input.questions.length > 0) {
-    const q = block.input.questions[0]
-    const header = q.header || ''
-    const question = q.question || ''
-    if (header) return header
-    if (question) return question.length > 60 ? question.slice(0, 57) + '...' : question
-  }
-  // Prefer description (human-readable intent) over raw input values
-  if (block.input.description) return block.input.description
-  const obj = block.input
-  if (obj.file_path) return baseName(obj.file_path)
-  if (obj.command) return obj.command.length > 60 ? obj.command.slice(0, 57) + '...' : obj.command
-  // Grep/Glob: show pattern
-  if (obj.pattern) return obj.pattern.length > 60 ? obj.pattern.slice(0, 57) + '...' : obj.pattern
-  // WebSearch: show query
-  if (obj.query) return obj.query.length > 60 ? obj.query.slice(0, 57) + '...' : obj.query
-  // WebFetch: show url
-  if (obj.url) return obj.url.length > 60 ? obj.url.slice(0, 57) + '...' : obj.url
-  // Skill: show skill name
-  if (obj.skill) return obj.skill
-  // Agent: show description or prompt summary (description already handled above)
-  if (obj.prompt && name === 'agent') return obj.prompt.length > 60 ? obj.prompt.slice(0, 57) + '...' : obj.prompt
-  if (obj.path) return baseName(obj.path)
-  if (obj.src_path && obj.dst_path) return `${baseName(obj.src_path)} → ${baseName(obj.dst_path)}`
-  const firstVal = Object.values(obj)[0]
-  if (typeof firstVal === 'string' && firstVal.length < 80) return firstVal
-  return ''
-}
+import { describe, expect, it } from 'vitest'
+import { toolCallSummary } from '@/utils/chatBlocks.ts'
 
 describe('toolCallSummary', () => {
   // ── Edge cases ──
@@ -52,6 +13,10 @@ describe('toolCallSummary', () => {
 
   it('returns empty string for empty input object', () => {
     expect(toolCallSummary({ input: {} })).toBe('')
+  })
+
+  it('returns empty string for block without input field', () => {
+    expect(toolCallSummary({} as any)).toBe('')
   })
 
   // ── AskUserQuestion ──
@@ -79,6 +44,20 @@ describe('toolCallSummary', () => {
     expect(result).toContain('...')
   })
 
+  it('AskUserQuestion with empty questions array returns empty', () => {
+    expect(toolCallSummary({
+      name: 'AskUserQuestion',
+      input: { questions: [] },
+    })).toBe('')
+  })
+
+  it('AskUserQuestion is case-insensitive', () => {
+    expect(toolCallSummary({
+      name: 'askuserquestion',
+      input: { questions: [{ header: 'Pick' }] },
+    })).toBe('Pick')
+  })
+
   // ── Description priority ──
   it('prefers description over file_path', () => {
     expect(toolCallSummary({
@@ -102,6 +81,12 @@ describe('toolCallSummary', () => {
   it('shows baseName for file_path', () => {
     expect(toolCallSummary({
       input: { file_path: '/home/user/project/main.go' },
+    })).toBe('main.go')
+  })
+
+  it('shows baseName for file_path with no directory', () => {
+    expect(toolCallSummary({
+      input: { file_path: 'main.go' },
     })).toBe('main.go')
   })
 
@@ -142,7 +127,6 @@ describe('toolCallSummary', () => {
   })
 
   it('pattern has lower priority than file_path', () => {
-    // file_path is checked before pattern
     expect(toolCallSummary({
       input: { file_path: 'main.go', pattern: 'TODO' },
     })).toBe('main.go')
@@ -164,7 +148,6 @@ describe('toolCallSummary', () => {
   })
 
   it('query has lower priority than pattern', () => {
-    // pattern is checked before query
     expect(toolCallSummary({
       input: { pattern: 'TODO', query: 'search query' },
     })).toBe('TODO')
@@ -214,7 +197,6 @@ describe('toolCallSummary', () => {
   })
 
   it('shows description instead of prompt for Agent', () => {
-    // description is higher priority (checked before prompt)
     expect(toolCallSummary({
       name: 'Agent',
       input: { description: 'Fix the bug', prompt: 'Long detailed prompt...' },
@@ -232,8 +214,6 @@ describe('toolCallSummary', () => {
   })
 
   it('prompt fallback for non-Agent tools goes to firstVal', () => {
-    // For non-Agent tools, the agent-specific prompt check is skipped,
-    // but prompt is still a valid first value for the generic fallback
     expect(toolCallSummary({
       name: 'Bash',
       input: { prompt: 'Some prompt' },
@@ -254,6 +234,13 @@ describe('toolCallSummary', () => {
     })).toBe('file.go → file.go')
   })
 
+  it('src_path without dst_path falls through to firstVal', () => {
+    // src_path is only processed when dst_path is also present
+    expect(toolCallSummary({
+      input: { src_path: '/old/path/file.go' },
+    })).toBe('/old/path/file.go')
+  })
+
   // ── Fallback: first value ──
   it('shows first string value as fallback', () => {
     expect(toolCallSummary({
@@ -271,6 +258,21 @@ describe('toolCallSummary', () => {
   it('ignores first value if not a string', () => {
     expect(toolCallSummary({
       input: { count: 42 },
+    })).toBe('')
+  })
+
+  it('uses first string value as fallback when first value is a string', () => {
+    // Object.values preserves insertion order; if the first value is a number,
+    // it skips, and the next values are not checked (only the first value is used)
+    expect(toolCallSummary({
+      input: { text: 'hello', num: 42 },
+    })).toBe('hello')
+  })
+
+  it('returns empty when first value is a number even if later values are strings', () => {
+    // The fallback only checks Object.values()[0], not subsequent values
+    expect(toolCallSummary({
+      input: { num: 42, text: 'hello' },
     })).toBe('')
   })
 })

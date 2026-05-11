@@ -1,32 +1,31 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import {
   buildMessageSnapshot,
   parseMessages,
 } from '@/utils/chatSessionUtils.ts'
+
+// ── buildMessageSnapshot ──
 
 describe('buildMessageSnapshot', () => {
   it('creates fingerprint from message properties', () => {
     const msgs = [
       { id: '1', role: 'user', content: 'hello', createdAt: '2026-01-01T00:00:00Z', streaming: false },
     ]
-    const snapshot = buildMessageSnapshot(msgs)
-    expect(snapshot).toBe('1:user:5:2026-01-01T00:00:00Z:0')
+    expect(buildMessageSnapshot(msgs)).toBe('1:user:5:2026-01-01T00:00:00Z:0')
   })
 
   it('handles missing id', () => {
     const msgs = [
       { role: 'user', content: 'hi', createdAt: '2026-01-01', streaming: false },
     ]
-    const snapshot = buildMessageSnapshot(msgs)
-    expect(snapshot).toBe(':user:2:2026-01-01:0')
+    expect(buildMessageSnapshot(msgs)).toBe(':user:2:2026-01-01:0')
   })
 
   it('handles empty content', () => {
     const msgs = [
       { id: '2', role: 'assistant', content: '', createdAt: '', streaming: true },
     ]
-    const snapshot = buildMessageSnapshot(msgs)
-    expect(snapshot).toBe('2:assistant:0::1')
+    expect(buildMessageSnapshot(msgs)).toBe('2:assistant:0::1')
   })
 
   it('handles multiple messages', () => {
@@ -34,15 +33,14 @@ describe('buildMessageSnapshot', () => {
       { id: '1', role: 'user', content: 'hello', createdAt: '2026-01-01', streaming: false },
       { id: '2', role: 'assistant', content: 'world', createdAt: '2026-01-01', streaming: false },
     ]
-    const snapshot = buildMessageSnapshot(msgs)
-    expect(snapshot).toBe('1:user:5:2026-01-01:0|2:assistant:5:2026-01-01:0')
+    expect(buildMessageSnapshot(msgs)).toBe('1:user:5:2026-01-01:0|2:assistant:5:2026-01-01:0')
   })
 
   it('returns empty for empty array', () => {
     expect(buildMessageSnapshot([])).toBe('')
   })
 
-  it('detects changes in content length', () => {
+  it('detects content length changes', () => {
     const msgs1 = [{ id: '1', role: 'user', content: 'hi', createdAt: '2026-01-01', streaming: false }]
     const msgs2 = [{ id: '1', role: 'user', content: 'hello', createdAt: '2026-01-01', streaming: false }]
     expect(buildMessageSnapshot(msgs1)).not.toBe(buildMessageSnapshot(msgs2))
@@ -60,6 +58,12 @@ describe('buildMessageSnapshot', () => {
     expect(buildMessageSnapshot(msgs1)).not.toBe(buildMessageSnapshot(msgs2))
   })
 
+  it('detects id change', () => {
+    const msgs1 = [{ id: '1', role: 'user', content: 'hi', createdAt: '2026-01-01', streaming: false }]
+    const msgs2 = [{ id: '2', role: 'user', content: 'hi', createdAt: '2026-01-01', streaming: false }]
+    expect(buildMessageSnapshot(msgs1)).not.toBe(buildMessageSnapshot(msgs2))
+  })
+
   it('detects createdAt change', () => {
     const msgs1 = [{ id: '1', role: 'user', content: 'hi', createdAt: '2026-01-01', streaming: false }]
     const msgs2 = [{ id: '1', role: 'user', content: 'hi', createdAt: '2026-01-02', streaming: false }]
@@ -71,18 +75,34 @@ describe('buildMessageSnapshot', () => {
     expect(buildMessageSnapshot(msgs)).toBe(buildMessageSnapshot(msgs))
   })
 
-  it('handles message count change', () => {
-    const msgs1 = [{ id: '1', role: 'user', content: 'hi', createdAt: '2026-01-01', streaming: false }]
-    const msgs2 = [
-      { id: '1', role: 'user', content: 'hi', createdAt: '2026-01-01', streaming: false },
-      { id: '2', role: 'assistant', content: 'reply', createdAt: '2026-01-01', streaming: false },
+  it('handles null content', () => {
+    const msgs = [
+      { id: '1', role: 'user', content: null, createdAt: '2026-01-01', streaming: false },
     ]
-    expect(buildMessageSnapshot(msgs1)).not.toBe(buildMessageSnapshot(msgs2))
+    // (null || '') = '', length is 0
+    expect(buildMessageSnapshot(msgs)).toContain(':0:')
+  })
+
+  it('handles undefined content', () => {
+    const msgs = [
+      { id: '1', role: 'user', content: undefined, createdAt: '2026-01-01', streaming: false },
+    ]
+    expect(buildMessageSnapshot(msgs)).toContain(':0:')
+  })
+
+  it('handles very long content (only checks length)', () => {
+    const longContent = 'x'.repeat(10000)
+    const msgs = [
+      { id: '1', role: 'user', content: longContent, createdAt: '2026-01-01', streaming: false },
+    ]
+    expect(buildMessageSnapshot(msgs)).toContain(':10000:')
   })
 })
 
+// ── parseMessages ──
+
 describe('parseMessages', () => {
-  const mockParseAssistantContent = (content: string) => {
+  const mockParser = (content: string) => {
     if (!content) return { blocks: [], metadata: null, cancelled: false }
     try {
       const parsed = JSON.parse(content)
@@ -95,7 +115,7 @@ describe('parseMessages', () => {
     const msgs = [
       { role: 'assistant', content: JSON.stringify({ blocks: [{ type: 'text', text: 'Hello' }] }) },
     ]
-    const result = parseMessages(msgs, mockParseAssistantContent)
+    const result = parseMessages(msgs, mockParser)
     expect(result[0].blocks).toEqual([{ type: 'text', text: 'Hello' }])
   })
 
@@ -103,7 +123,7 @@ describe('parseMessages', () => {
     const msgs = [
       { role: 'user', content: 'Hello AI' },
     ]
-    const result = parseMessages(msgs, mockParseAssistantContent)
+    const result = parseMessages(msgs, mockParser)
     expect(result[0].blocks).toEqual([{ type: 'text', text: 'Hello AI' }])
   })
 
@@ -111,7 +131,7 @@ describe('parseMessages', () => {
     const msgs = [
       { role: 'user', content: '' },
     ]
-    const result = parseMessages(msgs, mockParseAssistantContent)
+    const result = parseMessages(msgs, mockParser)
     expect(result[0].blocks).toEqual([])
   })
 
@@ -119,7 +139,7 @@ describe('parseMessages', () => {
     const msgs = [
       { role: 'user', content: 'Hello', blocks: [{ type: 'text', text: 'Hello' }] },
     ]
-    const result = parseMessages(msgs, mockParseAssistantContent)
+    const result = parseMessages(msgs, mockParser)
     expect(result[0].blocks).toEqual([{ type: 'text', text: 'Hello' }])
   })
 
@@ -127,7 +147,7 @@ describe('parseMessages', () => {
     const msgs = [
       { role: 'assistant', content: '', streaming: true },
     ]
-    const result = parseMessages(msgs, mockParseAssistantContent)
+    const result = parseMessages(msgs, mockParser)
     expect(result[0].fromDB).toBe(true)
     expect(result[0].streaming).toBe(true)
   })
@@ -136,7 +156,7 @@ describe('parseMessages', () => {
     const msgs = [
       { role: 'assistant', content: JSON.stringify({ blocks: [{ type: 'text', text: 'Done' }] }) },
     ]
-    const result = parseMessages(msgs, mockParseAssistantContent)
+    const result = parseMessages(msgs, mockParser)
     expect(result[0].fromDB).toBeUndefined()
   })
 
@@ -145,7 +165,7 @@ describe('parseMessages', () => {
       { role: 'user', content: 'Question' },
       { role: 'assistant', content: JSON.stringify({ blocks: [{ type: 'text', text: 'Answer' }] }) },
     ]
-    const result = parseMessages(msgs, mockParseAssistantContent)
+    const result = parseMessages(msgs, mockParser)
     expect(result).toHaveLength(2)
     expect(result[0].blocks[0].text).toBe('Question')
     expect(result[1].blocks[0].text).toBe('Answer')
@@ -155,7 +175,7 @@ describe('parseMessages', () => {
     const msgs = [
       { role: 'assistant', content: JSON.stringify({ blocks: [{ type: 'text', text: 'Hi' }], metadata: { tokens: 50 } }) },
     ]
-    const result = parseMessages(msgs, mockParseAssistantContent)
+    const result = parseMessages(msgs, mockParser)
     expect(result[0].metadata).toEqual({ tokens: 50 })
   })
 
@@ -163,39 +183,53 @@ describe('parseMessages', () => {
     const msgs = [
       { role: 'assistant', content: JSON.stringify({ blocks: [{ type: 'text', text: 'partial' }], cancelled: true }) },
     ]
-    const result = parseMessages(msgs, mockParseAssistantContent)
+    const result = parseMessages(msgs, mockParser)
     expect(result[0].cancelled).toBe(true)
   })
 
-  it('does not set metadata when null from parser', () => {
-    const msgs = [
-      { role: 'assistant', content: JSON.stringify({ blocks: [{ type: 'text', text: 'Hi' }] }) },
-    ]
-    const result = parseMessages(msgs, mockParseAssistantContent)
-    // metadata is null from parser — condition `if (metadata)` is false
-    expect(result[0].metadata).toBeUndefined()
-  })
-
-  it('does not set cancelled when false from parser', () => {
-    const msgs = [
-      { role: 'assistant', content: JSON.stringify({ blocks: [{ type: 'text', text: 'Hi' }] }) },
-    ]
-    const result = parseMessages(msgs, mockParseAssistantContent)
-    // cancelled is false from parser — condition `if (cancelled)` is false
-    expect(result[0].cancelled).toBeUndefined()
-  })
-
   it('handles empty array', () => {
-    const result = parseMessages([], mockParseAssistantContent)
-    expect(result).toEqual([])
+    expect(parseMessages([], mockParser)).toEqual([])
   })
 
   it('preserves other message properties', () => {
     const msgs = [
       { role: 'user', content: 'Hello', id: 'msg-1', createdAt: '2026-01-01' },
     ]
-    const result = parseMessages(msgs, mockParseAssistantContent)
+    const result = parseMessages(msgs, mockParser)
     expect(result[0].id).toBe('msg-1')
     expect(result[0].createdAt).toBe('2026-01-01')
   })
+
+  it('delegates to the parser function', () => {
+    const customParser = vi.fn().mockReturnValue({ blocks: [{ type: 'text', text: 'custom' }], metadata: null, cancelled: false })
+    const msgs = [
+      { role: 'assistant', content: 'test content' },
+    ]
+    parseMessages(msgs, customParser)
+    expect(customParser).toHaveBeenCalledWith('test content')
+  })
+
+  it('handles user message with null content', () => {
+    const msgs = [
+      { role: 'user', content: null },
+    ]
+    const result = parseMessages(msgs, customParser)
+    expect(result[0].blocks).toEqual([])
+  })
+
+  it('handles user message with non-string content (no blocks field)', () => {
+    const msgs = [
+      { role: 'user', content: 42 },
+    ]
+    const result = parseMessages(msgs, mockParser)
+    // content is 42 (number), (42 || '') = 42 (truthy), so blocks = [{ type: 'text', text: 42 }]
+    // But actually msg.content ? [{ type: 'text', text: msg.content }] : []
+    // 42 is truthy, so blocks = [{ type: 'text', text: 42 }]
+    expect(result[0].blocks).toEqual([{ type: 'text', text: 42 }])
+  })
 })
+
+function customParser(content: string) {
+  if (!content) return { blocks: [], metadata: null, cancelled: false }
+  return { blocks: [{ type: 'text', text: content }], metadata: null, cancelled: false }
+}

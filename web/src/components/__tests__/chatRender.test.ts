@@ -1,64 +1,10 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest'
-
-// ────────────────────────────────────────────────────────────
-// parseAssistantContent logic (extracted from useChatRender for testing)
-// The actual function lives inside useChatRender composable.
-// We replicate the logic here to test the block parsing and dedup.
-// ────────────────────────────────────────────────────────────
-
-function parseAssistantContent(content: string) {
-  if (!content) return { blocks: [], metadata: null }
-  try {
-    const parsed = JSON.parse(content)
-    if (parsed.blocks && Array.isArray(parsed.blocks)) {
-      const mapped = parsed.blocks.map(b => {
-        if (b.type === 'tool_use') {
-          if (b.done === undefined || b.done === false) b.done = true
-          // Backward compat: old Codex format had output in input.output
-          if (!b.output && b.input && b.input.output) {
-            b.output = b.input.output
-            delete b.input.output
-          }
-        }
-        return b
-      })
-      const result: any[] = []
-      const toolIndex = new Map()
-      for (const b of mapped) {
-        if (b.type === 'tool_use' && b.id) {
-          const prevIdx = toolIndex.get(b.id)
-          if (prevIdx !== undefined) {
-            const prev = result[prevIdx]
-            const prevEmpty = !prev.input || Object.keys(prev.input).length === 0
-            const currEmpty = !b.input || Object.keys(b.input).length === 0
-            if (currEmpty && !prevEmpty) continue
-            if (!currEmpty && prevEmpty) {
-              prev.input = b.input
-              prev.done = b.done
-              prev.name = b.name || prev.name
-              if (b.output) prev.output = b.output
-              if (b.status) prev.status = b.status
-              continue
-            }
-            if (b.done) prev.done = true
-            if (!currEmpty) prev.input = b.input
-            if (b.output) prev.output = b.output
-            if (b.status) prev.status = b.status
-            continue
-          }
-          toolIndex.set(b.id, result.length)
-        }
-        result.push(b)
-      }
-      return {
-        blocks: result,
-        metadata: parsed.metadata || null,
-        cancelled: parsed.cancelled || false
-      }
-    }
-  } catch {}
-  return { blocks: [{ type: 'text', text: content }], metadata: null }
-}
+import {
+  parseAssistantContent,
+  hasImagesInContent,
+  formatDetailTime,
+  truncate,
+} from '@/utils/chatBlocks.ts'
 
 describe('parseAssistantContent', () => {
   it('returns empty blocks for null content', () => {
@@ -189,7 +135,6 @@ describe('parseAssistantContent', () => {
   it('handles JSON without blocks array as text fallback', () => {
     const content = JSON.stringify({ message: 'not blocks' })
     const result = parseAssistantContent(content)
-    // JSON.parse succeeds but no blocks array -> falls back to text
     expect(result.blocks).toEqual([{ type: 'text', text: content }])
   })
 
@@ -205,112 +150,9 @@ describe('parseAssistantContent', () => {
     const result = parseAssistantContent(content)
     expect(result.blocks).toHaveLength(4)
   })
-})
 
-// ────────────────────────────────────────────────────────────
-// Additional pure functions from useChatRender
-// ────────────────────────────────────────────────────────────
+  // ── Tool output/status backward compat and dedup ──
 
-function hasImagesInContent(content: string) {
-  return content && content.includes('![')
-}
-
-function formatMessageTime(createdAt: string) {
-  const date = new Date(createdAt)
-  const now = new Date()
-  const diffMs = now - date
-  const diffMins = Math.floor(diffMs / 60000)
-  if (diffMins < 1) return 'just now'
-  if (diffMins < 60) return `${diffMins} min ago`
-  const diffHours = Math.floor(diffMins / 60)
-  if (diffHours < 24) return `${diffHours}h ago`
-  const diffDays = Math.floor(diffHours / 24)
-  if (diffDays < 7) return `${diffDays}d ago`
-  const month = date.getMonth() + 1
-  const day = date.getDate()
-  const hour = date.getHours().toString().padStart(2, '0')
-  const minute = date.getMinutes().toString().padStart(2, '0')
-  return `${month}/${day} ${hour}:${minute}`
-}
-
-function formatDetailTime(createdAt: string) {
-  const date = new Date(createdAt)
-  const year = date.getFullYear()
-  const month = (date.getMonth() + 1).toString().padStart(2, '0')
-  const day = date.getDate().toString().padStart(2, '0')
-  const hour = date.getHours().toString().padStart(2, '0')
-  const minute = date.getMinutes().toString().padStart(2, '0')
-  const second = date.getSeconds().toString().padStart(2, '0')
-  return `${year}-${month}-${day} ${hour}:${minute}:${second}`
-}
-
-function truncate(str: string, len: number) {
-  if (!str) return ''
-  const runes = [...str]
-  return runes.length > len ? runes.slice(0, len).join('') + '...' : str
-}
-
-describe('hasImagesInContent', () => {
-  it('detects markdown image syntax', () => {
-    expect(hasImagesInContent('![alt](url)')).toBe(true)
-  })
-
-  it('returns false for text without images', () => {
-    expect(hasImagesInContent('plain text')).toBe(false)
-  })
-
-  it('returns falsy for empty string', () => {
-    expect(hasImagesInContent('')).toBeFalsy()
-  })
-
-  it('returns falsy for null', () => {
-    expect(hasImagesInContent(null as any)).toBeFalsy()
-  })
-})
-
-describe('formatDetailTime', () => {
-  it('formats ISO date string correctly', () => {
-    const result = formatDetailTime('2026-01-15T14:30:45.000Z')
-    expect(result).toMatch(/2026/)
-    expect(result).toMatch(/01/)
-    expect(result).toMatch(/15/)
-  })
-
-  it('pads single-digit months and days', () => {
-    const result = formatDetailTime('2026-03-05T09:05:03.000Z')
-    expect(result).toContain('03')
-    expect(result).toContain('05')
-  })
-})
-
-describe('truncate', () => {
-  it('returns empty for null/undefined', () => {
-    expect(truncate(null as any, 10)).toBe('')
-    expect(truncate(undefined as any, 10)).toBe('')
-  })
-
-  it('returns string unchanged when shorter than limit', () => {
-    expect(truncate('hello', 10)).toBe('hello')
-  })
-
-  it('truncates and adds ellipsis when longer than limit', () => {
-    expect(truncate('hello world', 5)).toBe('hello...')
-  })
-
-  it('handles exact length without truncation', () => {
-    expect(truncate('hello', 5)).toBe('hello')
-  })
-
-  it('handles emoji/unicode correctly (runes, not bytes)', () => {
-    expect(truncate('🎉🎊🎁', 2)).toBe('🎉🎊...')
-  })
-})
-
-// ────────────────────────────────────────────────────────────
-// Tool output/status backward compat and dedup
-// ────────────────────────────────────────────────────────────
-
-describe('parseAssistantContent tool output/status', () => {
   it('preserves output and status on tool_use blocks', () => {
     const content = JSON.stringify({
       blocks: [
@@ -340,7 +182,6 @@ describe('parseAssistantContent tool output/status', () => {
       ],
     })
     const result = parseAssistantContent(content)
-    // When output already exists, input.output migration is skipped
     expect(result.blocks[0].output).toBe('new-format')
   })
 
@@ -377,7 +218,6 @@ describe('parseAssistantContent tool output/status', () => {
     })
     const result = parseAssistantContent(content)
     expect(result.blocks).toHaveLength(1)
-    // First block has output, second is empty — keep previous
     expect(result.blocks[0].output).toBe('result')
     expect(result.blocks[0].status).toBe('success')
   })
@@ -392,5 +232,145 @@ describe('parseAssistantContent tool output/status', () => {
     expect(result.blocks[0].output).toBeUndefined()
     expect(result.blocks[0].status).toBeUndefined()
     expect(result.blocks[0].done).toBe(true)
+  })
+
+  // ── Edge cases ──
+
+  it('handles deeply nested JSON content without blocks', () => {
+    const content = JSON.stringify({ data: { nested: true } })
+    const result = parseAssistantContent(content)
+    expect(result.blocks).toHaveLength(1)
+    expect(result.blocks[0].type).toBe('text')
+  })
+
+  it('handles blocks array with only text blocks', () => {
+    const content = JSON.stringify({
+      blocks: [
+        { type: 'text', text: 'First paragraph' },
+        { type: 'text', text: 'Second paragraph' },
+      ],
+    })
+    const result = parseAssistantContent(content)
+    expect(result.blocks).toHaveLength(2)
+    expect(result.blocks[0].text).toBe('First paragraph')
+    expect(result.blocks[1].text).toBe('Second paragraph')
+  })
+
+  it('handles tool_use block without id (no dedup)', () => {
+    const content = JSON.stringify({
+      blocks: [
+        { type: 'tool_use', name: 'Bash', input: { command: 'ls' } },
+        { type: 'tool_use', name: 'Bash', input: { command: 'pwd' } },
+      ],
+    })
+    const result = parseAssistantContent(content)
+    // No id means no dedup — both blocks preserved
+    expect(result.blocks).toHaveLength(2)
+  })
+
+  it('handles malformed JSON gracefully', () => {
+    const result = parseAssistantContent('{invalid json}')
+    expect(result.blocks).toEqual([{ type: 'text', text: '{invalid json}' }])
+  })
+})
+
+describe('hasImagesInContent', () => {
+  it('detects markdown image syntax', () => {
+    expect(hasImagesInContent('![alt](url)')).toBe(true)
+  })
+
+  it('returns false for text without images', () => {
+    expect(hasImagesInContent('plain text')).toBe(false)
+  })
+
+  it('returns false for empty string', () => {
+    expect(hasImagesInContent('')).toBe(false)
+  })
+
+  it('returns false for null', () => {
+    expect(hasImagesInContent(null)).toBe(false)
+  })
+
+  it('returns false for undefined', () => {
+    expect(hasImagesInContent(undefined)).toBe(false)
+  })
+
+  it('detects multiple images', () => {
+    expect(hasImagesInContent('text ![a](b) more ![c](d)')).toBe(true)
+  })
+
+  it('does not match escaped image syntax', () => {
+    // \\!\\[ is not an image — but includes '![' literally would match
+    expect(hasImagesInContent('not an image: \\!\\[alt\\](url)')).toBe(false)
+  })
+
+  it('detects image reference-style syntax', () => {
+    expect(hasImagesInContent('![alt][ref]')).toBe(true)
+  })
+})
+
+describe('formatDetailTime', () => {
+  it('formats ISO date string correctly', () => {
+    const result = formatDetailTime('2026-01-15T14:30:45.000Z')
+    expect(result).toMatch(/2026/)
+    expect(result).toMatch(/01/)
+    expect(result).toMatch(/15/)
+  })
+
+  it('pads single-digit months and days', () => {
+    const result = formatDetailTime('2026-03-05T09:05:03.000Z')
+    expect(result).toContain('03')
+    expect(result).toContain('05')
+  })
+
+  it('includes hours, minutes, and seconds with zero-padding', () => {
+    const result = formatDetailTime('2026-01-01T01:02:03.000Z')
+    // The result may vary by timezone, but the format should be consistent
+    expect(result).toMatch(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/)
+  })
+
+  it('formats midnight correctly', () => {
+    const result = formatDetailTime('2026-06-15T00:00:00.000Z')
+    expect(result).toMatch(/\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}/)
+  })
+})
+
+describe('truncate', () => {
+  it('returns empty for null/undefined', () => {
+    expect(truncate(null, 10)).toBe('')
+    expect(truncate(undefined, 10)).toBe('')
+  })
+
+  it('returns string unchanged when shorter than limit', () => {
+    expect(truncate('hello', 10)).toBe('hello')
+  })
+
+  it('truncates and adds ellipsis when longer than limit', () => {
+    expect(truncate('hello world', 5)).toBe('hello...')
+  })
+
+  it('handles exact length without truncation', () => {
+    expect(truncate('hello', 5)).toBe('hello')
+  })
+
+  it('handles emoji/unicode correctly (runes, not bytes)', () => {
+    expect(truncate('🎉🎊🎁', 2)).toBe('🎉🎊...')
+  })
+
+  it('returns empty for empty string', () => {
+    expect(truncate('', 10)).toBe('')
+  })
+
+  it('truncates at unicode boundary, not byte boundary', () => {
+    const chinese = '你好世界再见'
+    expect(truncate(chinese, 3)).toBe('你好世...')
+  })
+
+  it('handles limit of 0', () => {
+    expect(truncate('hello', 0)).toBe('...')
+  })
+
+  it('handles single character truncation', () => {
+    expect(truncate('ab', 1)).toBe('a...')
   })
 })

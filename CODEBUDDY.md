@@ -120,7 +120,7 @@ npx vitest run web/src/components/__tests__/gitGraphUtils.test.ts  # Single test
 
 **State management:** Single reactive store in `stores/app.ts` (project, files, navigation history, upload config, chat UI config, session limits, chat unread badge). No Pinia/Vuex — plain `reactive()` object.
 
-**App structure** (`App.vue`): AppHeader (project root, theme toggle, project dialog) + bottom dock with navigation: (Chat, Files, History, Tasks, Port Forward [app mode only], Refresh). File navigation (back/forward) moved to `FileHeader.vue` capsule button group. Drawers are mutually exclusive — opening one closes others. `ChatPanel` is a `BottomSheet` component. Authentication flow includes auto-login for Android app mode.
+**App structure** (`App.vue`): AppHeader (project root, theme toggle, project dialog) + bottom dock with primary navigation (Chat, Files, Tasks) and overflow menu (History, Port Forward [app mode only], Terminal). Overflow menu button shows the icon of the active overflow tab (or `MoreHorizontal` when none active). Tab panels use `noHeader` for non-chat tabs to avoid redundant headers — each content area manages its own header. File navigation (back/forward) moved to `FileHeader.vue` capsule button group. Drawers are mutually exclusive — opening one closes others. `ChatPanel` is a `BottomSheet` component. Authentication flow includes auto-login for Android app mode.
 
 **Chat architecture** (the most complex UI feature):
 - `ChatPanel.vue` — Orchestrator; composes composables and child components.
@@ -166,6 +166,7 @@ npx vitest run web/src/components/__tests__/gitGraphUtils.test.ts  # Single test
 - `task/` — Scheduled task management as an independent tab with 4-level breadcrumb navigation: `TaskTab` (orchestrator) → `TaskListPage` → `TaskDetailPage` → `TaskExecDetail`. `TaskBreadcrumb` for navigation. `TaskOverviewTab` and `TaskHistoryTab` as detail page sub-tabs. `TaskFormPage` (drill-down page with Settings/Prompt dual tabs, replacing the old `TaskFormDialog` modal) for task creation/editing. Status labels use "Enabled/Disabled" (not "Active/Paused"). Task unread badge on the Tasks dock button.
 - `proxy/` — ProxyPanel, PortForwardBrowser, ProxyPortItem for port forwarding UI (app mode only).
 - `common/BottomSheet.vue` — Mobile-friendly bottom sheet drawer.
+- `common/TabPanel.vue` — Tab panel container with optional header (`noHeader` prop suppresses header for tabs that manage their own).
 - `common/AppHeader.vue` — Top header bar with project name, theme toggle.
 - `common/ModalDialog.vue` — Generic modal dialog.
 - `common/SearchDrawer.vue` + `SearchInput.vue` — Search within files.
@@ -205,7 +206,7 @@ npx vitest run web/src/components/__tests__/gitGraphUtils.test.ts  # Single test
 - **Module-level singletons:** `useAutoSpeech()` uses module-level refs so all consumers share the same state. Only instantiate once (in ChatPanel). Same pattern for `useToast()`.
 - **SSE with reconnection:** `useChatStream` handles SSE disconnects with up to 3 reconnects, then falls back to HTTP polling every 2s. 60s timeout with no events triggers reconnect.
 - **Block coalescing:** Streamed text/thinking events are merged into the last block of the same type (unless separated by a `tool_use` block which acts as a boundary).
-- **Drawer mutual exclusion:** `App.vue` manages all drawer open states (chat, fileManager, projectHistory, fileHistory, toc, search, details, proxy); opening one instantly closes others. Tasks is a dock tab (not a drawer) with its own navigation stack.
+- **Drawer mutual exclusion:** `App.vue` manages all drawer open states (chat, fileManager, projectHistory, fileHistory, toc, search, details, proxy); opening one instantly closes others. Tasks is a dock tab (not a drawer) with its own navigation stack. Dock overflow menu (History, Port Forward, Terminal) shares the same tab switching — selecting an overflow item activates it as a tab and closes the popup.
 - **AutoResumeBackend:** Wraps claude, codebuddy, and qoder backends. Detects ExitPlanMode tool_use → cancels CLI → resumes with "继续" in same session. Emits `resume_split` event for DB message finalization. Transparent to outer caller.
 - **Cancel reason tracking:** Session cancels are tracked as `"user"` (explicit) or `"disconnect"` (SSE client gone). `ForceCancelSession` kills zombie CLI processes on disconnect.
 - **ProxyRegistry health checks:** Forwarded ports are probed every 5s; auto-detection scans `/proc/net/tcp` (Linux), `lsof` (macOS), `netstat` (Windows); TLS probing for HTTPS ports.

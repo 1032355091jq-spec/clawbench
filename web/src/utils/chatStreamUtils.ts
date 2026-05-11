@@ -1,0 +1,55 @@
+/**
+ * Pure functions and constants extracted from useChatStream composable.
+ * These have no Vue reactivity dependencies and can be tested in isolation.
+ */
+
+/**
+ * Tool names that modify files on disk (canonical PascalCase, guaranteed by backend normalization).
+ * Used to trigger file preview refresh after tool completion.
+ */
+export const FILE_MODIFYING_TOOLS = new Set(['Write', 'Edit'])
+
+/**
+ * Find the most recent block of a given type by searching backward.
+ * tool_use blocks act as natural boundaries — text/thinking after a tool_use
+ * should not be merged with text/thinking before it.
+ */
+export function findLastBlockOfType(blocks: any[], type: string): any | undefined {
+  for (let i = blocks.length - 1; i >= 0; i--) {
+    if (blocks[i].type === type) return blocks[i]
+    // tool_use blocks are natural boundaries — don't merge across them
+    if (blocks[i].type === 'tool_use') return undefined
+  }
+  return undefined
+}
+
+/**
+ * Clean up streaming state for the current assistant message.
+ * Marks all unfinished tool_use blocks as done, removes streaming flag.
+ * Returns the streaming message if found (for caller to do further processing).
+ */
+export function forceCleanupStreamingState(
+  messages: any[],
+  callbacks: {
+    onRenderNeeded: (forceFull?: boolean) => void
+    onExtractScheduledTasks?: (msgs: any[]) => void
+  }
+): any | undefined {
+  const streamingMsg = messages.find((m: any) => m.role === 'assistant' && m.streaming)
+  if (streamingMsg) {
+    delete streamingMsg.streaming
+    // Mark all unfinished tool_use blocks as done so spinner stops
+    if (streamingMsg.blocks) {
+      for (const block of streamingMsg.blocks) {
+        if (block.type === 'tool_use' && !block.done) {
+          block.done = true
+        }
+      }
+    }
+    // Extract scheduled tasks from the just-finished message
+    // (this path doesn't go through loadHistory, so we must call it explicitly)
+    callbacks.onExtractScheduledTasks?.(messages)
+  }
+  callbacks.onRenderNeeded(true)
+  return streamingMsg
+}

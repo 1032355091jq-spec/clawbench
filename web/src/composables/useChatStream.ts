@@ -1,6 +1,7 @@
 import { onUnmounted, type Ref } from 'vue'
 import { cancelChat } from '@/utils/api.ts'
 import { gt } from '@/composables/useLocale'
+import { FILE_MODIFYING_TOOLS, findLastBlockOfType, forceCleanupStreamingState } from '@/utils/chatStreamUtils.ts'
 
 export interface UseChatStreamOptions {
   messages: Ref<any[]>
@@ -22,9 +23,6 @@ export interface UseChatStreamOptions {
   onFileModified?: (filePath: string) => void
   onExtractScheduledTasks?: (msgs: any[]) => void
 }
-
-// Tool names that modify files on disk (canonical PascalCase, guaranteed by backend normalization)
-const FILE_MODIFYING_TOOLS = new Set(['Write', 'Edit'])
 
 export function useChatStream(options: UseChatStreamOptions) {
   const {
@@ -105,27 +103,15 @@ export function useChatStream(options: UseChatStreamOptions) {
 
   /**
    * Clean up streaming state for the current assistant message.
-   * Marks all unfinished tool_use blocks as done, clears streaming flag,
-   * and resets loading state. Called from all interruption paths.
+   * Delegates to the extracted pure function, then handles composable-specific
+   * cleanup (tool_use timeouts, loading state).
    */
   function forceCleanupStreamingState() {
     clearToolUseTimeouts()
-    const streamingMsg = messages.value.find(m => m.role === 'assistant' && m.streaming)
-    if (streamingMsg) {
-      delete streamingMsg.streaming
-      // Mark all unfinished tool_use blocks as done so spinner stops
-      if (streamingMsg.blocks) {
-        for (const block of streamingMsg.blocks) {
-          if (block.type === 'tool_use' && !block.done) {
-            block.done = true
-          }
-        }
-      }
-      // Extract scheduled tasks from the just-finished message
-      // (this path doesn't go through loadHistory, so we must call it explicitly)
-      onExtractScheduledTasks?.(messages.value)
-    }
-    onRenderNeeded(true)
+    _forceCleanupStreamingState(messages.value, {
+      onRenderNeeded,
+      onExtractScheduledTasks,
+    })
     loading.value = false
   }
 
@@ -231,20 +217,6 @@ export function useChatStream(options: UseChatStreamOptions) {
 
     // Start stream timeout
     resetStreamTimeout()
-
-    // Helper: find the most recent block of a given type by searching backward.
-    // This handles interleaved thinking/text events correctly — when events
-    // alternate, the last block may not be the same type as the incoming event.
-    // tool_use blocks act as natural boundaries — text/thinking after a tool_use
-    // should not be merged with text/thinking before it.
-    const findLastBlockOfType = (blocks: any[], type: string): any | undefined => {
-      for (let i = blocks.length - 1; i >= 0; i--) {
-        if (blocks[i].type === type) return blocks[i]
-        // tool_use blocks are natural boundaries — don't merge across them
-        if (blocks[i].type === 'tool_use') return undefined
-      }
-      return undefined
-    }
 
     eventSource.addEventListener('content', (e) => {
       if (!guard()) return
