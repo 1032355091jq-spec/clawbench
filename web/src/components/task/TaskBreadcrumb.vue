@@ -102,7 +102,7 @@ function navigate(target) {
   white-space: nowrap;
   cursor: default;
   color: var(--text-secondary, #666);
-  background: var(--bg-tertiary, #e9ecef);
+  background: var(--bg-secondary, #f0f0f0);
   transition: background 0.15s, color 0.15s;
 }
 
@@ -122,7 +122,7 @@ function navigate(target) {
   height: 0;
   border-style: solid;
   border-width: 11px 0 11px 8px;
-  border-color: transparent transparent transparent var(--bg-tertiary, #e9ecef);
+  border-color: transparent transparent transparent var(--border-color, #ddd);
   transition: border-color 0.15s;
   z-index: 1;
 }
@@ -139,7 +139,7 @@ function navigate(target) {
   }
 
   .crumb.clickable:hover::after {
-    border-left-color: var(--bg-secondary, #dde1e6);
+    border-left-color: var(--border-color, #ccc);
   }
 }
 
@@ -148,33 +148,33 @@ function navigate(target) {
 }
 
 .crumb.clickable:active::after {
-  border-left-color: var(--bg-secondary, #d0d5da);
+  border-left-color: var(--border-color, #bbb);
 }
 
 /* ── Current (active) crumb ── */
 .crumb.current {
-  background: var(--accent-color, #0066cc);
+  background: var(--text-primary, #444);
   color: #fff;
   font-weight: 600;
 }
 
 .crumb.current::after {
-  border-left-color: var(--accent-color, #0066cc);
+  border-left-color: var(--text-primary, #444);
 }
 
 /* Last crumb: no arrow */
-.crumb.current:last-child::after {
+.crumb:last-child::after {
   display: none;
 }
 
 @media (hover: hover) {
   .crumb.current:hover {
-    background: var(--accent-color, #0066cc);
+    background: var(--text-primary, #444);
     color: #fff;
   }
 
   .crumb.current:hover::after {
-    border-left-color: var(--accent-color, #0066cc);
+    border-left-color: var(--text-primary, #444);
   }
 }
 </style>
