@@ -75,6 +75,42 @@ export function useChatRender(options) {
     }
   }
 
+  // Batch-fetch task data using the list API to avoid per-task loading flicker.
+  // All entries transition from loading→loaded at the same time.
+  async function fetchBatchTaskData(taskKeys) {
+    const pending = taskKeys.filter(({ key, taskId }) =>
+      !blockTasks[key]?.task && !blockTasks[key]?.loading
+    )
+    if (pending.length === 0) return
+
+    // Mark all as loading
+    for (const { key, taskId } of pending) {
+      blockTasks[key] = { taskId, task: null, loading: true, deleted: false }
+    }
+
+    try {
+      const resp = await fetch('/api/tasks')
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
+      const data = await resp.json()
+      const taskMap = new Map((data.tasks || []).map(t => [t.id, t]))
+
+      for (const { key, taskId } of pending) {
+        const task = taskMap.get(taskId)
+        if (task) {
+          blockTasks[key].task = task
+        } else {
+          blockTasks[key].deleted = true
+        }
+        blockTasks[key].loading = false
+      }
+    } catch {
+      for (const { key } of pending) {
+        blockTasks[key].deleted = true
+        blockTasks[key].loading = false
+      }
+    }
+  }
+
   async function refreshTaskData(taskId) {
     for (const key of Object.keys(blockTasks)) {
       if (blockTasks[key].taskId === taskId && !blockTasks[key].deleted) {
@@ -176,11 +212,14 @@ export function useChatRender(options) {
 
     // ── Post-streaming: full pipeline ──
 
-    // Extract scheduled-task IDs and fetch their data
+    // Extract scheduled-task IDs and batch-fetch their data
     const taskIds = extractScheduledTaskIds(text)
-    for (let tagIdx = 0; tagIdx < taskIds.length; tagIdx++) {
-      const key = `${msgId}-${blockIdx}-${tagIdx}`
-      fetchTaskData(key, taskIds[tagIdx])
+    if (taskIds.length > 0) {
+      const taskKeys = taskIds.map((tid, tagIdx) => ({
+        key: `${msgId}-${blockIdx}-${tagIdx}`,
+        taskId: tid,
+      }))
+      fetchBatchTaskData(taskKeys)
     }
 
     // Detect ask-question tags
@@ -275,6 +314,8 @@ export function useChatRender(options) {
   }
 
   function extractScheduledTasks(msgs) {
+    // Collect all task keys across messages for a single batch fetch
+    const allTaskKeys = []
     for (const msg of msgs) {
       if (msg.role === 'assistant' && msg.blocks && !msg.streaming) {
         for (let bi = 0; bi < msg.blocks.length; bi++) {
@@ -282,12 +323,17 @@ export function useChatRender(options) {
           if (block.type === 'text') {
             const taskIds = extractScheduledTaskIds(block.text || '')
             for (let tagIdx = 0; tagIdx < taskIds.length; tagIdx++) {
-              const key = `${msg.id}-${bi}-${tagIdx}`
-              fetchTaskData(key, taskIds[tagIdx])
+              allTaskKeys.push({
+                key: `${msg.id}-${bi}-${tagIdx}`,
+                taskId: taskIds[tagIdx],
+              })
             }
           }
         }
       }
+    }
+    if (allTaskKeys.length > 0) {
+      fetchBatchTaskData(allTaskKeys)
     }
   }
 
