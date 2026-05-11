@@ -3,7 +3,7 @@
     <!-- Root crumb: 任务列表 -->
     <span
       class="crumb"
-      :class="{ current: isList, clickable: !isList }"
+      :class="{ current: isList, clickable: !isList, first: true }"
       @click="!isList && navigate('list')"
     >{{ t('task.title') }}</span>
 
@@ -84,45 +84,50 @@ function navigate(target) {
   scrollbar-width: none;
   flex: 1;
   min-width: 0;
-  /* Arrow height = font-size * line-height + padding-y * 2 */
-  height: 22px;
 }
 
 .task-breadcrumb::-webkit-scrollbar {
   display: none;
 }
 
-/* ── Arrow-shaped crumb ── */
+/* ── Chevron crumb base ── */
 .crumb {
   position: relative;
   display: flex;
   align-items: center;
-  padding: 0 12px 0 16px;
-  height: 100%;
+  height: 22px;
+  padding: 0 16px 0 18px;
   font-size: 11px;
   font-weight: 500;
   white-space: nowrap;
+  cursor: default;
   color: var(--text-secondary, #666);
   background: var(--bg-tertiary, #e9ecef);
-  cursor: default;
   transition: background 0.15s, color 0.15s;
-
-  /* Arrow shape: right edge is a pointed arrow */
-  clip-path: polygon(8px 0, 100% 50%, 8px 100%, 0 50%);
 }
 
-/* First crumb: flat left edge instead of arrow notch */
-.crumb:first-child {
+/* First crumb: rounded left, no left indent for arrow notch */
+.crumb.first {
   padding-left: 10px;
-  clip-path: polygon(0 0, 100% 50%, 0 100%);
+  border-radius: 4px 0 0 4px;
 }
 
-/* Overlap each crumb onto the previous one so arrows nest */
-.crumb + .crumb {
-  margin-left: -6px;
+/* Right arrow — ::after triangle that overlaps the next crumb */
+.crumb::after {
+  content: '';
+  position: absolute;
+  right: -8px;
+  top: 0;
+  width: 0;
+  height: 0;
+  border-style: solid;
+  border-width: 11px 0 11px 8px;
+  border-color: transparent transparent transparent var(--bg-tertiary, #e9ecef);
+  transition: border-color 0.15s;
+  z-index: 1;
 }
 
-/* ── Clickable (past) crumb ── */
+/* ── Clickable crumb ── */
 .crumb.clickable {
   cursor: pointer;
 }
@@ -132,10 +137,18 @@ function navigate(target) {
     background: var(--bg-secondary, #dde1e6);
     color: var(--accent-color, #4a90d9);
   }
+
+  .crumb.clickable:hover::after {
+    border-left-color: var(--bg-secondary, #dde1e6);
+  }
 }
 
 .crumb.clickable:active {
   background: var(--bg-secondary, #d0d5da);
+}
+
+.crumb.clickable:active::after {
+  border-left-color: var(--bg-secondary, #d0d5da);
 }
 
 /* ── Current (active) crumb ── */
@@ -145,10 +158,23 @@ function navigate(target) {
   font-weight: 600;
 }
 
+.crumb.current::after {
+  border-left-color: var(--accent-color, #0066cc);
+}
+
+/* Last crumb: no arrow */
+.crumb.current:last-child::after {
+  display: none;
+}
+
 @media (hover: hover) {
   .crumb.current:hover {
     background: var(--accent-color, #0066cc);
     color: #fff;
+  }
+
+  .crumb.current:hover::after {
+    border-left-color: var(--accent-color, #0066cc);
   }
 }
 </style>
