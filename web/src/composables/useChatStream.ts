@@ -189,18 +189,18 @@ export function useChatStream(options: UseChatStreamOptions) {
     reconnectAttempts = 0
 
     // Find existing streaming message or create a new one
-    let lastIndex = messages.value.findIndex(m => m.role === 'assistant' && m.streaming)
-    if (lastIndex === -1) {
+    let streamingMsg = messages.value.find(m => m.role === 'assistant' && m.streaming)
+    if (!streamingMsg) {
       // No streaming message from DB — create empty assistant message
-      messages.value.push({
+      streamingMsg = {
         role: 'assistant',
         content: '',
         blocks: [],
         streaming: true,
         createdAt: new Date().toISOString(),
         backend: currentBackend.value
-      })
-      lastIndex = messages.value.length - 1
+      }
+      messages.value.push(streamingMsg)
       // Keep renderedContents in sync with messages array
       onRenderNeeded()
     }
@@ -209,7 +209,7 @@ export function useChatStream(options: UseChatStreamOptions) {
     // Guard: skip events if session changed or message was removed
     const guard = () => {
       if (currentSessionId.value !== sessionId) return false
-      if (!messages.value[lastIndex]) return false
+      if (!messages.value.includes(streamingMsg)) return false
       return true
     }
 
@@ -223,7 +223,7 @@ export function useChatStream(options: UseChatStreamOptions) {
       resetStreamTimeout()
       const data = JSON.parse(e.data)
       // Coalesce content into the most recent text block
-      const blocks = messages.value[lastIndex].blocks
+      const blocks = streamingMsg.blocks
       const existingText = findLastBlockOfType(blocks, 'text')
       if (existingText) {
         existingText.text += data.content
@@ -238,7 +238,7 @@ export function useChatStream(options: UseChatStreamOptions) {
       if (!guard()) return
       resetStreamTimeout()
       const data = JSON.parse(e.data)
-      const blocks = messages.value[lastIndex].blocks
+      const blocks = streamingMsg.blocks
       // Coalesce thinking into the most recent thinking block
       const existingThinking = findLastBlockOfType(blocks, 'thinking')
       if (existingThinking) {
@@ -253,7 +253,7 @@ export function useChatStream(options: UseChatStreamOptions) {
       resetStreamTimeout()
       const data = JSON.parse(e.data)
       if (!guard()) return
-      const blocks = messages.value[lastIndex].blocks
+      const blocks = streamingMsg.blocks
       // Always check for existing block with same ID first — the backend may
       // emit multiple tool_use events for the same call (start + stop), and
       // we should merge them rather than creating duplicates.
@@ -310,7 +310,7 @@ export function useChatStream(options: UseChatStreamOptions) {
       resetStreamTimeout()
       const data = JSON.parse(e.data)
       if (!guard()) return
-      const blocks = messages.value[lastIndex].blocks
+      const blocks = streamingMsg.blocks
       // Find the matching tool_use block and update output/status
       const existing = blocks.find(b => b.type === 'tool_use' && b.id === data.id)
       if (existing) {
@@ -324,7 +324,7 @@ export function useChatStream(options: UseChatStreamOptions) {
       if (!guard()) return
       resetStreamTimeout()
       const data = JSON.parse(e.data)
-      messages.value[lastIndex].metadata = data
+      streamingMsg.metadata = data
     })
 
     eventSource.addEventListener('done', () => {
@@ -355,20 +355,19 @@ export function useChatStream(options: UseChatStreamOptions) {
       if (streamTimeout) { clearTimeout(streamTimeout); streamTimeout = null }
       disconnectStream()
       if (!guard()) return
-      const msg = messages.value[lastIndex]
-      msg.cancelled = true
-      delete msg.streaming
+      streamingMsg.cancelled = true
+      delete streamingMsg.streaming
       // Mark all unfinished tool_use blocks as done so spinner stops
-      if (msg.blocks) {
-        for (const block of msg.blocks) {
+      if (streamingMsg.blocks) {
+        for (const block of streamingMsg.blocks) {
           if (block.type === 'tool_use' && !block.done) {
             block.done = true
           }
         }
       }
       // If no content was received, add error block so the UI shows the error card instead of loading dots
-      if ((!msg.blocks || msg.blocks.length === 0) && !msg.content) {
-        msg.blocks = [{ type: 'error', text: gt('chat.stream.userCancelled') }]
+      if ((!streamingMsg.blocks || streamingMsg.blocks.length === 0) && !streamingMsg.content) {
+        streamingMsg.blocks = [{ type: 'error', text: gt('chat.stream.userCancelled') }]
       }
       onRenderNeeded(true)
       onExtractScheduledTasks?.(messages.value)
@@ -380,15 +379,14 @@ export function useChatStream(options: UseChatStreamOptions) {
       if (!guard()) return
       resetStreamTimeout()
       const data = JSON.parse(e.data)
-      const msg = messages.value[lastIndex]
       // Flush any streaming text before adding warning block
-      if (msg.streamingText) {
-        msg.blocks.push({ type: 'text', text: msg.streamingText })
-        msg.streamingText = ''
+      if (streamingMsg.streamingText) {
+        streamingMsg.blocks.push({ type: 'text', text: streamingMsg.streamingText })
+        streamingMsg.streamingText = ''
       }
       const warningBlock = { type: 'warning', text: data.text }
       if (data.reason) warningBlock.reason = data.reason
-      msg.blocks.push(warningBlock)
+      streamingMsg.blocks.push(warningBlock)
       onRenderNeeded()
     })
 
@@ -410,15 +408,15 @@ export function useChatStream(options: UseChatStreamOptions) {
       })
 
       // Create new streaming assistant placeholder
-      messages.value.push({
+      streamingMsg = {
         role: 'assistant',
         content: '',
         blocks: [],
         streaming: true,
         createdAt: new Date().toISOString(),
         backend: currentBackend.value,
-      })
-      lastIndex = messages.value.length - 1 // CRITICAL: update closure variable
+      }
+      messages.value.push(streamingMsg)
 
       onRenderNeeded()
       // Force scroll: queue_done removes the streaming indicator which shrinks layout,
@@ -439,12 +437,11 @@ export function useChatStream(options: UseChatStreamOptions) {
       resetStreamTimeout()
       // Current streaming message is finalized — clear loading state
       // before the next queued message starts (queue_consume)
-      const msg = messages.value[lastIndex]
-      if (msg) {
-        delete msg.streaming
+      if (streamingMsg) {
+        delete streamingMsg.streaming
         // Mark all unfinished tool_use blocks as done so spinner stops
-        if (msg.blocks) {
-          for (const block of msg.blocks) {
+        if (streamingMsg.blocks) {
+          for (const block of streamingMsg.blocks) {
             if (block.type === 'tool_use' && !block.done) {
               block.done = true
             }
@@ -468,13 +465,13 @@ export function useChatStream(options: UseChatStreamOptions) {
       onLoadHistory().catch(() => {
         if (!guard()) return
         const data = JSON.parse(e.data)
-        messages.value[lastIndex].content = `${gt('chat.stream.errorPrefix')} ${data.error}`
+        streamingMsg.content = `${gt('chat.stream.errorPrefix')} ${data.error}`
         const errorBlock = { type: 'error', text: data.error }
         if (data.reason) errorBlock.reason = data.reason
-        messages.value[lastIndex].blocks = [errorBlock]
-        delete messages.value[lastIndex].streaming
+        streamingMsg.blocks = [errorBlock]
+        delete streamingMsg.streaming
         // Mark any unfinished tool_use blocks as done
-        for (const block of messages.value[lastIndex].blocks) {
+        for (const block of streamingMsg.blocks) {
           if (block.type === 'tool_use' && !block.done) block.done = true
         }
         onRenderNeeded(true)
