@@ -23,13 +23,8 @@ func (p *VeCLIStreamParser) GetCapturedSessionID() string { return "" }
 // The --session-summary flag is NOT added here; it's appended by vecliPreStart
 // since the file path varies per request.
 func buildVeCLIArgs(req ChatRequest) []string {
-	// Prompt: prepend system prompt when ShouldInjectSystemPrompt returns true.
-	// VeCLI has no --system-prompt flag, so injecting the system prompt
-	// into the user prompt is the only way to pass it through.
-	prompt := req.Prompt
-	if req.ShouldInjectSystemPrompt() {
-		prompt = fmt.Sprintf("[System Instructions: %s]\n\n%s", req.SystemPrompt, prompt)
-	}
+	// VeCLI has no --system-prompt flag — inject into user prompt.
+	prompt := injectSystemPrompt(req)
 
 	args := []string{
 		"--yolo",

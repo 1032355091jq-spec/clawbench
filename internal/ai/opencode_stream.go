@@ -2,7 +2,6 @@ package ai
 
 import (
 	"encoding/json"
-	"fmt"
 	"log/slog"
 	"strings"
 )
@@ -166,15 +165,8 @@ func (p *OpenCodeStreamParser) ParseLine(line string, ch chan<- StreamEvent) {
 
 // buildOpenCodeStreamArgs constructs the CLI arguments for OpenCode streaming
 func buildOpenCodeStreamArgs(req ChatRequest) []string {
-	// Prompt: prepend system prompt when ShouldInjectSystemPrompt returns true.
-	// OpenCode CLI has no --system-prompt flag, so injecting the system prompt
-	// into the user prompt is the only way to pass it through.
-	// Re-injects every N assistant turns (configured via chat.system_prompt_interval)
-	// to reinforce the system prompt in long conversations.
-	prompt := req.Prompt
-	if req.ShouldInjectSystemPrompt() {
-		prompt = fmt.Sprintf("[System Instructions: %s]\n\n%s", req.SystemPrompt, prompt)
-	}
+	// OpenCode CLI has no --system-prompt flag — inject into user prompt.
+	prompt := injectSystemPrompt(req)
 
 	args := []string{
 		"run",
@@ -206,63 +198,16 @@ func buildOpenCodeStreamArgs(req ChatRequest) []string {
 }
 
 // normalizeOpenCodeToolName maps OpenCode tool names to canonical names.
-// OpenCode uses lowercase tool names (read, bash, edit, write).
-func normalizeOpenCodeToolName(name string) string {
-	switch name {
-	case "read":
-		return "Read"
-	case "write":
-		return "Write"
-	case "edit":
-		return "Edit"
-	case "bash":
-		return "Bash"
-	case "glob":
-		return "Glob"
-	case "grep":
-		return "Grep"
-	case "ls":
-		return "LS"
-	case "webfetch":
-		return "WebFetch"
-	case "websearch":
-		return "WebSearch"
-	case "skill":
-		return "Skill"
-	case "task":
-		return "Agent" // OpenCode's task tool is a sub-agent
-	case "todowrite":
-		return "TodoWrite"
-	case "look_at":
-		return "Read" // media inspection → Read
-	default:
-		return name
-	}
-}
+// Deprecated: use normalizeToolName instead. Retained for backward compatibility.
+func normalizeOpenCodeToolName(name string) string { return normalizeToolName(name) }
 
 // normalizeOpenCodeInput remaps OpenCode's camelCase input fields to canonical snake_case.
-// OpenCode uses filePath instead of file_path, oldString instead of old_string, etc.
+// Deprecated: use normalizeToolInput instead. Retained for backward compatibility.
 func normalizeOpenCodeInput(toolName string, rawInput json.RawMessage) string {
-	var input map[string]any
-	if err := json.Unmarshal(rawInput, &input); err != nil {
-		return string(rawInput) // fallback: return as-is
-	}
-
-	// Remap camelCase keys to canonical snake_case
-	if v, ok := input["filePath"]; ok {
-		delete(input, "filePath")
-		input["file_path"] = v
-	}
-	if v, ok := input["oldString"]; ok {
-		delete(input, "oldString")
-		input["old_string"] = v
-	}
-	if v, ok := input["newString"]; ok {
-		delete(input, "newString")
-		input["new_string"] = v
-	}
-
-	normalized, err := json.Marshal(input)
+	normalized, err := normalizeToolInput(rawInput, map[string]string{
+		"oldString": "old_string",
+		"newString": "new_string",
+	})
 	if err != nil {
 		return string(rawInput)
 	}

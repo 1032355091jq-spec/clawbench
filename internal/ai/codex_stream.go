@@ -159,16 +159,8 @@ func buildCodexStreamArgs(req ChatRequest) []string {
 	// Skip git repo check (allows running in non-git dirs)
 	args = append(args, "--skip-git-repo-check")
 
-	// Prompt: prepend system prompt when ShouldInjectSystemPrompt returns true.
-	// Codex CLI has no --system-prompt flag, and -c developer_instructions= causes
-	// reconnection errors (v0.57.0). Injecting the system prompt into the user prompt
-	// is the only reliable mechanism that works across all Codex CLI versions.
-	// Re-injects every N assistant turns (configured via chat.system_prompt_interval)
-	// to reinforce the system prompt in long conversations.
-	prompt := req.Prompt
-	if req.ShouldInjectSystemPrompt() {
-		prompt = fmt.Sprintf("[System Instructions: %s]\n\n%s", req.SystemPrompt, prompt)
-	}
+	// Codex CLI has no --system-prompt flag — inject into user prompt.
+	prompt := injectSystemPrompt(req)
 
 	// Prompt is the last argument for new sessions
 	args = append(args, prompt)
@@ -228,7 +220,7 @@ func parseCodexResumeOutput(scanner *bufio.Scanner, ch chan<- StreamEvent, sessi
 		if line == "codex" || line == "user" {
 			// Flush any pending exec block
 			if role == "exec" && execCommand != "" {
-				input := execCommandCompleteJSON(execCommand)
+				input := execCommandJSON(execCommand)
 				output := truncateToolOutput(execOutput.String())
 				emitBashToolCall(ch, execID, input, output, true, nil)
 				execCommand = ""
@@ -241,7 +233,7 @@ func parseCodexResumeOutput(scanner *bufio.Scanner, ch chan<- StreamEvent, sessi
 		if line == "exec" {
 			// Flush any pending exec block
 			if role == "exec" && execCommand != "" {
-				input := execCommandCompleteJSON(execCommand)
+				input := execCommandJSON(execCommand)
 				output := truncateToolOutput(execOutput.String())
 				emitBashToolCall(ch, execID, input, output, true, nil)
 				execCommand = ""
@@ -342,7 +334,7 @@ func parseCodexResumeOutput(scanner *bufio.Scanner, ch chan<- StreamEvent, sessi
 			execCommand = strings.TrimSuffix(line, ":")
 			execID = fmt.Sprintf("exec-%d", execCounter)
 			execCounter++
-			emitBashToolCall(ch, execID, execCommandSummaryJSON(execCommand), "", false, nil)
+			emitBashToolCall(ch, execID, execCommandJSON(execCommand), "", false, nil)
 		} else {
 			if execOutput.Len() > 0 {
 				execOutput.WriteByte('\n')
@@ -355,7 +347,7 @@ func parseCodexResumeOutput(scanner *bufio.Scanner, ch chan<- StreamEvent, sessi
 
 	// Flush any pending exec block at EOF
 	if role == "exec" && execCommand != "" {
-		input := execCommandCompleteJSON(execCommand)
+		input := execCommandJSON(execCommand)
 		output := truncateToolOutput(execOutput.String())
 		emitBashToolCall(ch, execID, input, output, true, nil)
 	}
@@ -394,25 +386,7 @@ func emitBashToolCall(ch chan<- StreamEvent, id, input, output string, done bool
 }
 
 // codexBashInputJSON builds canonical {"command":"..."} JSON from Codex's raw command string.
-func codexBashInputJSON(command string) string {
-	m := map[string]string{"command": command}
-	b, _ := json.Marshal(m)
-	return string(b)
-}
-
-// execCommandSummaryJSON returns JSON for a started exec command (resume parser).
-func execCommandSummaryJSON(summary string) string {
-	m := map[string]string{"command": summary}
-	b, _ := json.Marshal(m)
-	return string(b)
-}
-
-// execCommandCompleteJSON returns JSON for a completed exec command (resume parser).
-func execCommandCompleteJSON(summary string) string {
-	m := map[string]string{"command": summary}
-	b, _ := json.Marshal(m)
-	return string(b)
-}
+func codexBashInputJSON(command string) string { return execCommandJSON(command) }
 
 // buildCodexResumeArgs constructs the CLI arguments for resuming a Codex session.
 // "codex exec resume" does not support --json, so output is plain text.
@@ -439,11 +413,8 @@ func buildCodexResumeArgs(req ChatRequest, threadID string) []string {
 	// Thread ID for resuming
 	args = append(args, threadID)
 
-	// Prompt: prepend system prompt if set (same approach as buildCodexStreamArgs).
-	prompt := req.Prompt
-	if req.SystemPrompt != "" {
-		prompt = fmt.Sprintf("[System Instructions: %s]\n\n%s", req.SystemPrompt, prompt)
-	}
+	// Codex CLI has no --system-prompt flag — inject into user prompt.
+	prompt := injectSystemPrompt(req)
 
 	// Prompt for the resumed session
 	args = append(args, prompt)

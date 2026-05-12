@@ -2,7 +2,6 @@ package ai
 
 import (
 	"encoding/json"
-	"fmt"
 	"log/slog"
 )
 
@@ -167,15 +166,8 @@ func (p *GeminiStreamParser) ParseLine(line string, ch chan<- StreamEvent) {
 
 // buildGeminiStreamArgs constructs the CLI arguments for Gemini streaming
 func buildGeminiStreamArgs(req ChatRequest) []string {
-	// Prompt: prepend system prompt when ShouldInjectSystemPrompt returns true.
-	// Gemini CLI has no --system-prompt flag, so injecting the system prompt
-	// into the user prompt is the only way to pass it through.
-	// Re-injects every N assistant turns (configured via chat.system_prompt_interval)
-	// to reinforce the system prompt in long conversations.
-	prompt := req.Prompt
-	if req.ShouldInjectSystemPrompt() {
-		prompt = fmt.Sprintf("[System Instructions: %s]\n\n%s", req.SystemPrompt, prompt)
-	}
+	// Gemini CLI has no --system-prompt flag, so inject into the user prompt.
+	prompt := injectSystemPrompt(req)
 
 	args := []string{
 		"--prompt", prompt,
@@ -202,59 +194,13 @@ func buildGeminiStreamArgs(req ChatRequest) []string {
 }
 
 // normalizeGeminiToolName maps Gemini tool names to canonical names.
-// Gemini uses snake_case tool names (read_file, write_file, edit_file, list_files).
-func normalizeGeminiToolName(name string) string {
-	switch name {
-	case "read_file":
-		return "Read"
-	case "write_file":
-		return "Write"
-	case "edit_file", "replace":
-		return "Edit"
-	case "shell", "run_command":
-		return "Bash"
-	case "list_files", "list_directory":
-		return "LS"
-	case "search_files":
-		return "Grep"
-	case "glob":
-		return "Glob"
-	case "web_fetch":
-		return "WebFetch"
-	case "google_web_search":
-		return "WebSearch"
-	case "invoke_agent":
-		return "Agent"
-	case "enter_plan_mode":
-		return "EnterPlanMode"
-	case "activate_skill":
-		return "Skill"
-	case "save_memory":
-		return "save_memory" // no canonical PascalCase equivalent
-	default:
-		return name
-	}
-}
+// Deprecated: use normalizeToolName instead. Retained for backward compatibility.
+func normalizeGeminiToolName(name string) string { return normalizeToolName(name) }
 
 // normalizeGeminiInput remaps Gemini's camelCase input fields to canonical snake_case.
-// Gemini uses filePath instead of file_path, dirPath instead of path, etc.
+// Deprecated: use normalizeToolInput instead. Retained for backward compatibility.
 func normalizeGeminiInput(toolName string, rawInput json.RawMessage) string {
-	var input map[string]any
-	if err := json.Unmarshal(rawInput, &input); err != nil {
-		return string(rawInput) // fallback: return as-is
-	}
-
-	// Remap camelCase keys to canonical snake_case
-	if v, ok := input["filePath"]; ok {
-		delete(input, "filePath")
-		input["file_path"] = v
-	}
-	if v, ok := input["dirPath"]; ok {
-		delete(input, "dirPath")
-		input["path"] = v
-	}
-
-	normalized, err := json.Marshal(input)
+	normalized, err := normalizeToolInput(rawInput, map[string]string{"dirPath": "path"})
 	if err != nil {
 		return string(rawInput)
 	}
