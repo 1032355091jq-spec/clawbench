@@ -2,7 +2,7 @@ import { onUnmounted, type Ref } from 'vue'
 import { cancelChat } from '@/utils/api.ts'
 import { useReconnect } from './useReconnect'
 import { gt } from '@/composables/useLocale'
-import { FILE_MODIFYING_TOOLS, findLastBlockOfType } from '@/utils/chatStreamUtils.ts'
+import { FILE_MODIFYING_TOOLS, findLastBlockOfType, forceCleanupStreamingState as _forceCleanupStreamingState } from '@/utils/chatStreamUtils.ts'
 
 export interface UseChatStreamOptions {
   messages: Ref<any[]>
@@ -360,21 +360,11 @@ export function useChatStream(options: UseChatStreamOptions) {
       disconnectStream()
       if (!guard()) return
       streamingMsg.cancelled = true
-      delete streamingMsg.streaming
-      // Mark all unfinished tool_use blocks as done so spinner stops
-      if (streamingMsg.blocks) {
-        for (const block of streamingMsg.blocks) {
-          if (block.type === 'tool_use' && !block.done) {
-            block.done = true
-          }
-        }
-      }
       // If no content was received, add error block so the UI shows the error card instead of loading dots
       if ((!streamingMsg.blocks || streamingMsg.blocks.length === 0) && !streamingMsg.content) {
         streamingMsg.blocks = [{ type: 'error', text: gt('chat.stream.userCancelled') }]
       }
-      onRenderNeeded(true)
-      onExtractScheduledTasks?.(messages.value)
+      _forceCleanupStreamingState(messages.value, { onRenderNeeded, onExtractScheduledTasks })
       loading.value = false
       onStreamEnd?.('cancelled')
     })
@@ -441,19 +431,7 @@ export function useChatStream(options: UseChatStreamOptions) {
       resetStreamTimeout()
       // Current streaming message is finalized — clear loading state
       // before the next queued message starts (queue_consume)
-      if (streamingMsg) {
-        delete streamingMsg.streaming
-        // Mark all unfinished tool_use blocks as done so spinner stops
-        if (streamingMsg.blocks) {
-          for (const block of streamingMsg.blocks) {
-            if (block.type === 'tool_use' && !block.done) {
-              block.done = true
-            }
-          }
-        }
-      }
-      onRenderNeeded(true)
-      onExtractScheduledTasks?.(messages.value)
+      _forceCleanupStreamingState(messages.value, { onRenderNeeded, onExtractScheduledTasks })
       // Re-sync scroll position: removing the streaming indicator and pending
       // messages shrinks the layout, which can make isAtBottom=false even when
       // the user is visually at the bottom. Scroll to ensure isAtBottom stays
@@ -473,13 +451,7 @@ export function useChatStream(options: UseChatStreamOptions) {
         const errorBlock = { type: 'error', text: data.error }
         if (data.reason) errorBlock.reason = data.reason
         streamingMsg.blocks = [errorBlock]
-        delete streamingMsg.streaming
-        // Mark any unfinished tool_use blocks as done
-        for (const block of streamingMsg.blocks) {
-          if (block.type === 'tool_use' && !block.done) block.done = true
-        }
-        onRenderNeeded(true)
-        onExtractScheduledTasks?.(messages.value)
+        _forceCleanupStreamingState(messages.value, { onRenderNeeded, onExtractScheduledTasks })
         loading.value = false
       })
       onStreamEnd?.('error')
