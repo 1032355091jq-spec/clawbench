@@ -1,15 +1,13 @@
 import { watch, onUnmounted, type Ref } from 'vue'
 import { store } from '@/stores/app.ts'
 import { refreshCurrentFile } from '@/composables/useFileRefresh.ts'
+import { useReconnect } from './useReconnect'
 
 interface UseFileWatchOptions {
   fileManagerOpen: Ref<boolean>
   currentDir: Ref<string>
   currentFile: Ref<{ path: string; isImage?: boolean; isAudio?: boolean; isVideo?: boolean } | null>
 }
-
-const MAX_RECONNECT = 3
-const RECONNECT_DELAY = 2000
 
 /**
  * useFileWatch connects to the backend file watch SSE endpoint,
@@ -23,9 +21,13 @@ export function useFileWatch(options: UseFileWatchOptions) {
 
   let eventSource: EventSource | null = null
   let clientId: string | null = null
-  let reconnectAttempts = 0
-  let reconnectTimer: ReturnType<typeof setTimeout> | null = null
   let updating = false // guard against concurrent updateWatch calls
+
+  const reconnect = useReconnect({
+    maxAttempts: 3,
+    baseDelay: 2000,
+    onReconnect: connect,
+  })
 
   function connect() {
     if (eventSource) return
@@ -42,7 +44,7 @@ export function useFileWatch(options: UseFileWatchOptions) {
       try {
         const data = JSON.parse(e.data)
         clientId = data.clientId
-        reconnectAttempts = 0
+        reconnect.reset()
         updateWatch()
       } catch { /* ignore parse error */ }
     })
@@ -58,19 +60,15 @@ export function useFileWatch(options: UseFileWatchOptions) {
 
     eventSource.onerror = () => {
       disconnect()
-      if (reconnectAttempts < MAX_RECONNECT) {
-        reconnectAttempts++
-        reconnectTimer = setTimeout(connect, RECONNECT_DELAY)
+      if (reconnect.shouldReconnect()) {
+        reconnect.scheduleReconnect()
       }
       // After MAX_RECONNECT failures, stop trying — file watch is non-critical
     }
   }
 
   function disconnect() {
-    if (reconnectTimer) {
-      clearTimeout(reconnectTimer)
-      reconnectTimer = null
-    }
+    reconnect.reset()
     if (eventSource) {
       eventSource.close()
       eventSource = null

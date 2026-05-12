@@ -1,5 +1,6 @@
 import { ref, type Ref } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { useReconnect } from './useReconnect'
 
 export type ConnectionState = 'disconnected' | 'connecting' | 'connected' | 'reconnecting' | 'error'
 
@@ -28,11 +29,13 @@ export function useTerminalSession(getWsUrl: () => string) {
   const currentCwd = ref('')
   const sessionId = ref('')
   const ws: Ref<WebSocket | null> = ref(null)
-  let reconnectAttempts = 0
-  const maxReconnectAttempts = 3
-  let reconnectTimer: ReturnType<typeof setTimeout> | null = null
   // Track whether the current error is fatal (should not auto-reconnect)
   let fatalError = false
+
+  const reconnect = useReconnect({
+    onReconnect: () => connect().catch(() => { /* onclose handles retry logic */ }),
+    getFatalError: () => fatalError ? true : null,
+  })
 
   function connect(): Promise<void> {
     return new Promise((resolve, reject) => {
@@ -56,7 +59,7 @@ export function useTerminalSession(getWsUrl: () => string) {
 
       socket.onopen = () => {
         connectionState.value = 'connected'
-        reconnectAttempts = 0
+        reconnect.reset()
         ws.value = socket
         resolve()
       }
@@ -86,7 +89,7 @@ export function useTerminalSession(getWsUrl: () => string) {
         // infinite kick-reconnect loop.
         if (event.code === WS_CLOSE_REPLACED) {
           connectionState.value = 'disconnected'
-          reconnectAttempts = maxReconnectAttempts // prevent reconnect
+          reconnect.disable()
           return
         }
 
@@ -95,15 +98,13 @@ export function useTerminalSession(getWsUrl: () => string) {
           connectionState.value = 'disconnected'
           tryReconnect()
         } else {
-          // If intentionally disconnected (disconnect() sets reconnectAttempts to max),
-          // don't set error state — just stay disconnected
-          if (reconnectAttempts >= maxReconnectAttempts) {
+          // If intentionally disconnected (reconnect exhausted), don't set error
+          if (!reconnect.shouldReconnect()) {
             connectionState.value = 'disconnected'
             return
           }
           // Failed during connecting/reconnecting
           // WebSocket close code 1006 = abnormal closure (server rejected upgrade)
-          // This typically means the backend returned HTTP 500 (e.g. PTY start failed)
           if (event.code === 1006 && !fatalError) {
             // Likely a server-side error (PTY start failure, etc.)
             errorMessage.value = t('terminal.shellStartFailed')
@@ -130,11 +131,7 @@ export function useTerminalSession(getWsUrl: () => string) {
   }
 
   function disconnect() {
-    if (reconnectTimer) {
-      clearTimeout(reconnectTimer)
-      reconnectTimer = null
-    }
-    reconnectAttempts = maxReconnectAttempts // prevent reconnect
+    reconnect.reset()
     fatalError = false
     sessionId.value = '' // intentional close = next connect creates new session
     if (ws.value) {
@@ -146,11 +143,7 @@ export function useTerminalSession(getWsUrl: () => string) {
 
   // reset clears all state for a fresh connect (used by rebuild session)
   function reset() {
-    if (reconnectTimer) {
-      clearTimeout(reconnectTimer)
-      reconnectTimer = null
-    }
-    reconnectAttempts = 0
+    reconnect.reset()
     fatalError = false
     errorMessage.value = ''
     errorCode.value = ''
@@ -163,19 +156,13 @@ export function useTerminalSession(getWsUrl: () => string) {
   }
 
   function tryReconnect() {
-    if (reconnectAttempts >= maxReconnectAttempts || fatalError) {
+    if (!reconnect.shouldReconnect()) {
       connectionState.value = 'error'
       errorMessage.value = errorMessage.value || t('terminal.websocketFailed')
       return
     }
-
-    reconnectAttempts++
     connectionState.value = 'reconnecting'
-    reconnectTimer = setTimeout(() => {
-      connect().catch(() => {
-        // tryReconnect will be called again from onclose if appropriate
-      })
-    }, 2000 * reconnectAttempts)
+    reconnect.scheduleReconnect()
   }
 
   // Message handler callbacks — set by TerminalPanel

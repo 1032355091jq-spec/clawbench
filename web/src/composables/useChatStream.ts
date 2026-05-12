@@ -1,5 +1,6 @@
 import { onUnmounted, type Ref } from 'vue'
 import { cancelChat } from '@/utils/api.ts'
+import { useReconnect } from './useReconnect'
 import { gt } from '@/composables/useLocale'
 import { FILE_MODIFYING_TOOLS, findLastBlockOfType } from '@/utils/chatStreamUtils.ts'
 
@@ -47,16 +48,20 @@ export function useChatStream(options: UseChatStreamOptions) {
   } = options
 
   let eventSource: EventSource | null = null
-  let reconnectAttempts = 0
   let streamTimeout: ReturnType<typeof setTimeout> | null = null
   let renderTimer: ReturnType<typeof setTimeout> | null = null
   let pollingInterval: ReturnType<typeof setInterval> | null = null
   // Track tool_use timeout timers so we can clean them up
   const toolUseTimeouts: Map<string, ReturnType<typeof setTimeout>> = new Map()
 
-  const MAX_RECONNECT_ATTEMPTS = 3
   const STREAM_TIMEOUT_MS = 60000 // 60 seconds without any SSE event = try reconnect
   const TOOL_USE_TIMEOUT_MS = 30000 // 30 seconds without 'done' event = mark as done
+
+  const reconnect = useReconnect({
+    maxAttempts: 3,
+    baseDelay: 2000,
+    onReconnect: () => connectStream(currentSessionId.value),
+  })
 
   function debouncedRender() {
     if (renderTimer) clearTimeout(renderTimer)
@@ -74,9 +79,8 @@ export function useChatStream(options: UseChatStreamOptions) {
       // No SSE event received for too long — reconnect instead of killing the session
       disconnectStream()
       // The AI session continues on the backend; just reconnect SSE
-      if (currentSessionId.value && loading.value && reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
-        reconnectAttempts++
-        connectStream(currentSessionId.value)
+      if (currentSessionId.value && loading.value && reconnect.shouldReconnect()) {
+        reconnect.scheduleReconnect()
       } else {
         // Too many reconnect attempts or session no longer active, fall back to polling
         forceCleanupStreamingState()
@@ -186,7 +190,7 @@ export function useChatStream(options: UseChatStreamOptions) {
   function connectStream(sessionId: string) {
     disconnectStream()
     stopPolling()
-    reconnectAttempts = 0
+    reconnect.reset()
 
     // Find existing streaming message or create a new one
     let streamingMsg = messages.value.find(m => m.role === 'assistant' && m.streaming)
@@ -485,10 +489,9 @@ export function useChatStream(options: UseChatStreamOptions) {
       // SSE connection error — reconnect if session is still active
       if (streamTimeout) { clearTimeout(streamTimeout); streamTimeout = null }
       disconnectStream()
-      if (currentSessionId.value && loading.value && reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
+      if (currentSessionId.value && loading.value && reconnect.shouldReconnect()) {
         // AI session likely still running on backend, reconnect SSE
-        reconnectAttempts++
-        connectStream(currentSessionId.value)
+        reconnect.scheduleReconnect()
       } else {
         // Too many attempts or session inactive — fall back to polling
         forceCleanupStreamingState()
