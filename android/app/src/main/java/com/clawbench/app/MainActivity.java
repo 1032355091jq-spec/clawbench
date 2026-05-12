@@ -626,6 +626,20 @@ public class MainActivity extends AppCompatActivity {
             });
         }
 
+        /**
+         * Stop the PortForwardService and disconnect SSH.
+         * Called from WebView when server reports no forwarded ports,
+         * to avoid running an idle foreground service with no work to do.
+         */
+        @JavascriptInterface
+        public void stopPortForwardService() {
+            activity.runOnUiThread(() -> {
+                Log.i(TAG, "WebView requested PortForwardService stop (no ports on server)");
+                activity.forwardedPorts.clear();
+                PortForwardService.stop(activity);
+            });
+        }
+
         @JavascriptInterface
         public String getForwardedPorts() {
             return new JSONArray(activity.forwardedPorts).toString();

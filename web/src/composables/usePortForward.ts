@@ -89,10 +89,17 @@ export function usePortForward() {
     detectedPorts.value = data.ports || []
   }
 
-  /** Sync all registered ports to Android native on initial load */
+  /** Sync all registered ports to Android native on initial load.
+   *  If the server has no registered ports, stop the native service
+   *  to avoid an idle foreground service draining battery. */
   async function syncToNative() {
     if (!isAppMode.value) return
     await loadPorts()
+    if (ports.value.length === 0) {
+      // No ports on server — stop the native service (clears stale SharedPreferences)
+      ;(window as any).AndroidNative?.stopPortForwardService()
+      return
+    }
     for (const p of ports.value) {
       ;(window as any).AndroidNative?.addForwardedPort(p.port)
     }

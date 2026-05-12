@@ -157,10 +157,10 @@
 
     <!-- Fixed bottom bar -->
     <div class="form-footer">
-      <button class="footer-btn primary" :disabled="saving" @click="submit">
+      <button class="action-btn primary" :disabled="saving" @click="submit">
         {{ mode === 'create' ? t('task.form.create') : t('task.form.save') }}
       </button>
-      <button class="footer-btn secondary" @click="$emit('close')">{{ t('common.cancel') }}</button>
+      <button class="action-btn secondary" @click="$emit('close')">{{ t('common.cancel') }}</button>
     </div>
   </div>
 </template>
@@ -554,46 +554,53 @@ onMounted(() => {
 .form-footer {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 5px;
   padding: 6px 12px;
-  border-top: 1px solid var(--border-color, #e5e5e5);
-  background: var(--bg-primary, #fff);
+  background: transparent;
   flex-shrink: 0;
 }
 
-.footer-btn {
-  padding: 6px 12px;
+.action-btn {
+  height: 26px;
   border: none;
-  border-radius: 6px;
-  font-size: 12px;
-  font-weight: 500;
+  border-radius: 13px;
   cursor: pointer;
-  transition: background 0.15s, opacity 0.15s;
-  display: flex;
+  transition: all 0.15s;
+  display: inline-flex;
   align-items: center;
   gap: 3px;
+  padding: 0 8px;
+  flex-shrink: 0;
+  font-size: 10px;
+  font-weight: 500;
+  white-space: nowrap;
 }
 
-.footer-btn:disabled {
-  opacity: 0.5;
+.action-btn:disabled {
+  opacity: 0.4;
   cursor: not-allowed;
 }
 
-.footer-btn.primary {
+.action-btn.primary {
   background: var(--accent-color, #0066cc);
   color: #fff;
 }
 
-.footer-btn.primary:hover:not(:disabled) {
-  opacity: 0.9;
+@media (hover: hover) {
+  .action-btn.primary:hover:not(:disabled) {
+    opacity: 0.85;
+  }
 }
 
-.footer-btn.secondary {
-  background: var(--bg-tertiary, #f0f0f0);
-  color: var(--text-primary, #1a1a1a);
+.action-btn.secondary {
+  background: var(--bg-tertiary, rgba(0, 0, 0, 0.06));
+  color: var(--text-secondary, #666);
 }
 
-.footer-btn.secondary:hover {
-  background: #e0e0e0;
+@media (hover: hover) {
+  .action-btn.secondary:hover {
+    background: rgba(0, 0, 0, 0.1);
+    color: var(--text-primary, #1a1a1a);
+  }
 }
 </style>

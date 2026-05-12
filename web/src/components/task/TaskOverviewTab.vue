@@ -63,45 +63,45 @@
     <!-- Fixed bottom action bar -->
     <div class="overview-actions">
       <button class="action-btn" @click="$emit('edit')">
-        <Pencil :size="14" />
+        <Pencil :size="12" />
         <span class="action-text">{{ t('common.edit') }}</span>
       </button>
       <button v-if="task.runCount > 0 || task.runningCount > 0" class="action-btn" @click="$emit('history')">
-        <Clock :size="14" />
+        <Clock :size="12" />
         <span class="action-text">{{ t('task.history') }}</span>
       </button>
       <span class="actions-spacer"></span>
       <template v-if="task.status === 'active'">
         <button class="action-btn accent" :disabled="actionLoading" @click="triggerTask">
-          <Zap :size="14" />
+          <Zap :size="12" />
           <span class="action-text">{{ t('task.run') }}</span>
         </button>
         <button class="action-btn warn" :disabled="actionLoading" @click="pauseTask">
-          <Pause :size="14" />
+          <Pause :size="12" />
           <span class="action-text">{{ t('task.pause') }}</span>
         </button>
         <button class="action-btn danger" :disabled="actionLoading" @click="deleteTask">
-          <Trash2 :size="14" />
+          <Trash2 :size="12" />
           <span class="action-text">{{ t('task.delete') }}</span>
         </button>
       </template>
       <template v-else-if="task.status === 'paused'">
         <button class="action-btn accent" :disabled="actionLoading" @click="triggerTask">
-          <Zap :size="14" />
+          <Zap :size="12" />
           <span class="action-text">{{ t('task.run') }}</span>
         </button>
         <button class="action-btn success" :disabled="actionLoading" @click="resumeTask">
-          <Play :size="14" />
+          <Play :size="12" />
           <span class="action-text">{{ t('task.resume') }}</span>
         </button>
         <button class="action-btn danger" :disabled="actionLoading" @click="deleteTask">
-          <Trash2 :size="14" />
+          <Trash2 :size="12" />
           <span class="action-text">{{ t('task.delete') }}</span>
         </button>
       </template>
       <template v-else-if="task.status === 'completed'">
         <button class="action-btn danger" :disabled="actionLoading" @click="deleteTask">
-          <Trash2 :size="14" />
+          <Trash2 :size="12" />
           <span class="action-text">{{ t('task.delete') }}</span>
         </button>
       </template>
@@ -342,8 +342,8 @@ const renderedPrompt = computed(() => {
 .overview-actions {
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 8px 12px;
+  gap: 5px;
+  padding: 6px 12px;
   border-top: none;
   background: transparent;
   flex-shrink: 0;
@@ -354,19 +354,19 @@ const renderedPrompt = computed(() => {
 }
 
 .action-btn {
-  height: 30px;
+  height: 26px;
   border: none;
-  border-radius: 15px;
+  border-radius: 13px;
   background: var(--bg-tertiary, rgba(0, 0, 0, 0.06));
   color: var(--text-secondary, #666);
   cursor: pointer;
   transition: all 0.15s;
   display: inline-flex;
   align-items: center;
-  gap: 4px;
-  padding: 0 10px;
+  gap: 3px;
+  padding: 0 8px;
   flex-shrink: 0;
-  font-size: 11px;
+  font-size: 10px;
   white-space: nowrap;
 }
 

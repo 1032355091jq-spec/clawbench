@@ -185,6 +185,13 @@ public class PortForwardService extends Service {
 
         // Restore previously saved ports (from before Service was killed)
         restoreForwardedPorts();
+
+        // If no ports were restored, there's nothing to forward — stop immediately.
+        // This prevents an idle foreground service with no work to do (wastes battery).
+        if (forwardedPorts.isEmpty()) {
+            Log.i(TAG, "SSH: no saved ports to forward, stopping service");
+            stopSelf();
+        }
     }
 
     @Override
@@ -235,6 +242,17 @@ public class PortForwardService extends Service {
         isRunning = false;
         instance = null;
         networkExecutor.shutdownNow();
+
+        // If there are no forwarded ports, clean up SharedPreferences
+        // so the service won't be unnecessarily restored on next cold start.
+        if (forwardedPorts.isEmpty()) {
+            getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
+                    .edit()
+                    .remove(KEY_FORWARDED_PORTS)
+                    .apply();
+            Log.i(TAG, "SSH: cleaned up empty forwarded_ports from SharedPreferences");
+        }
+
         stopForeground(true);
         super.onDestroy();
     }
@@ -762,7 +780,9 @@ public class PortForwardService extends Service {
         } else if (portCount > 0) {
             text = portCount + " 个端口转发活跃";
         } else {
-            text = "SSH 隧道已连接";
+            // No ports forwarded — service should stop itself shortly,
+            // but if this notification is visible it means we're winding down.
+            text = "无端口转发，即将停止";
         }
 
         return new NotificationCompat.Builder(this, CHANNEL_ID)

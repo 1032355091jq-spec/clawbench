@@ -1,12 +1,10 @@
 <template>
   <div class="task-tab" v-show="active">
-    <Transition name="slide-view" mode="out-in">
-      <TaskListPage v-if="currentView === 'list' && !formViewOpen" key="list" ref="listPageRef" @create="onCreate" @select="onTaskSelect" />
-      <TaskDetailPage v-else-if="currentView === 'settings' && !execDetailOpen && !formViewOpen" key="settings" :task="selectedTaskData" @edit="onEdit" @deleted="onTaskDeleted" @history="onTaskHistory" />
-      <TaskHistoryTab v-else-if="currentView === 'history' && !execDetailOpen && !formViewOpen" key="history" :task="selectedTaskData" @open-file="onOpenFile" />
-      <TaskExecDetail v-else-if="execDetailOpen && !formViewOpen" key="exec" :execDetail="selectedExecData" :taskName="selectedTaskData?.name" @close="closeExecDetail" @open-file="onOpenFile" />
-      <TaskFormPage v-else-if="formViewOpen" key="form" :mode="formMode" :task="formMode === 'edit' ? selectedTaskData : null" @close="closeForm" @saved="onFormSaved" />
-    </Transition>
+    <TaskListPage v-if="currentView === 'list' && !formViewOpen" ref="listPageRef" @create="onCreate" @select="onTaskSelect" />
+    <TaskDetailPage v-else-if="currentView === 'settings' && !execDetailOpen && !formViewOpen" :task="selectedTaskData" @edit="onEdit" @deleted="onTaskDeleted" @history="onTaskHistory" />
+    <TaskHistoryTab v-else-if="currentView === 'history' && !execDetailOpen && !formViewOpen" :task="selectedTaskData" @open-file="onOpenFile" />
+    <TaskExecDetail v-else-if="execDetailOpen && !formViewOpen" :execDetail="selectedExecData" :taskName="selectedTaskData?.name" @close="closeExecDetail" @open-file="onOpenFile" />
+    <TaskFormPage v-else-if="formViewOpen" :mode="formMode" :task="formMode === 'edit' ? selectedTaskData : null" @close="closeForm" @saved="onFormSaved" />
   </div>
 </template>
 
@@ -79,23 +77,5 @@ function onTaskHistory() {
   overflow: hidden;
   display: flex;
   flex-direction: column;
-}
-
-.slide-view-enter-active {
-  transition: transform 250ms ease-out, opacity 250ms ease-out;
-}
-
-.slide-view-leave-active {
-  transition: transform 200ms ease-in, opacity 200ms ease-in;
-}
-
-.slide-view-enter-from {
-  transform: translateX(30px);
-  opacity: 0;
-}
-
-.slide-view-leave-to {
-  transform: translateX(-30px);
-  opacity: 0;
 }
 </style>
