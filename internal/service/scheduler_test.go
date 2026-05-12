@@ -178,26 +178,6 @@ func TestGetTasks_AllProjects(t *testing.T) {
 	assert.Equal(t, "task-1", tasks[0].ID)
 }
 
-func TestGetTasks_ExcludesDeleted(t *testing.T) {
-	_, cleanup := setupScheduler(t)
-	defer cleanup()
-
-	now := time.Now()
-	service.DB.Exec(
-		"INSERT INTO scheduled_tasks (id, project_path, name, cron_expr, agent_id, prompt, session_id, status, repeat_mode, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-		"task-1", "/proj", "Active", "0 * * * *", "agent1", "p", "", "active", "unlimited", now, now,
-	)
-	service.DB.Exec(
-		"INSERT INTO scheduled_tasks (id, project_path, name, cron_expr, agent_id, prompt, session_id, status, repeat_mode, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-		"task-2", "/proj", "Deleted", "0 * * * *", "agent1", "p", "", "deleted", "unlimited", now, now,
-	)
-
-	tasks, err := service.GetTasks("/proj")
-	assert.NoError(t, err)
-	assert.Len(t, tasks, 1)
-	assert.Equal(t, "task-1", tasks[0].ID)
-}
-
 func TestGetTasks_OrdersByCreatedAtDesc(t *testing.T) {
 	_, cleanup := setupScheduler(t)
 	defer cleanup()
@@ -347,10 +327,9 @@ func TestRemoveTask(t *testing.T) {
 
 	s.RemoveTask(task.ID)
 
-	// Task should be marked as deleted in DB
-	persisted, err := service.GetTaskByID(task.ID)
-	assert.NoError(t, err)
-	assert.Equal(t, "deleted", persisted.Status)
+	// Task should be hard-deleted from DB
+	_, err := service.GetTaskByID(task.ID)
+	assert.Error(t, err, "hard-deleted task should not be found")
 
 	// Should not appear in GetTasks
 	tasks, err := service.GetTasks(task.ProjectPath)
@@ -445,10 +424,9 @@ func TestResumeTask_AfterRemove(t *testing.T) {
 
 	s.RemoveTask(task.ID)
 
-	// Deleted task is not paused, so resume should fail
+	// Deleted task no longer exists, so resume should fail
 	err := s.ResumeTask(task.ID)
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "not paused")
 }
 
 // ---------- UpdateTask ----------
@@ -549,8 +527,8 @@ func TestLoadTasksFromDB(t *testing.T) {
 	// We verify by checking that the active task can be removed without error
 	s.RemoveTask("task-1")
 
-	persisted, _ := service.GetTaskByID("task-1")
-	assert.Equal(t, "deleted", persisted.Status)
+	_, err = service.GetTaskByID("task-1")
+	assert.Error(t, err, "hard-deleted task should not be found")
 }
 
 func TestLoadTasksFromDB_AllProjects(t *testing.T) {
@@ -574,10 +552,10 @@ func TestLoadTasksFromDB_AllProjects(t *testing.T) {
 	s.RemoveTask("task-1")
 	s.RemoveTask("task-2")
 
-	p1, _ := service.GetTaskByID("task-1")
-	p2, _ := service.GetTaskByID("task-2")
-	assert.Equal(t, "deleted", p1.Status)
-	assert.Equal(t, "deleted", p2.Status)
+	_, err1 := service.GetTaskByID("task-1")
+	_, err2 := service.GetTaskByID("task-2")
+	assert.Error(t, err1, "hard-deleted task-1 should not be found")
+	assert.Error(t, err2, "hard-deleted task-2 should not be found")
 }
 
 func TestLoadTasksFromDB_InvalidCronSkipped(t *testing.T) {
@@ -766,8 +744,8 @@ func TestSchedulerFullLifecycle(t *testing.T) {
 
 	// 5. Remove
 	s.RemoveTask(task.ID)
-	removed, _ := service.GetTaskByID(task.ID)
-	assert.Equal(t, "deleted", removed.Status)
+	_, err := service.GetTaskByID(task.ID)
+	assert.Error(t, err, "hard-deleted task should not be found")
 }
 
 // ---------- LoadTasksFromDB after scheduler restart ----------
@@ -870,10 +848,9 @@ func TestRemoveTask_CascadeDeletesSessions(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, 0, execCount, "task_executions should be deleted after RemoveTask")
 
-	// Verify task is marked deleted
-	persisted, err := service.GetTaskByID(task.ID)
-	assert.NoError(t, err)
-	assert.Equal(t, "deleted", persisted.Status)
+	// Verify task is hard-deleted
+	_, err = service.GetTaskByID(task.ID)
+	assert.Error(t, err, "hard-deleted task should not be found")
 }
 
 // ---------- PurgeDeletedData cleans task_executions (Task 8) ----------

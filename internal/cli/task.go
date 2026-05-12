@@ -97,7 +97,7 @@ var updateHelp = HelpInfo{
 
 var deleteHelp = HelpInfo{
 	Usage:       "clawbench task delete TASK_ID --project PATH",
-	Description: "Delete a task. Soft-deletes — the task will no longer appear in lists.",
+	Description: "Delete a task permanently.",
 	Positional:  "TASK_ID  (required) ID of the task to delete",
 	Flags: []FlagHelp{
 		{Name: "project", Type: "string", Desc: "Project path", Required: true},

@@ -199,7 +199,7 @@ func (s *Scheduler) AddTask(task *model.ScheduledTask) error {
 	return s.registerTask(task)
 }
 
-// RemoveTask removes a task from cron and marks it as deleted in the database.
+// RemoveTask removes a task from cron and hard-deletes it from the database.
 // Also soft-deletes associated chat sessions and removes task_executions rows.
 func (s *Scheduler) RemoveTask(id string) {
 	s.mu.Lock()
@@ -250,8 +250,8 @@ func (s *Scheduler) RemoveTask(id string) {
 	// Delete task_executions rows
 	DB.Exec("DELETE FROM task_executions WHERE task_id = ?", id)
 
-	// Mark task as deleted
-	DB.Exec("UPDATE scheduled_tasks SET status = 'deleted', updated_at = CURRENT_TIMESTAMP WHERE id = ?", id)
+	// Hard-delete the task
+	DB.Exec("DELETE FROM scheduled_tasks WHERE id = ?", id)
 }
 
 // PauseTask removes a task from cron but keeps it in the database as paused.
@@ -321,7 +321,7 @@ func (s *Scheduler) UpdateTask(task *model.ScheduledTask) error {
 		}
 		s.mu.Unlock()
 	} else if task.Status != "active" {
-		// Remove from cron if task is not active (completed/paused/deleted)
+		// Remove from cron if task is not active (completed/paused)
 		s.mu.Lock()
 		if entryID, ok := s.entries[task.ID]; ok {
 			s.cron.Remove(entryID)
@@ -609,7 +609,7 @@ func GetTasks(projectPath string) ([]model.ScheduledTask, error) {
 			(SELECT COUNT(*) FROM task_executions e
 			 WHERE e.task_id = s.id AND e.read_at IS NULL
 			 AND (s.last_read_at IS NULL OR e.created_at > s.last_read_at)) AS unread_count
-			FROM scheduled_tasks s WHERE s.status != 'deleted' ORDER BY s.created_at DESC`
+			FROM scheduled_tasks s ORDER BY s.created_at DESC`
 	} else {
 		query = `SELECT s.id, s.project_path, s.name, s.cron_expr, s.agent_id, s.prompt, s.session_id,
 			s.status, s.repeat_mode, s.max_runs, s.last_run_at, s.next_run_at, s.run_count,
@@ -617,7 +617,7 @@ func GetTasks(projectPath string) ([]model.ScheduledTask, error) {
 			(SELECT COUNT(*) FROM task_executions e
 			 WHERE e.task_id = s.id AND e.read_at IS NULL
 			 AND (s.last_read_at IS NULL OR e.created_at > s.last_read_at)) AS unread_count
-			FROM scheduled_tasks s WHERE s.project_path = ? AND s.status != 'deleted' ORDER BY s.created_at DESC`
+			FROM scheduled_tasks s WHERE s.project_path = ? ORDER BY s.created_at DESC`
 		args = []interface{}{projectPath}
 	}
 
@@ -731,15 +731,14 @@ func HasUnreadTasks(projectPath string) (bool, error) {
 	if projectPath == "" {
 		err = DB.QueryRow(
 			`SELECT COUNT(*) FROM scheduled_tasks s
-			 WHERE s.status != 'deleted'
-			 AND (SELECT COUNT(*) FROM task_executions e
+			 WHERE (SELECT COUNT(*) FROM task_executions e
 			      WHERE e.task_id = s.id AND e.read_at IS NULL
 			      AND (s.last_read_at IS NULL OR e.created_at > s.last_read_at)) > 0`,
 		).Scan(&count)
 	} else {
 		err = DB.QueryRow(
 			`SELECT COUNT(*) FROM scheduled_tasks s
-			 WHERE s.project_path = ? AND s.status != 'deleted'
+			 WHERE s.project_path = ?
 			 AND (SELECT COUNT(*) FROM task_executions e
 			      WHERE e.task_id = s.id AND e.read_at IS NULL
 			      AND (s.last_read_at IS NULL OR e.created_at > s.last_read_at)) > 0`,

@@ -12,7 +12,7 @@ type ScheduledTask struct {
 	AgentID           string                   `json:"agentId"`
 	Prompt            string                   `json:"prompt"`
 	SessionID         string                   `json:"sessionId,omitempty"`
-	Status            string                   `json:"status"`       // active / paused / completed / deleted
+	Status            string                   `json:"status"`       // active / paused / completed
 	RepeatMode        string                   `json:"repeatMode"`   // once / limited / unlimited
 	MaxRuns           int                      `json:"maxRuns"`
 	LastRunAt         *time.Time               `json:"lastRunAt,omitempty"`
