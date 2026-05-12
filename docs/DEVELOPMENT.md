@@ -374,6 +374,7 @@ clawbench/
 │   │   └── server_test.go       # 测试
 │   ├── cli/                     # CLI 子命令（AI 智能体自服务）
 │   │   ├── task.go              # 定时任务子命令（create/update/delete/pause/resume/trigger/list/get/list-agents；--prompt 支持 @path 语法）
+│   │   ├── migrate.go           # 一次性数据库迁移（task_executions 内容→chat_history）
 │   │   ├── rag.go               # RAG 搜索子命令（search/message/session）
 │   │   ├── help.go              # --help 自文档化基础设施
 │   │   └── helpers.go           # 共享代码（loadConfig/apiURL/httpDo/TLS/cookie）
@@ -381,6 +382,7 @@ clawbench/
 │       ├── interface.go         # AIBackend 接口
 │       ├── factory.go           # 后端工厂
 │       ├── cli_backend.go       # 共享 CLI 后端抽象
+│       ├── common_stream.go     # 共享流参数/工具规范化/系统提示词
 │       ├── stream_parser.go     # 共享流解析工具
 │       ├── claude.go / claude_stream.go
 │       ├── codebuddy.go / codebuddy_stream.go
@@ -390,6 +392,7 @@ clawbench/
 │       ├── qoder.go / qoder_stream.go
 │       └── vecli.go / vecli_stream.go
 │   └── speech/                  # TTS 语音合成 & 总结
+│       ├── common_tts.go        # CLISpeechProvider 共享基类
 │       ├── summarizer.go        # Summarizer 接口 + genericSummarizer 共享管线
 │       ├── mmx_summarizer.go    # MMXSummarizer（mmx-cli text chat）
 │       ├── ollama_summarizer.go # OllamaSummarizer（HTTP /api/chat）

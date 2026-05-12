@@ -160,6 +160,51 @@ describe('useTerminalKeys', () => {
     })
   })
 
+  describe('processInput — fallthrough paths', () => {
+    it('Ctrl with a digit returns the digit unchanged and clears once modifier', () => {
+      const { keys } = createKeys()
+      keys.toggleModifier('ctrl', false)
+      expect(keys.processInput('5')).toBe('5')
+      expect(keys.activeModifiers.value.ctrl).toBe('inactive')
+    })
+
+    it('Ctrl with a special character not in the special cases returns unchanged', () => {
+      const { keys } = createKeys()
+      keys.toggleModifier('ctrl', false)
+      expect(keys.processInput('!')).toBe('!')
+      expect(keys.activeModifiers.value.ctrl).toBe('inactive')
+    })
+
+    it('Alt with multi-character input returns unchanged and clears once modifier', () => {
+      const { keys } = createKeys()
+      keys.toggleModifier('alt', false)
+      expect(keys.processInput('hello')).toBe('hello')
+      expect(keys.activeModifiers.value.alt).toBe('inactive')
+    })
+
+    it('Shift with non-tab character returns unchanged and clears once modifier', () => {
+      const { keys } = createKeys()
+      keys.toggleModifier('shift', false)
+      expect(keys.processInput('a')).toBe('a')
+      expect(keys.activeModifiers.value.shift).toBe('inactive')
+    })
+
+    it('Shift+Enter returns \\r unchanged and clears once modifier', () => {
+      const { keys } = createKeys()
+      keys.toggleModifier('shift', false)
+      expect(keys.processInput('\r')).toBe('\r')
+      expect(keys.activeModifiers.value.shift).toBe('inactive')
+    })
+
+    it('multiple modifiers active: Ctrl takes priority over Shift for alpha', () => {
+      const { keys } = createKeys()
+      keys.toggleModifier('ctrl', false)
+      keys.toggleModifier('shift', false)
+      // Ctrl+C should still work even with Shift also active
+      expect(keys.processInput('c')).toBe('\x03')
+    })
+  })
+
   describe('send functions', () => {
     it('sendCtrlC sends \\x03', () => {
       const { keys, sent } = createKeys()

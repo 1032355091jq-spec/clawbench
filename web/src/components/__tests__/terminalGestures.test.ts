@@ -245,3 +245,160 @@ describe('shouldPreventTerminalContextMenu', () => {
     expect(shouldPreventTerminalContextMenu(true)).toBe(true)
   })
 })
+
+describe('useTerminalGestures — uncovered branches', () => {
+  it('sends an arrow key on touchend when the swipe was too fast for touchmove to detect', () => {
+    const { el, sent, hints } = setupGestures()
+
+    // Start touch, then release at a position that constitutes a swipe
+    // without any intermediate touchmove events
+    dispatchTouch(el, 'touchstart', [makeTouch(60, 60)])
+    const touchEnd = dispatchTouch(el, 'touchend', [], [makeTouch(130, 60)])
+
+    // The direction was only detected on touchend (swipe-on-lift)
+    expect(sent).toEqual(['right'])
+    expect(hints).toEqual(['→'])
+    expect(touchEnd.preventDefault).toHaveBeenCalled()
+  })
+
+  it('sends a swipe-up arrow on touchend with no touchmove', () => {
+    const { el, sent, hints } = setupGestures()
+
+    dispatchTouch(el, 'touchstart', [makeTouch(60, 100)])
+    dispatchTouch(el, 'touchend', [], [makeTouch(60, 40)])
+
+    expect(sent).toEqual(['up'])
+    expect(hints).toEqual(['↑'])
+  })
+
+  it('sends a swipe-down arrow on touchend with no touchmove', () => {
+    const { el, sent } = setupGestures()
+
+    dispatchTouch(el, 'touchstart', [makeTouch(60, 40)])
+    dispatchTouch(el, 'touchend', [], [makeTouch(60, 100)])
+
+    expect(sent).toEqual(['down'])
+  })
+
+  it('sends a swipe-left arrow on touchend with no touchmove', () => {
+    const { el, sent } = setupGestures()
+
+    dispatchTouch(el, 'touchstart', [makeTouch(100, 60)])
+    dispatchTouch(el, 'touchend', [], [makeTouch(40, 60)])
+
+    expect(sent).toEqual(['left'])
+  })
+
+  it('auto-repeats arrow keys during a sustained hold', () => {
+    vi.useFakeTimers()
+    const { el, sent } = setupGestures()
+
+    dispatchTouch(el, 'touchstart', [makeTouch(60, 60)])
+    dispatchTouch(el, 'touchmove', [makeTouch(120, 60)])
+
+    // Initial send from the first direction detection
+    expect(sent).toEqual(['right'])
+
+    // After initial delay (500ms), the repeat interval is created
+    vi.advanceTimersByTime(500)
+
+    // First repeat fires after another 150ms (REPEAT_INTERVAL)
+    vi.advanceTimersByTime(150)
+    expect(sent.length).toBe(2)
+    expect(sent[1]).toBe('right')
+
+    // Second repeat after another 150ms
+    vi.advanceTimersByTime(150)
+    expect(sent.length).toBe(3)
+    expect(sent[2]).toBe('right')
+  })
+
+  it('stops auto-repeat on touchend', () => {
+    vi.useFakeTimers()
+    const { el, sent } = setupGestures()
+
+    dispatchTouch(el, 'touchstart', [makeTouch(60, 60)])
+    dispatchTouch(el, 'touchmove', [makeTouch(120, 60)])
+    expect(sent).toEqual(['right'])
+
+    // Release before repeat starts
+    dispatchTouch(el, 'touchend', [], [makeTouch(120, 60)])
+
+    // Advance past the full repeat cycle — no more arrows should be sent
+    vi.advanceTimersByTime(650)
+    expect(sent).toEqual(['right']) // no auto-repeat
+  })
+
+  it('clears touchAction on detach', () => {
+    const { el, gestures } = setupGestures()
+
+    // After attach, touchAction should be set
+    expect(el.style.touchAction).toBeTruthy()
+
+    gestures.detach()
+    expect(el.style.touchAction).toBe('')
+  })
+
+  it('handles single-tap that is not a double-tap (records tap for future)', () => {
+    const { el, sent } = setupGestures()
+
+    dispatchTouch(el, 'touchstart', [makeTouch(60, 60)])
+    const touchEnd = dispatchTouch(el, 'touchend', [], [makeTouch(60, 60)])
+
+    // Single tap: no arrow, no tab
+    expect(sent).toEqual([])
+    // Short tap without movement: no preventDefault (allows native selection start)
+    expect(touchEnd.preventDefault).not.toHaveBeenCalled()
+  })
+
+  it('resets double-tap timer after a triple tap (avoids triple-tab)', () => {
+    const { el, sent } = setupGestures()
+
+    // First tap
+    dispatchTouch(el, 'touchstart', [makeTouch(60, 60)])
+    dispatchTouch(el, 'touchend', [], [makeTouch(60, 60)])
+    // Second tap → double-tap → Tab
+    dispatchTouch(el, 'touchstart', [makeTouch(62, 62)])
+    dispatchTouch(el, 'touchend', [], [makeTouch(62, 62)])
+    // Third tap → should NOT produce another Tab
+    dispatchTouch(el, 'touchstart', [makeTouch(63, 63)])
+    dispatchTouch(el, 'touchend', [], [makeTouch(63, 63)])
+
+    expect(sent).toEqual(['tab'])
+  })
+
+  it('handles touchstart with 3+ fingers gracefully', () => {
+    const { el, sent } = setupGestures()
+
+    dispatchTouch(el, 'touchstart', [makeTouch(10, 10), makeTouch(20, 20), makeTouch(30, 30)])
+    // Should not crash or send any command
+    expect(sent).toEqual([])
+  })
+
+  it('resets pinch state when one finger lifts from two-finger gesture', () => {
+    const { el, zoomDeltas } = setupGestures()
+
+    // Start pinch
+    dispatchTouch(el, 'touchstart', [makeTouch(0, 0), makeTouch(20, 0)])
+    dispatchTouch(el, 'touchmove', [makeTouch(0, 0), makeTouch(40, 0)])
+    expect(zoomDeltas).toEqual([2])
+
+    // Lift one finger (touchend with 0 remaining touches)
+    dispatchTouch(el, 'touchend', [], [makeTouch(0, 0), makeTouch(40, 0)])
+
+    // A subsequent two-finger start should work fresh
+    dispatchTouch(el, 'touchstart', [makeTouch(0, 0), makeTouch(20, 0)])
+    dispatchTouch(el, 'touchmove', [makeTouch(0, 0), makeTouch(40, 0)])
+    expect(zoomDeltas).toEqual([2, 2])
+  })
+
+  it('does not send scroll deltas when movement is primarily horizontal in disabled mode', () => {
+    const { el, scrollDeltas, gestures } = setupGestures()
+
+    gestures.toggle()
+    dispatchTouch(el, 'touchstart', [makeTouch(80, 100)])
+    dispatchTouch(el, 'touchmove', [makeTouch(150, 108)]) // mostly horizontal
+
+    expect(scrollDeltas).toEqual([])
+  })
+})

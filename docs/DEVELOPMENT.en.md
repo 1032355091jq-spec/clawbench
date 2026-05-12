@@ -374,6 +374,7 @@ clawbench/
 │   │   └── server_test.go       # Tests
 │   ├── cli/                     # CLI subcommands (AI agent self-service)
 │   │   ├── task.go              # Scheduled task subcommands (create/update/delete/pause/resume/trigger/list/get/list-agents; --prompt supports @path syntax)
+│   │   ├── migrate.go           # One-time DB migration (task_executions content → chat_history)
 │   │   ├── rag.go               # RAG search subcommands (search/message/session)
 │   │   ├── help.go              # --help self-documentation infrastructure
 │   │   └── helpers.go           # Shared code (loadConfig/apiURL/httpDo/TLS/cookie)
@@ -381,6 +382,7 @@ clawbench/
 │       ├── interface.go         # AIBackend interface
 │       ├── factory.go           # Backend factory
 │       ├── cli_backend.go       # Shared CLI backend abstraction
+│       ├── common_stream.go     # Shared stream args/tool normalization/system prompt
 │       ├── stream_parser.go     # Shared stream parsing utilities
 │       ├── claude.go / claude_stream.go
 │       ├── codebuddy.go / codebuddy_stream.go
@@ -390,6 +392,7 @@ clawbench/
 │       ├── qoder.go / qoder_stream.go
 │       └── vecli.go / vecli_stream.go
 │   └── speech/                  # TTS speech synthesis & summarization
+│       ├── common_tts.go        # CLISpeechProvider shared base
 │       ├── summarizer.go        # Summarizer interface + genericSummarizer shared pipeline
 │       ├── mmx_summarizer.go    # MMXSummarizer (mmx-cli text chat)
 │       ├── ollama_summarizer.go # OllamaSummarizer (HTTP /api/chat)

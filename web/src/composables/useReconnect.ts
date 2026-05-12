@@ -42,7 +42,8 @@ export function useReconnect(options: ReconnectOptions) {
 
   function shouldReconnect(): boolean {
     if (disabled) return false
-    if (options.getFatalError?.() !== null) return false
+    const fatalError = options.getFatalError?.()
+    if (fatalError !== undefined && fatalError !== null) return false
     return hasActiveAttempts()
   }
 

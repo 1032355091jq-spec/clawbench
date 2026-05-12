@@ -1,6 +1,15 @@
 import { ref, type Ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useReconnect } from './useReconnect'
+import {
+  NO_RECONNECT_CODES,
+  WS_CLOSE_REPLACED,
+  processTerminalMessage,
+  processWSClose,
+  buildWsUrl,
+  type TerminalCallbacks,
+  type TerminalMessage,
+} from '@/utils/terminalSessionUtils'
 
 export type ConnectionState = 'disconnected' | 'connecting' | 'connected' | 'reconnecting' | 'error'
 
@@ -8,18 +17,6 @@ export interface TerminalStatus {
   running: boolean
   cwd: string
 }
-
-// Error codes that should NOT trigger automatic reconnection
-const NO_RECONNECT_CODES = new Set([
-  'terminal_disabled',
-  'shell_start_failed',
-  'session_limit',
-])
-
-// Custom WebSocket close codes from the backend (4000-4999 per RFC 6455)
-// When the server kicks an existing client because a new one connected,
-// it uses this code so the old client knows not to auto-reconnect.
-const WS_CLOSE_REPLACED = 4001
 
 export function useTerminalSession(getWsUrl: () => string) {
   const { t } = useI18n()
@@ -50,11 +47,7 @@ export function useTerminalSession(getWsUrl: () => string) {
       fatalError = false
 
       // Build URL with session ID for reconnect (to reattach to existing PTY)
-      let url = getWsUrl()
-      if (sessionId.value) {
-        const sep = url.includes('?') ? '&' : '?'
-        url += `${sep}session=${encodeURIComponent(sessionId.value)}`
-      }
+      const url = buildWsUrl(getWsUrl(), sessionId.value)
       const socket = new WebSocket(url)
 
       socket.onopen = () => {
@@ -76,44 +69,26 @@ export function useTerminalSession(getWsUrl: () => string) {
       socket.onclose = (event) => {
         ws.value = null
 
-        // If already in error state (from onerror or fatal error message),
-        // don't override — keep the error visible
-        if (connectionState.value === 'error') {
-          return
-        }
+        const result = processWSClose(event.code, connectionState.value, reconnect.shouldReconnect())
 
-        // Close code 4001 = replaced by a new client (e.g. another browser tab
-        // or mobile app connected to the same terminal session).  The session
-        // is still alive — just owned by a different client now — so we must
-        // NOT auto-reconnect, otherwise we'd kick the new client and start an
-        // infinite kick-reconnect loop.
-        if (event.code === WS_CLOSE_REPLACED) {
-          connectionState.value = 'disconnected'
+        if (result.shouldDisable) {
           reconnect.disable()
-          return
         }
 
-        if (connectionState.value === 'connected') {
-          // Unexpected disconnect after successful connection — try reconnecting
-          connectionState.value = 'disconnected'
+        // Apply state updates
+        if (result.state.connectionState) {
+          connectionState.value = result.state.connectionState
+        }
+        if (result.state.errorCode) {
+          errorCode.value = result.state.errorCode
+          errorMessage.value = t('terminal.shellStartFailed')
+        }
+        if (result.state.fatalError) {
+          fatalError = true
+        }
+
+        if (result.shouldReconnect) {
           tryReconnect()
-        } else {
-          // If intentionally disconnected (reconnect exhausted), don't set error
-          if (!reconnect.shouldReconnect()) {
-            connectionState.value = 'disconnected'
-            return
-          }
-          // Failed during connecting/reconnecting
-          // WebSocket close code 1006 = abnormal closure (server rejected upgrade)
-          if (event.code === 1006 && !fatalError) {
-            // Likely a server-side error (PTY start failure, etc.)
-            errorMessage.value = t('terminal.shellStartFailed')
-            errorCode.value = 'shell_start_failed'
-            connectionState.value = 'error'
-            fatalError = true
-          } else {
-            connectionState.value = 'disconnected'
-          }
         }
       }
 
@@ -166,19 +141,13 @@ export function useTerminalSession(getWsUrl: () => string) {
   }
 
   // Message handler callbacks — set by TerminalPanel
-  let onOutput: ((data: string) => void) | null = null
-  let onReplay: ((data: string) => void) | null = null
-  let onStatus: ((status: TerminalStatus) => void) | null = null
-  let onExit: ((code: number) => void) | null = null
-  let onError: ((message: string, code: string) => void) | null = null
+  let onOutput: TerminalCallbacks['onOutput'] = null
+  let onReplay: TerminalCallbacks['onReplay'] = null
+  let onStatus: TerminalCallbacks['onStatus'] = null
+  let onExit: TerminalCallbacks['onExit'] = null
+  let onError: TerminalCallbacks['onError'] = null
 
-  function setCallbacks(callbacks: {
-    onOutput?: (data: string) => void
-    onReplay?: (data: string) => void
-    onStatus?: (status: TerminalStatus) => void
-    onExit?: (code: number) => void
-    onError?: (message: string, code: string) => void
-  }) {
+  function setCallbacks(callbacks: TerminalCallbacks) {
     onOutput = callbacks.onOutput ?? null
     onReplay = callbacks.onReplay ?? null
     onStatus = callbacks.onStatus ?? null
@@ -186,38 +155,22 @@ export function useTerminalSession(getWsUrl: () => string) {
     onError = callbacks.onError ?? null
   }
 
-  function handleMessage(msg: { type: string; sessionId?: string; data?: string; cwd?: string; running?: boolean; code?: number; message?: string; errcode?: string }) {
-    switch (msg.type) {
-      case 'output':
-        onOutput?.(msg.data ?? '')
-        break
-      case 'replay':
-        onReplay?.(msg.data ?? '')
-        break
-      case 'status':
-        // Store session ID for reconnect
-        if (msg.sessionId) {
-          sessionId.value = msg.sessionId
-        }
-        currentCwd.value = msg.cwd ?? ''
-        onStatus?.({ running: msg.running ?? true, cwd: msg.cwd ?? '' })
-        break
-      case 'exit':
-        sessionId.value = '' // session is gone
-        connectionState.value = 'disconnected'
-        onExit?.(msg.code ?? 0)
-        break
-      case 'error':
-        errorMessage.value = msg.message ?? ''
-        errorCode.value = msg.errcode ?? ''
-        connectionState.value = 'error'
-        // Fatal errors should not auto-reconnect
-        if (msg.errcode && NO_RECONNECT_CODES.has(msg.errcode)) {
-          fatalError = true
-        }
-        onError?.(msg.message ?? '', msg.errcode ?? '')
-        break
-    }
+  function handleMessage(msg: TerminalMessage) {
+    const updates = processTerminalMessage(msg, {
+      sessionId: sessionId.value,
+      currentCwd: currentCwd.value,
+      errorMessage: errorMessage.value,
+      errorCode: errorCode.value,
+      connectionState: connectionState.value,
+      fatalError,
+    }, { onOutput, onReplay, onStatus, onExit, onError })
+
+    if (updates.sessionId !== undefined) sessionId.value = updates.sessionId
+    if (updates.currentCwd !== undefined) currentCwd.value = updates.currentCwd
+    if (updates.errorMessage !== undefined) errorMessage.value = updates.errorMessage
+    if (updates.errorCode !== undefined) errorCode.value = updates.errorCode
+    if (updates.connectionState !== undefined) connectionState.value = updates.connectionState
+    if (updates.fatalError !== undefined) fatalError = updates.fatalError
   }
 
   function sendInput(data: string) {
