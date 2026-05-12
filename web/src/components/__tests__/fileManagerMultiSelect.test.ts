@@ -265,6 +265,8 @@ const i18n = createI18n({
         hideHiddenFiles: '隐藏',
         showHiddenFiles: '显示隐藏',
         syncToCurrentDir: '同步',
+        emptyDir: '此目录为空',
+        noFiles: '未找到支持的文件',
         multiSelect: {
           enter: '多选',
           exit: '退出多选',
@@ -272,6 +274,9 @@ const i18n = createI18n({
           selectedCount: '已选 {n} 项',
           selectAll: '全选',
           deselectAll: '取消全选',
+          confirmDelete: '确认删除 {n} 个文件？',
+          allCopied: '已复制 {n} 项',
+          allCut: '已剪切 {n} 项',
         },
         context: {
           copy: '复制',

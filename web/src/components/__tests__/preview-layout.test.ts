@@ -8,11 +8,30 @@ import MarkdownPreview from '../file/MarkdownPreview.vue'
 import WelcomeView from '../WelcomeView.vue'
 import CodePreview from '../file/CodePreview.vue'
 
-// Minimal i18n instance for tests — returns the key as-is
+// Minimal i18n instance for tests
 const i18n = createI18n({
   legacy: false,
   locale: 'en',
-  messages: { en: {} },
+  messages: {
+    en: {
+      welcome: {
+        selectFile: 'Select a file to start',
+        description: 'Open a file and chat with AI to read, edit, and modify it directly.',
+      },
+      file: {
+        header: {
+          toc: 'TOC',
+          search: 'Search',
+          more: 'More',
+          openAsText: 'Open as text',
+          sourceView: 'Source',
+          renderedView: 'Rendered',
+          wordWrap: 'Word Wrap',
+          fileHistory: 'File history',
+        },
+      },
+    },
+  },
 })
 
 vi.mock('@/composables/useMarkdownRenderer.ts', () => ({
