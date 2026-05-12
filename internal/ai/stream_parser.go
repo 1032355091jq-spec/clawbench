@@ -23,8 +23,9 @@ type ClaudeContentBlock struct {
 	ID        string          `json:"id,omitempty"`
 	Name      string          `json:"name,omitempty"`
 	Input     json.RawMessage `json:"input,omitempty"`
-	Content   string          `json:"content,omitempty"` // tool_result blocks: output content (non-streaming format)
-	IsError   bool            `json:"is_error,omitempty"` // tool_result blocks: whether the tool execution failed
+	Content   json.RawMessage `json:"content,omitempty"`    // tool_result blocks: output content (string or array of text blocks)
+	ToolUseID string          `json:"tool_use_id,omitempty"` // tool_result blocks: references the tool_use ID this result belongs to
+	IsError   bool            `json:"is_error,omitempty"`    // tool_result blocks: whether the tool execution failed
 }
 
 // ClaudeStreamMessageBody represents the message body within a Claude stream message
@@ -126,6 +127,40 @@ const (
 	streamChanSize = 64          // channel buffer size
 )
 
+// extractContentText extracts text from a Content field that may be a plain
+// string or an array of content blocks (e.g., [{"type":"text","text":"..."}]).
+// This handles the Claude/Codebuddy API convention where tool_result content
+// can be either format depending on the message type and CLI version.
+func extractContentText(raw json.RawMessage) string {
+	if len(raw) == 0 {
+		return ""
+	}
+	// Try string format first
+	var s string
+	if err := json.Unmarshal(raw, &s); err == nil {
+		return s
+	}
+	// Try array of content blocks format
+	var blocks []struct {
+		Type string `json:"type"`
+		Text string `json:"text"`
+	}
+	if err := json.Unmarshal(raw, &blocks); err == nil {
+		var sb strings.Builder
+		for i, b := range blocks {
+			if b.Type == "text" {
+				if i > 0 {
+					sb.WriteString("\n")
+				}
+				sb.WriteString(b.Text)
+			}
+		}
+		return sb.String()
+	}
+	// Fallback: return raw as string
+	return string(raw)
+}
+
 // toolResultAccum tracks an in-progress tool_result content block.
 // When Claude/Codebuddy CLI emits tool_result blocks via stream_event,
 // text_delta events within those blocks must be accumulated here
@@ -166,6 +201,11 @@ type StreamParser struct {
 	// subsequent text_delta events for that index are accumulated into the
 	// tool result output instead of being emitted as content events.
 	activeToolResults map[int]*toolResultAccum
+	// emittedToolInputEmpty tracks tool_use IDs that were emitted via stream_event
+	// but had empty Input (partial_json was empty). When the assistant verbose
+	// message arrives with the full Input, we re-emit a tool_use event so that
+	// AccumulateBlock can update the block with the correct input data.
+	emittedToolInputEmpty map[string]bool
 }
 
 // GetCapturedSessionID returns empty string for Claude/Codebuddy/Gemini backends
@@ -188,8 +228,27 @@ func (p *StreamParser) ParseLine(line string, ch chan<- StreamEvent) {
 		if msg.Message != nil {
 			for _, block := range msg.Message.Content {
 				if block.Type == "tool_use" {
-					// Skip if we already received stream_event tool_use for this block
 					if p.receivedPartialToolUse {
+						// We already emitted this tool_use via stream_event.
+						// However, some CLIs/models send empty input_json_delta,
+						// resulting in tool_use blocks with no Input. If the
+						// verbose assistant message contains the full Input,
+						// re-emit a tool_use event so AccumulateBlock can update
+						// the existing block with the correct input data.
+						if p.emittedToolInputEmpty != nil && p.emittedToolInputEmpty[block.ID] {
+							inputStr := string(block.Input)
+							if inputStr != "" && inputStr != "{}" {
+								slog.Debug("stream: supplementing empty tool_use input from assistant message",
+									"tool_id", block.ID, "tool_name", block.Name, "input_len", len(inputStr))
+								ch <- StreamEvent{Type: "tool_use", Tool: &ToolCall{
+									Name:  block.Name,
+									ID:    block.ID,
+									Input: inputStr,
+									Done:  true,
+								}}
+							}
+							delete(p.emittedToolInputEmpty, block.ID)
+						}
 						continue
 					}
 					// Emit tool_use event with full input from the complete message
@@ -203,12 +262,15 @@ func (p *StreamParser) ParseLine(line string, ch chan<- StreamEvent) {
 					}}
 				} else if block.Type == "tool_result" {
 					// Tool result in assistant verbose format — emit tool_result event
-					toolUseID := block.ID
+					toolUseID := block.ToolUseID
+					if toolUseID == "" {
+						toolUseID = block.ID
+					}
 					status := "success"
 					if block.IsError {
 						status = "error"
 					}
-					output := block.Content
+					output := extractContentText(block.Content)
 					if output == "" && block.Text != "" {
 						output = block.Text
 					}
@@ -295,6 +357,35 @@ func (p *StreamParser) ParseLine(line string, ch chan<- StreamEvent) {
 	case "system":
 		// System messages (e.g., init, tool use) - skip
 
+	case "user":
+		// Claude/Codebuddy verbose format: tool_result blocks appear in user messages
+		// (tool results are sent back to the model as "user" role). Extract them
+		// so that tool_use blocks get their output/status populated.
+		if msg.Message != nil {
+			for _, block := range msg.Message.Content {
+				if block.Type == "tool_result" {
+					toolUseID := block.ToolUseID
+					if toolUseID == "" {
+						toolUseID = block.ID
+					}
+					status := "success"
+					if block.IsError {
+						status = "error"
+					}
+					output := extractContentText(block.Content)
+					if output == "" && block.Text != "" {
+						output = block.Text
+					}
+					slog.Debug("stream: emitting tool_result from user message", "tool_use_id", toolUseID, "output_len", len(output), "status", status)
+					ch <- StreamEvent{Type: "tool_result", Tool: &ToolCall{
+						ID:     toolUseID,
+						Output: truncateToolOutput(output),
+						Status: status,
+					}}
+				}
+			}
+		}
+
 	case "stream_event":
 		// Codebuddy --include-partial-messages: incremental token streaming
 		if msg.Event == nil {
@@ -377,6 +468,16 @@ func (p *StreamParser) ParseLine(line string, ch chan<- StreamEvent) {
 					// Done=true) don't affect events already queued for SSE consumption.
 					startCopy := *tool
 					ch <- StreamEvent{Type: "tool_use", Tool: &startCopy}
+					// Track tool IDs emitted with empty Input so that when the
+					// assistant verbose message arrives, we can supplement the
+					// missing input data. This handles CLIs/models where
+					// input_json_delta.partial_json is always empty.
+					if tool.Input == "" {
+						if p.emittedToolInputEmpty == nil {
+							p.emittedToolInputEmpty = make(map[string]bool)
+						}
+						p.emittedToolInputEmpty[tool.ID] = true
+					}
 				} else if msg.Event.ContentBlock.Type == "tool_result" {
 					// Track tool_result block to suppress text_delta leak.
 					// When a tool_result content_block_start is received, subsequent
@@ -423,6 +524,15 @@ func (p *StreamParser) ParseLine(line string, ch chan<- StreamEvent) {
 				closed := *tool // copy before mutating
 				closed.Done = true
 				ch <- StreamEvent{Type: "tool_use", Tool: &closed}
+				// Track tool IDs where the final Input is still empty after
+				// content_block_stop. The assistant verbose message may
+				// contain the full input data.
+				if closed.Input == "" {
+					if p.emittedToolInputEmpty == nil {
+						p.emittedToolInputEmpty = make(map[string]bool)
+					}
+					p.emittedToolInputEmpty[closed.ID] = true
+				}
 				delete(p.activeTools, msg.Event.Index)
 			} else {
 				slog.Debug("stream: content_block_stop for unknown index", "index", msg.Event.Index)

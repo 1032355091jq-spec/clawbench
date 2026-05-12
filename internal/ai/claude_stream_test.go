@@ -636,9 +636,11 @@ func TestStreamParser_FullCodebuddyFlow(t *testing.T) {
 	if contentCount != 2 {
 		t.Errorf("expected 2 content events, got %d", contentCount)
 	}
-	// 2 from stream (start+stop); assistant message tool_use is skipped (receivedPartialToolUse)
-	if toolUseCount != 2 {
-		t.Errorf("expected 2 tool_use events, got %d", toolUseCount)
+	// 2 from stream (start+stop) + 1 supplement from assistant (input_json_delta
+	// used wrong "text" field instead of "partial_json", so Input was empty and
+	// the assistant verbose message provides the full input)
+	if toolUseCount != 3 {
+		t.Errorf("expected 3 tool_use events, got %d", toolUseCount)
 	}
 	if metadataCount != 1 {
 		t.Errorf("expected 1 metadata event, got %d", metadataCount)
@@ -1305,7 +1307,7 @@ func TestStreamParser_ToolResultInAssistantVerbose(t *testing.T) {
 		Message: &ClaudeStreamMessageBody{
 			Content: []ClaudeContentBlock{
 				{Type: "tool_use", ID: "toolu_v1", Name: "Read", Input: json.RawMessage(`{"file_path":"/a.go"}`)},
-				{Type: "tool_result", ID: "toolu_v1", Content: "file contents", IsError: false},
+				{Type: "tool_result", ID: "toolu_v1", Content: json.RawMessage(`"file contents"`), IsError: false},
 				{Type: "text", Text: "Here is the file."},
 			},
 		},
@@ -1340,7 +1342,7 @@ func TestStreamParser_ToolResultInAssistantVerboseError(t *testing.T) {
 		Type: "assistant",
 		Message: &ClaudeStreamMessageBody{
 			Content: []ClaudeContentBlock{
-				{Type: "tool_result", ID: "toolu_err1", Content: "permission denied", IsError: true},
+				{Type: "tool_result", ID: "toolu_err1", Content: json.RawMessage(`"permission denied"`), IsError: true},
 			},
 		},
 	}
@@ -1387,5 +1389,216 @@ func TestStreamParser_ToolResultInAssistantVerboseTextFallback(t *testing.T) {
 	}
 	if toolResultEvents[0].Tool.Output != "text fallback output" {
 		t.Errorf("expected output from Text field, got %q", toolResultEvents[0].Tool.Output)
+	}
+}
+
+func TestStreamParser_EmptyInputJsonDeltaSupplementedByAssistant(t *testing.T) {
+	// Regression test: some CLIs/models send input_json_delta with empty partial_json,
+	// resulting in tool_use blocks with no Input. The assistant verbose message
+	// contains the full Input — we must supplement it, not skip it.
+	lines := []string{
+		`{"type":"stream_event","event":{"type":"message_start","message":{"model":"glm-4"}}}`,
+		`{"type":"stream_event","event":{"type":"content_block_start","index":0,"content_block":{"type":"thinking"}}}`,
+		`{"type":"stream_event","event":{"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"Let me check..."}}}`,
+		`{"type":"stream_event","event":{"type":"content_block_stop","index":0}}`,
+		`{"type":"stream_event","event":{"type":"content_block_start","index":2,"content_block":{"type":"tool_use","id":"bf6w0tee","name":"Bash"}}}`,
+		`{"type":"stream_event","event":{"type":"content_block_delta","index":2,"delta":{"type":"input_json_delta","partial_json":""}}}`,
+		`{"type":"stream_event","event":{"type":"content_block_stop","index":2}}`,
+		// Assistant verbose message with full tool_use input
+		`{"type":"assistant","message":{"content":[{"type":"thinking","thinking":"Let me check..."},{"type":"tool_use","id":"bf6w0tee","name":"Bash","input":{"command":"ls -la"}},{"type":"text","text":"Done."}]}}`,
+		`{"type":"result","session_id":"sess-1","duration_ms":3000}`,
+	}
+
+	events := parseLines(lines)
+
+	// Collect all tool_use events
+	var toolUseEvents []StreamEvent
+	for _, ev := range events {
+		if ev.Type == "tool_use" {
+			toolUseEvents = append(toolUseEvents, ev)
+		}
+	}
+
+	// Expect 3 tool_use events:
+	// 1. content_block_start (empty Input, Done=false)
+	// 2. content_block_stop (empty Input, Done=true)
+	// 3. supplement from assistant (full Input, Done=true)
+	if len(toolUseEvents) != 3 {
+		t.Fatalf("expected 3 tool_use events, got %d", len(toolUseEvents))
+	}
+
+	// First event: empty input from content_block_start
+	if toolUseEvents[0].Tool.Input != "" {
+		t.Errorf("expected empty Input in first event, got %q", toolUseEvents[0].Tool.Input)
+	}
+	if toolUseEvents[0].Tool.Done {
+		t.Error("expected Done=false in first event")
+	}
+
+	// Second event: still empty from content_block_stop
+	if toolUseEvents[1].Tool.Input != "" {
+		t.Errorf("expected empty Input in second event, got %q", toolUseEvents[1].Tool.Input)
+	}
+	if !toolUseEvents[1].Tool.Done {
+		t.Error("expected Done=true in second event")
+	}
+
+	// Third event: supplemented from assistant verbose message
+	if toolUseEvents[2].Tool.Input == "" {
+		t.Error("expected non-empty Input in supplement event")
+	}
+	if !toolUseEvents[2].Tool.Done {
+		t.Error("expected Done=true in supplement event")
+	}
+	// Verify the supplemented input contains the actual data
+	var input map[string]any
+	if err := json.Unmarshal([]byte(toolUseEvents[2].Tool.Input), &input); err != nil {
+		t.Fatalf("failed to parse supplement input JSON: %v", err)
+	}
+	if cmd, ok := input["command"].(string); !ok || cmd != "ls -la" {
+		t.Errorf("expected command='ls -la', got %v", input["command"])
+	}
+}
+
+func TestStreamParser_EmptyInputNotSupplementedWhenAssistantAlsoEmpty(t *testing.T) {
+	// When both stream_event and assistant have empty input, no supplement event should be emitted.
+	lines := []string{
+		`{"type":"stream_event","event":{"type":"content_block_start","index":2,"content_block":{"type":"tool_use","id":"toolu_empty","name":"Bash"}}}`,
+		`{"type":"stream_event","event":{"type":"content_block_delta","index":2,"delta":{"type":"input_json_delta","partial_json":""}}}`,
+		`{"type":"stream_event","event":{"type":"content_block_stop","index":2}}`,
+		// Assistant with empty input too
+		`{"type":"assistant","message":{"content":[{"type":"tool_use","id":"toolu_empty","name":"Bash","input":{}}]}}`,
+	}
+
+	events := parseLines(lines)
+
+	var toolUseCount int
+	for _, ev := range events {
+		if ev.Type == "tool_use" {
+			toolUseCount++
+		}
+	}
+
+	// Only 2 from stream (start+stop), no supplement since assistant input is also empty
+	if toolUseCount != 2 {
+		t.Errorf("expected 2 tool_use events (no supplement), got %d", toolUseCount)
+	}
+}
+
+func TestStreamParser_ToolResultInUserMessage(t *testing.T) {
+	// Regression test: Claude/Codebuddy CLI puts tool_result in user messages
+	// (because tool results are returned to the model as "user" role).
+	// The parser must extract these so tool_use blocks get their output/status.
+	lines := []string{
+		`{"type":"stream_event","event":{"type":"content_block_start","index":2,"content_block":{"type":"tool_use","id":"toolu_001","name":"Read"}}}`,
+		`{"type":"stream_event","event":{"type":"content_block_delta","index":2,"delta":{"type":"input_json_delta","partial_json":"{\"file_path\":\"/a.go\"}"}}}`,
+		`{"type":"stream_event","event":{"type":"content_block_stop","index":2}}`,
+		// User message containing tool_result
+		`{"type":"user","message":{"content":[{"type":"tool_result","tool_use_id":"toolu_001","content":[{"type":"text","text":"file contents here"}]}]}}`,
+		`{"type":"result","session_id":"sess-1"}`,
+	}
+
+	events := parseLines(lines)
+
+	var toolResultEvents []StreamEvent
+	for _, ev := range events {
+		if ev.Type == "tool_result" {
+			toolResultEvents = append(toolResultEvents, ev)
+		}
+	}
+
+	if len(toolResultEvents) != 1 {
+		t.Fatalf("expected 1 tool_result event from user message, got %d", len(toolResultEvents))
+	}
+	if toolResultEvents[0].Tool.ID != "toolu_001" {
+		t.Errorf("expected tool_use_id 'toolu_001', got %q", toolResultEvents[0].Tool.ID)
+	}
+	if toolResultEvents[0].Tool.Output != "file contents here" {
+		t.Errorf("expected output 'file contents here', got %q", toolResultEvents[0].Tool.Output)
+	}
+	if toolResultEvents[0].Tool.Status != "success" {
+		t.Errorf("expected status 'success', got %q", toolResultEvents[0].Tool.Status)
+	}
+}
+
+func TestStreamParser_ToolResultInUserMessageError(t *testing.T) {
+	// Error tool_result in user message
+	lines := []string{
+		`{"type":"user","message":{"content":[{"type":"tool_result","tool_use_id":"toolu_err","is_error":true,"content":"command failed"}]}}`,
+	}
+
+	events := parseLines(lines)
+
+	var toolResultEvents []StreamEvent
+	for _, ev := range events {
+		if ev.Type == "tool_result" {
+			toolResultEvents = append(toolResultEvents, ev)
+		}
+	}
+
+	if len(toolResultEvents) != 1 {
+		t.Fatalf("expected 1 tool_result event, got %d", len(toolResultEvents))
+	}
+	if toolResultEvents[0].Tool.Status != "error" {
+		t.Errorf("expected status 'error', got %q", toolResultEvents[0].Tool.Status)
+	}
+	if toolResultEvents[0].Tool.Output != "command failed" {
+		t.Errorf("expected output 'command failed', got %q", toolResultEvents[0].Tool.Output)
+	}
+}
+
+func TestStreamParser_FullFlowWithEmptyInputJsonDeltaAndUserToolResult(t *testing.T) {
+	// End-to-end test simulating the exact scenario that caused the bug:
+	// 1. stream_event sends tool_use with empty input_json_delta
+	// 2. user message contains tool_result with actual output
+	// 3. assistant verbose message contains full tool_use input
+	// All three pieces must be correctly assembled.
+	lines := []string{
+		`{"type":"stream_event","event":{"type":"message_start","message":{"model":"glm-4"}}}`,
+		`{"type":"stream_event","event":{"type":"content_block_start","index":2,"content_block":{"type":"tool_use","id":"bf6w0tee","name":"Bash"}}}`,
+		`{"type":"stream_event","event":{"type":"content_block_delta","index":2,"delta":{"type":"input_json_delta","partial_json":""}}}`,
+		`{"type":"stream_event","event":{"type":"content_block_stop","index":2}}`,
+		// User message with tool_result (CLI returns tool output as user role)
+		`{"type":"user","message":{"content":[{"type":"tool_result","tool_use_id":"bf6w0tee","content":[{"type":"text","text":"total 0\ndrwxr-xr-x  5 user  staff  160 May 12 10:00 ."}]}]}}`,
+		// Assistant verbose message with full tool_use input
+		`{"type":"assistant","message":{"content":[{"type":"tool_use","id":"bf6w0tee","name":"Bash","input":{"command":"ls -la"}},{"type":"text","text":"Here are the files."}]}}`,
+		`{"type":"result","session_id":"sess-1","duration_ms":3000}`,
+	}
+
+	events := parseLines(lines)
+
+	var toolUseEvents []StreamEvent
+	var toolResultEvents []StreamEvent
+	for _, ev := range events {
+		if ev.Type == "tool_use" {
+			toolUseEvents = append(toolUseEvents, ev)
+		}
+		if ev.Type == "tool_result" {
+			toolResultEvents = append(toolResultEvents, ev)
+		}
+	}
+
+	// Expect 3 tool_use events: start (empty), stop (empty), supplement (full input)
+	if len(toolUseEvents) != 3 {
+		t.Fatalf("expected 3 tool_use events, got %d", len(toolUseEvents))
+	}
+	// The supplemented event should have the full input
+	var input map[string]any
+	if err := json.Unmarshal([]byte(toolUseEvents[2].Tool.Input), &input); err != nil {
+		t.Fatalf("failed to parse supplement input: %v", err)
+	}
+	if cmd, ok := input["command"].(string); !ok || cmd != "ls -la" {
+		t.Errorf("expected command='ls -la', got %v", input["command"])
+	}
+
+	// Expect 1 tool_result event from user message
+	if len(toolResultEvents) != 1 {
+		t.Fatalf("expected 1 tool_result event, got %d", len(toolResultEvents))
+	}
+	if toolResultEvents[0].Tool.ID != "bf6w0tee" {
+		t.Errorf("expected tool_use_id 'bf6w0tee', got %q", toolResultEvents[0].Tool.ID)
+	}
+	if !strings.Contains(toolResultEvents[0].Tool.Output, "drwxr-xr-x") {
+		t.Errorf("expected output containing 'drwxr-xr-x', got %q", toolResultEvents[0].Tool.Output)
 	}
 }
