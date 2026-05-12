@@ -262,6 +262,152 @@ func SaveTTSSummary(cacheKey, summary string) error {
 	return err
 }
 
+// quickCommandExtra holds the additional fields needed for terminal_quick_commands
+// beyond the shared (label, command, sort_order) triplet.
+type quickCommandExtra struct{ hidden, autoExec int }
+
+// QuickCommandHelpers exposes the shared CRUD helpers for terminal_quick_commands.
+var QuickCommandHelpers = crudHelpers[QuickCommand, quickCommandExtra]{
+	table:     "terminal_quick_commands",
+	scanCols:  "id, label, command, hidden, auto_execute, sort_order",
+	insertSQL: "INSERT INTO terminal_quick_commands (label, command, hidden, auto_execute, sort_order) VALUES (?, ?, ?, ?, ?)",
+	updateSQL: "UPDATE terminal_quick_commands SET label = ?, command = ?, hidden = ?, auto_execute = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+	scanFn: func(rows *sql.Rows) (QuickCommand, error) {
+		var cmd QuickCommand
+		var hidden, autoExec int
+		if err := rows.Scan(&cmd.ID, &cmd.Label, &cmd.Command, &hidden, &autoExec, &cmd.SortOrder); err != nil {
+			return cmd, err
+		}
+		cmd.Hidden = hidden == 1
+		cmd.AutoExecute = autoExec == 1
+		return cmd, nil
+	},
+	addFn: func(cmd QuickCommand) (label string, command string, sortOrder int, extra quickCommandExtra) {
+		hidden := 0
+		if cmd.Hidden {
+			hidden = 1
+		}
+		autoExec := 0
+		if cmd.AutoExecute {
+			autoExec = 1
+		}
+		return cmd.Label, cmd.Command, cmd.SortOrder, quickCommandExtra{hidden: hidden, autoExec: autoExec}
+	},
+}
+
+// ChatQuickSendHelpers exposes the shared CRUD helpers for chat_quick_send.
+var ChatQuickSendHelpers = crudHelpers[ChatQuickSendItem, struct{}]{
+	table:     "chat_quick_send",
+	scanCols:  "id, label, command, sort_order",
+	insertSQL: "INSERT INTO chat_quick_send (label, command, sort_order) VALUES (?, ?, ?)",
+	updateSQL: "UPDATE chat_quick_send SET label = ?, command = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+	scanFn: func(rows *sql.Rows) (ChatQuickSendItem, error) {
+		var item ChatQuickSendItem
+		return item, rows.Scan(&item.ID, &item.Label, &item.Command, &item.SortOrder)
+	},
+	addFn: func(item ChatQuickSendItem) (label string, command string, sortOrder int, _ struct{}) {
+		return item.Label, item.Command, item.SortOrder, struct{}{}
+	},
+}
+
+// crudHelpers[T, E] holds the table-specific operations needed for CRUD on typed struct [T].
+// E carries table-specific extra data for Insert/Update beyond (label, command, sortOrder).
+type crudHelpers[T any, E any] struct {
+	table     string
+	scanCols  string // columns for SELECT (must match field order in scanFn)
+	scanFn    func(*sql.Rows) (T, error)
+	addFn     func(T) (label string, command string, sortOrder int, extra E)
+	insertSQL string
+	updateSQL string
+}
+
+// list returns all rows from the helper's table ordered by sort_order.
+func (h crudHelpers[T, E]) list() ([]T, error) {
+	rows, err := DB.Query("SELECT " + h.scanCols + " FROM " + h.table + " ORDER BY sort_order")
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []T
+	for rows.Next() {
+		item, err := h.scanFn(rows)
+		if err != nil {
+			return nil, err
+		}
+		items = append(items, item)
+	}
+	return items, nil
+}
+
+// insert adds a new row. For tables with an auto_execute column (E=quickCommandExtra),
+// any existing auto_execute=1 rows are cleared first to enforce the single-active invariant.
+func (h crudHelpers[T, E]) insert(item T) (int64, error) {
+	// Capture addFn result so we can inspect extra (for auto_execute check)
+	// without calling the closure twice.
+	label, command, sortOrder, extra := h.addFn(item)
+	if _, ok := any(extra).(quickCommandExtra); ok {
+		if _, err := DB.Exec("UPDATE " + h.table + " SET auto_execute = 0 WHERE auto_execute = 1"); err != nil {
+			return 0, err
+		}
+	}
+	var maxOrder sql.NullInt64
+	_ = DB.QueryRow("SELECT MAX(sort_order) FROM " + h.table).Scan(&maxOrder)
+	if maxOrder.Valid {
+		sortOrder = int(maxOrder.Int64) + 1
+	}
+	var args []any
+	if e, ok := any(extra).(quickCommandExtra); ok {
+		args = []any{label, command, sortOrder, e.autoExec, e.hidden}
+	} else {
+		args = []any{label, command, sortOrder}
+	}
+	result, err := DB.Exec(h.insertSQL, args...)
+	if err != nil {
+		return 0, err
+	}
+	return result.LastInsertId()
+}
+
+// update modifies an existing row by id. For tables with an auto_execute column,
+// clears auto_execute on other rows to enforce the single-active invariant.
+func (h crudHelpers[T, E]) update(id int64, item T) error {
+	label, command, _, extra := h.addFn(item)
+	if _, ok := any(extra).(quickCommandExtra); ok {
+		if _, err := DB.Exec("UPDATE "+h.table+" SET auto_execute = 0 WHERE auto_execute = 1 AND id != ?", id); err != nil {
+			return err
+		}
+	}
+	var args []any
+	if e, ok := any(extra).(quickCommandExtra); ok {
+		args = []any{label, command, e.autoExec, e.hidden, id}
+	} else {
+		args = []any{label, command, id}
+	}
+	_, err := DB.Exec(h.updateSQL, args...)
+	return err
+}
+
+// delete removes a row by id.
+func (h crudHelpers[T, E]) delete(id int64) error {
+	_, err := DB.Exec("DELETE FROM "+h.table+" WHERE id = ?", id)
+	return err
+}
+
+// reorder updates sort_order for all rows matching the given id list.
+func (h crudHelpers[T, E]) reorder(ids []int64) error {
+	tx, err := DB.Begin()
+	if err != nil {
+		return err
+	}
+	for i, id := range ids {
+		if _, err := tx.Exec("UPDATE "+h.table+" SET sort_order = ? WHERE id = ?", i, id); err != nil {
+			tx.Rollback()
+			return err
+		}
+	}
+	return tx.Commit()
+}
+
 // QuickCommand represents a terminal quick command stored in the database.
 type QuickCommand struct {
 	ID          int64  `json:"id"`
@@ -274,99 +420,29 @@ type QuickCommand struct {
 
 // GetQuickCommands returns all quick commands ordered by sort_order.
 func GetQuickCommands() ([]QuickCommand, error) {
-	rows, err := DB.Query("SELECT id, label, command, hidden, auto_execute, sort_order FROM terminal_quick_commands ORDER BY sort_order")
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var cmds []QuickCommand
-	for rows.Next() {
-		var cmd QuickCommand
-		var hidden, autoExec int
-		if err := rows.Scan(&cmd.ID, &cmd.Label, &cmd.Command, &hidden, &autoExec, &cmd.SortOrder); err != nil {
-			return nil, err
-		}
-		cmd.Hidden = hidden == 1
-		cmd.AutoExecute = autoExec == 1
-		cmds = append(cmds, cmd)
-	}
-	return cmds, nil
+	return QuickCommandHelpers.list()
 }
 
 // AddQuickCommand inserts a new quick command and returns its ID.
 // If autoExecute is true, other commands' auto_execute flag is cleared first.
 func AddQuickCommand(label, command string, hidden, autoExecute bool) (int64, error) {
-	if autoExecute {
-		if _, err := DB.Exec("UPDATE terminal_quick_commands SET auto_execute = 0 WHERE auto_execute = 1"); err != nil {
-			return 0, err
-		}
-	}
-	var maxOrder sql.NullInt64
-	_ = DB.QueryRow("SELECT MAX(sort_order) FROM terminal_quick_commands").Scan(&maxOrder)
-	sortOrder := 0
-	if maxOrder.Valid {
-		sortOrder = int(maxOrder.Int64) + 1
-	}
-	hiddenInt := 0
-	if hidden {
-		hiddenInt = 1
-	}
-	autoExecInt := 0
-	if autoExecute {
-		autoExecInt = 1
-	}
-	result, err := DB.Exec(
-		"INSERT INTO terminal_quick_commands (label, command, hidden, auto_execute, sort_order) VALUES (?, ?, ?, ?, ?)",
-		label, command, hiddenInt, autoExecInt, sortOrder,
-	)
-	if err != nil {
-		return 0, err
-	}
-	return result.LastInsertId()
+	return QuickCommandHelpers.insert(QuickCommand{Label: label, Command: command, Hidden: hidden, AutoExecute: autoExecute})
 }
 
 // UpdateQuickCommand updates an existing quick command.
 // If autoExecute is true, other commands' auto_execute flag is cleared first.
 func UpdateQuickCommand(id int64, label, command string, hidden, autoExecute bool) error {
-	if autoExecute {
-		if _, err := DB.Exec("UPDATE terminal_quick_commands SET auto_execute = 0 WHERE auto_execute = 1 AND id != ?", id); err != nil {
-			return err
-		}
-	}
-	hiddenInt := 0
-	if hidden {
-		hiddenInt = 1
-	}
-	autoExecInt := 0
-	if autoExecute {
-		autoExecInt = 1
-	}
-	_, err := DB.Exec(
-		"UPDATE terminal_quick_commands SET label = ?, command = ?, hidden = ?, auto_execute = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
-		label, command, hiddenInt, autoExecInt, id,
-	)
-	return err
+	return QuickCommandHelpers.update(id, QuickCommand{Label: label, Command: command, Hidden: hidden, AutoExecute: autoExecute})
 }
 
 // DeleteQuickCommand deletes a quick command by ID.
 func DeleteQuickCommand(id int64) error {
-	_, err := DB.Exec("DELETE FROM terminal_quick_commands WHERE id = ?", id)
-	return err
+	return QuickCommandHelpers.delete(id)
 }
 
 // ReorderQuickCommands updates sort_order for all commands based on the given ID order.
 func ReorderQuickCommands(ids []int64) error {
-	tx, err := DB.Begin()
-	if err != nil {
-		return err
-	}
-	for i, id := range ids {
-		if _, err := tx.Exec("UPDATE terminal_quick_commands SET sort_order = ? WHERE id = ?", i, id); err != nil {
-			tx.Rollback()
-			return err
-		}
-	}
-	return tx.Commit()
+	return QuickCommandHelpers.reorder(ids)
 }
 
 // ChatQuickSendItem represents a chat quick-send item stored in the database.
@@ -379,66 +455,25 @@ type ChatQuickSendItem struct {
 
 // GetChatQuickSend returns all quick-send items ordered by sort_order.
 func GetChatQuickSend() ([]ChatQuickSendItem, error) {
-	rows, err := DB.Query("SELECT id, label, command, sort_order FROM chat_quick_send ORDER BY sort_order")
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []ChatQuickSendItem
-	for rows.Next() {
-		var item ChatQuickSendItem
-		if err := rows.Scan(&item.ID, &item.Label, &item.Command, &item.SortOrder); err != nil {
-			return nil, err
-		}
-		items = append(items, item)
-	}
-	return items, nil
+	return ChatQuickSendHelpers.list()
 }
 
 // AddChatQuickSend inserts a new quick-send item and returns its ID.
 func AddChatQuickSend(label, command string) (int64, error) {
-	var maxOrder sql.NullInt64
-	_ = DB.QueryRow("SELECT MAX(sort_order) FROM chat_quick_send").Scan(&maxOrder)
-	sortOrder := 0
-	if maxOrder.Valid {
-		sortOrder = int(maxOrder.Int64) + 1
-	}
-	result, err := DB.Exec(
-		"INSERT INTO chat_quick_send (label, command, sort_order) VALUES (?, ?, ?)",
-		label, command, sortOrder,
-	)
-	if err != nil {
-		return 0, err
-	}
-	return result.LastInsertId()
+	return ChatQuickSendHelpers.insert(ChatQuickSendItem{Label: label, Command: command})
 }
 
 // UpdateChatQuickSend updates an existing quick-send item.
 func UpdateChatQuickSend(id int64, label, command string) error {
-	_, err := DB.Exec(
-		"UPDATE chat_quick_send SET label = ?, command = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
-		label, command, id,
-	)
-	return err
+	return ChatQuickSendHelpers.update(id, ChatQuickSendItem{Label: label, Command: command})
 }
 
 // DeleteChatQuickSend deletes a quick-send item by ID.
 func DeleteChatQuickSend(id int64) error {
-	_, err := DB.Exec("DELETE FROM chat_quick_send WHERE id = ?", id)
-	return err
+	return ChatQuickSendHelpers.delete(id)
 }
 
 // ReorderChatQuickSend updates sort_order for all items based on the given ID order.
 func ReorderChatQuickSend(ids []int64) error {
-	tx, err := DB.Begin()
-	if err != nil {
-		return err
-	}
-	for i, id := range ids {
-		if _, err := tx.Exec("UPDATE chat_quick_send SET sort_order = ? WHERE id = ?", i, id); err != nil {
-			tx.Rollback()
-			return err
-		}
-	}
-	return tx.Commit()
+	return ChatQuickSendHelpers.reorder(ids)
 }
