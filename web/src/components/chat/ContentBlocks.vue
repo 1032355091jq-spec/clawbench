@@ -1,15 +1,17 @@
 <template>
   <div class="content-blocks">
     <template v-for="(block, bi) in blocks" :key="bi">
-      <!-- Thinking block -->
-      <div v-if="block.type === 'thinking'" class="chat-thinking" :class="{ expanded: thinkingExpanded[key(bi)] }" @click.stop="toggleThinking(key(bi))">
-        <div class="thinking-header">
-          <CircleHelp :size="12" />
-          <span class="thinking-label">{{ t('chat.message.deepThinking') }}</span>
-          <ChevronDown :size="12" class="thinking-chevron" />
+      <!-- Thinking block — styled as tool-call, opens overlay on click -->
+      <template v-if="block.type === 'thinking'">
+        <div
+          class="chat-tool-call done"
+          data-category="skill"
+          @click.stop="handleThinkingClick(block, key(bi))"
+        >
+          <component :is="Brain" :size="12" class="tool-icon" />
+          <span class="tool-name">{{ t('chat.message.deepThinking') }}</span>
         </div>
-        <pre v-if="thinkingExpanded[key(bi)]" class="thinking-text">{{ block.text }}</pre>
-      </div>
+      </template>
       <!-- Tool use block -->
       <template v-else-if="block.type === 'tool_use'">
         <div class="chat-tool-call" :class="{ done: block.done, 'tool-error': block.status === 'error' }" :data-category="getToolIcon(block.name).category" @click.stop="handleToolClick(block, key(bi))">
@@ -96,7 +98,7 @@ import { ref, watch, onUnmounted, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { handleToolAction, shouldAutoExpandTool } from '@/utils/renderToolDetail.ts'
 import { getToolIcon } from '@/utils/icons'
-import { CircleHelp, ChevronDown, ChevronRight, CheckCircle2, AlertCircle, AlertTriangle, XCircle } from 'lucide-vue-next'
+import { Brain, ChevronRight, CheckCircle2, AlertCircle, AlertTriangle, XCircle } from 'lucide-vue-next'
 
 const { t, locale } = useI18n()
 
@@ -176,7 +178,7 @@ const props = defineProps({
   staticBlockCache: { type: Object, default: null },
 })
 
-const emit = defineEmits(['toggle-tool', 'show-tool-detail', 'task-card-click', 'send-message', 'render-flush'])
+const emit = defineEmits(['toggle-tool', 'show-tool-detail', 'show-thinking-detail', 'task-card-click', 'send-message', 'render-flush'])
 
 // Key helper: use msgId if available, otherwise msgIndex
 function key(bi) {
@@ -262,10 +264,10 @@ function formatTime(iso) {
   return d.toLocaleDateString(locale.value === 'zh' ? 'zh-CN' : 'en-US')
 }
 
-const thinkingExpanded = ref({})
+// thinkingExpanded is no longer needed — thinking now uses overlay
 
-function toggleThinking(k) {
-  thinkingExpanded.value = { ...thinkingExpanded.value, [k]: !thinkingExpanded.value[k] }
+function handleThinkingClick(block, k) {
+  emit('show-thinking-detail', { text: block.text || '' })
 }
 
 /** Generate a short summary for an ask-question block (from <ask-question> tag). */
@@ -460,50 +462,15 @@ onUnmounted(() => {
   color: #fcd34d;
 }
 
-/* Thinking block */
-.chat-thinking {
-  background: color-mix(in srgb, var(--accent-color, #0066cc) 6%, transparent);
-  border: 1px solid color-mix(in srgb, var(--accent-color, #0066cc) 15%, transparent);
-  border-radius: 6px;
-  margin: 4px 0;
-  cursor: pointer;
-  overflow: hidden;
-}
-
-.thinking-header {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  padding: 3px 8px;
-  font-size: 12px;
-  color: var(--text-secondary);
-}
-
-.thinking-label {
-  font-weight: 500;
-}
-
-.thinking-chevron {
-  margin-left: auto;
-  transition: transform 0.2s;
-}
-
-.chat-thinking.expanded .thinking-chevron {
-  transform: rotate(180deg);
-}
-
-.chat-thinking .thinking-text {
+/* Thinking overlay text */
+.content-blocks .thinking-overlay-text {
   margin: 0;
-  padding: 6px 8px;
-  font-size: 11px;
-  line-height: 1.5;
-  color: var(--text-secondary);
+  font-family: 'SF Mono', 'Fira Code', Menlo, Monaco, monospace;
+  font-size: 12px;
+  line-height: 1.6;
   white-space: pre-wrap;
   word-break: break-word;
-  border-top: 1px solid color-mix(in srgb, var(--accent-color, #0066cc) 10%, transparent);
-  max-height: 200px;
-  overflow-y: auto;
-  font-family: inherit;
+  color: var(--text-secondary);
 }
 
 /* Tool calls display */

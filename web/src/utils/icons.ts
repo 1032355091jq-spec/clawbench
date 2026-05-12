@@ -7,6 +7,8 @@ import {
   Users, MessageSquare, Send, Save, Camera, Wrench,
   // Fallback
   Wrench as WrenchFallback,
+  // Thinking
+  Brain,
 } from 'lucide-vue-next'
 
 /**
@@ -48,6 +50,7 @@ export const TOOL_ICONS: Record<string, { icon: typeof Wrench; category: string 
   'WeChatReply':       { icon: MessageSquare,    category: 'agent' },
   'WeComReply':        { icon: MessageSquare,    category: 'agent' },
   'save_memory':       { icon: Save,             category: 'skill' },
+  'DeepThink':        { icon: Brain,           category: 'skill' },
   'StructuredOutput':  { icon: FileText,         category: 'file' },
   'SkillManage':       { icon: Sparkles,         category: 'skill' },
   'Monitor':           { icon: Monitor,          category: 'bash' },

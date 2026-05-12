@@ -18,6 +18,7 @@
       @touchend="swipeSession.onTouchEnd"
       @toggle-tool="render.toggleToolDetail"
       @show-tool-detail="handleShowToolDetail"
+      @show-thinking-detail="handleShowThinkingDetail"
       @show-metadata="showMetadata"
       @file-tag-click="handleFileTagClick"
       @load-more="handleLoadMore"
@@ -546,6 +547,27 @@ function handleShowToolDetail(block) {
     status: block.status || '',
     done: !!block.done,
   }
+}
+
+function handleShowThinkingDetail({ text }) {
+  toolDetailOverlay.value = {
+    show: true,
+    name: 'DeepThink',
+    summary: '',
+    inputHtml: `<pre class="thinking-overlay-text">${escapeHtml(text)}</pre>`,
+    outputHtml: '',
+    status: '',
+    done: true,
+  }
+}
+
+function escapeHtml(str) {
+  return str
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;')
 }
 
 function handleFileOpenInOverlay(filePath) {

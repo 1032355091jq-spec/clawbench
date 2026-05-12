@@ -736,4 +736,15 @@ function handleBodyClick(event) {
   max-height: 120px;
   overflow-y: auto;
 }
+
+/* Thinking content in overlay */
+.tool-detail-body .thinking-overlay-text {
+  margin: 0;
+  font-family: 'SF Mono', 'Fira Code', Menlo, Monaco, monospace;
+  font-size: 13px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  word-break: break-word;
+  color: var(--text-secondary);
+}
 </style>

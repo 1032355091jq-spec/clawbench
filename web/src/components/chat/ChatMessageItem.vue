@@ -27,6 +27,7 @@
         :staticBlockCache="staticBlockCache"
         @toggle-tool="$emit('toggle-tool', $event)"
         @show-tool-detail="$emit('show-tool-detail', $event)"
+        @show-thinking-detail="$emit('show-thinking-detail', $event)"
         @task-card-click="$emit('task-card-click', $event)"
         @send-message="$emit('send-message', $event)"
         @render-flush="$emit('render-flush')"
@@ -115,7 +116,7 @@ const props = defineProps({
   staticBlockCache: Object,
 })
 
-const emit = defineEmits(['toggle-tool', 'show-tool-detail', 'show-metadata', 'file-tag-click', 'expand', 'collapse', 'task-card-click', 'send-message', 'render-flush'])
+const emit = defineEmits(['toggle-tool', 'show-tool-detail', 'show-thinking-detail', 'show-metadata', 'file-tag-click', 'expand', 'collapse', 'task-card-click', 'send-message', 'render-flush'])
 
 const autoSpeech = inject('autoSpeech')
 const layoutRefreshKey = inject('layoutRefreshKey', ref(0))

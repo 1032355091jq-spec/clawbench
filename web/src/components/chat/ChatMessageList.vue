@@ -49,6 +49,7 @@
       :staticBlockCache="staticBlockCache"
       @toggle-tool="$emit('toggle-tool', $event)"
       @show-tool-detail="$emit('show-tool-detail', $event)"
+      @show-thinking-detail="$emit('show-thinking-detail', $event)"
       @show-metadata="$emit('show-metadata', $event)"
       @file-tag-click="$emit('file-tag-click', $event)"
       @task-card-click="$emit('task-card-click', $event)"
@@ -99,7 +100,7 @@ const props = defineProps({
   staticBlockCache: Object,
 })
 
-const emit = defineEmits(['toggle-tool', 'show-tool-detail', 'show-metadata', 'file-tag-click', 'file-open', 'load-more', 'task-card-click', 'send-message', 'remove-pending', 'render-flush'])
+const emit = defineEmits(['toggle-tool', 'show-tool-detail', 'show-thinking-detail', 'show-metadata', 'file-tag-click', 'file-open', 'load-more', 'task-card-click', 'send-message', 'remove-pending', 'render-flush'])
 
 const messagesRef = ref(null)
 const { handleDblClick } = useDoubleClickCopy()
