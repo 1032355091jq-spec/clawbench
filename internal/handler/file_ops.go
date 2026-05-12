@@ -53,7 +53,7 @@ func ServeFileRename(w http.ResponseWriter, r *http.Request) {
 	}
 	newPath := filepath.Join(filepath.Dir(absOld), req.Name)
 	absNew, err := filepath.Abs(newPath)
-	if err != nil || !strings.HasPrefix(absNew, baseAbs+string(filepath.Separator)) {
+	if err != nil || !isPathUnderBase(absNew, baseAbs) {
 		writeLocalizedError(w, r, model.Forbidden(nil, "AccessDenied"))
 		return
 	}
@@ -254,7 +254,7 @@ func validateCreatePath(w http.ResponseWriter, r *http.Request, projectPath, req
 
 	fullPath := filepath.Join(absDir, reqName)
 	absPath, err := filepath.Abs(fullPath)
-	if err != nil || !strings.HasPrefix(absPath, basePath+string(filepath.Separator)) {
+	if err != nil || !isPathUnderBase(absPath, basePath) {
 		writeLocalizedError(w, r, model.Forbidden(nil, "AccessDenied"))
 		return ""
 	}

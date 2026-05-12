@@ -14,6 +14,7 @@ import (
 	"syscall"
 	"time"
 
+	"golang.org/x/crypto/bcrypt"
 	"gopkg.in/yaml.v3"
 
 	"clawbench/internal/cli"
@@ -389,19 +390,28 @@ func main() {
 		}
 	}
 
-	// Print auto-generated password info
+	// Print auto-generated password info (ISS-003d: don't log plaintext password)
 	if autoPassword != "" {
 		slog.Info("auto-generated password (no password configured)",
-			slog.String("password", autoPassword),
 			slog.String("file", filepath.Join(model.BinDir, ".clawbench", "auto-password")),
 		)
-		// Also print to stdout for foreground mode and shell scripts to capture
+		// Print to stdout for foreground mode and shell scripts to capture
 		fmt.Printf("Auto-generated password: %s\n", autoPassword)
 	}
 
 	// Hash the password for session comparison
 	hash := sha256.Sum256([]byte(cfg.Password + "clawbench-salt"))
 	model.SessionToken = hex.EncodeToString(hash[:])
+
+	// Generate bcrypt hash for secure password verification (ISS-003a)
+	if cfg.Password != "" {
+		bcryptHash, err := bcrypt.GenerateFromPassword([]byte(cfg.Password), bcrypt.DefaultCost)
+		if err != nil {
+			slog.Error("failed to generate bcrypt hash", slog.String("err", err.Error()))
+			os.Exit(1)
+		}
+		model.PasswordHash = bcryptHash
+	}
 
 	// Ensure the watch directory exists
 	if err := os.MkdirAll(model.WatchDir, 0755); err != nil {

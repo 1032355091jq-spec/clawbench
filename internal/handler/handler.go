@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/nicksnyder/go-i18n/v2/i18n"
 	i18npkg "clawbench/internal/i18n"
@@ -101,6 +102,28 @@ func validateAndResolvePath(w http.ResponseWriter, r *http.Request, basePath, re
 		return "", false
 	}
 	return absPath, true
+}
+
+// isPathUnderBase checks that absPath is under basePath by resolving symlinks
+// on both sides before comparing. This prevents symlink traversal attacks.
+// Both paths must be absolute.
+func isPathUnderBase(absPath, basePath string) bool {
+	evalBase, err := filepath.EvalSymlinks(basePath)
+	if err != nil {
+		return false
+	}
+	evalPath, err := filepath.EvalSymlinks(absPath)
+	if err != nil {
+		if !os.IsNotExist(err) {
+			return false
+		}
+		// Target doesn't exist — resolve parent directory
+		evalPath = model.ResolveExistingPath(absPath, evalBase)
+		if evalPath == "" {
+			return false
+		}
+	}
+	return strings.HasPrefix(evalPath, evalBase+string(filepath.Separator)) || evalPath == evalBase
 }
 
 // resolveAgentConfig resolves agent configuration from model.Agents.

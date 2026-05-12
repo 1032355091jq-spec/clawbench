@@ -301,7 +301,7 @@ func ServeProjects(w http.ResponseWriter, r *http.Request) {
 		absPath = basePath
 	} else if filepath.IsAbs(rawPath) {
 		absPath = rawPath
-		if !strings.HasPrefix(absPath, basePath+string(filepath.Separator)) && absPath != basePath {
+		if !isPathUnderBase(absPath, basePath) {
 			// Not under watchDir — treat leading "/" as part of a relative path
 			relPath := strings.TrimPrefix(rawPath, "/")
 			var absErr error
@@ -323,7 +323,7 @@ func ServeProjects(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	if !strings.HasPrefix(absPath, basePath+string(filepath.Separator)) && absPath != basePath {
+	if !isPathUnderBase(absPath, basePath) {
 		writeLocalizedError(w, r, model.Forbidden(nil, "AccessDenied"))
 		return
 	}
@@ -503,7 +503,7 @@ func serveProjectsCreate(w http.ResponseWriter, r *http.Request) {
 			slog.Warn("failed to resolve path", slog.String("path", req.Path), slog.String("err", err.Error()))
 		}
 	}
-	if !strings.HasPrefix(absPath, basePath+string(filepath.Separator)) && absPath != basePath {
+	if !isPathUnderBase(absPath, basePath) {
 		writeLocalizedError(w, r, model.Forbidden(nil, "AccessDenied"))
 		return
 	}

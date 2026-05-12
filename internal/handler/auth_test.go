@@ -2,11 +2,13 @@ package handler
 
 import (
 	"net/http"
+	"sync"
 	"testing"
 
 	"clawbench/internal/model"
 
 	"github.com/stretchr/testify/assert"
+	"golang.org/x/crypto/bcrypt"
 )
 
 func TestServeAuthCheck(t *testing.T) {
@@ -79,11 +81,14 @@ func TestServeLogin(t *testing.T) {
 		assert.Contains(t, []int{http.StatusOK, http.StatusNotFound}, w.Code)
 	})
 
-	t.Run("POST_CorrectPassword_Returns200WithCookie", func(t *testing.T) {
+	t.Run("POST_BcryptCorrectPassword_Returns200WithCookie", func(t *testing.T) {
 		_, teardown := setupTestEnv(t)
 		defer teardown()
 
 		model.SessionToken = hashPassword("testpass")
+		bcryptHash, err := bcrypt.GenerateFromPassword([]byte("testpass"), bcrypt.MinCost)
+		assert.NoError(t, err)
+		model.PasswordHash = bcryptHash
 
 		req := newRequest(t, http.MethodPost, "/login", map[string]string{
 			"password": "testpass",
@@ -106,11 +111,14 @@ func TestServeLogin(t *testing.T) {
 		assert.True(t, foundCookie, "expected session cookie to be set")
 	})
 
-	t.Run("POST_WrongPassword_Returns401", func(t *testing.T) {
+	t.Run("POST_BcryptWrongPassword_Returns401", func(t *testing.T) {
 		_, teardown := setupTestEnv(t)
 		defer teardown()
 
 		model.SessionToken = hashPassword("testpass")
+		bcryptHash, err := bcrypt.GenerateFromPassword([]byte("testpass"), bcrypt.MinCost)
+		assert.NoError(t, err)
+		model.PasswordHash = bcryptHash
 
 		req := newRequest(t, http.MethodPost, "/login", map[string]string{
 			"password": "wrongpass",
@@ -121,18 +129,36 @@ func TestServeLogin(t *testing.T) {
 		assertJSONField(t, w, "ok", false)
 	})
 
+	t.Run("POST_SHA256Fallback_Returns200", func(t *testing.T) {
+		_, teardown := setupTestEnv(t)
+		defer teardown()
+
+		// PasswordHash is nil — should fall back to SHA-256
+		model.SessionToken = hashPassword("testpass")
+		model.PasswordHash = nil
+
+		req := newRequest(t, http.MethodPost, "/login", map[string]string{
+			"password": "testpass",
+		})
+		w := callHandler(ServeLogin, req)
+
+		assert.Equal(t, http.StatusOK, w.Code)
+		assertJSONField(t, w, "ok", true)
+	})
+
 	t.Run("POST_EmptyBody_Returns401", func(t *testing.T) {
 		_, teardown := setupTestEnv(t)
 		defer teardown()
 
 		model.SessionToken = hashPassword("testpass")
+		bcryptHash, _ := bcrypt.GenerateFromPassword([]byte("testpass"), bcrypt.MinCost)
+		model.PasswordHash = bcryptHash
 
 		req := newRequest(t, http.MethodPost, "/login", map[string]string{
 			"password": "",
 		})
 		w := callHandler(ServeLogin, req)
 
-		// Empty password hash won't match the set token
 		assert.Equal(t, http.StatusUnauthorized, w.Code)
 		assertJSONField(t, w, "ok", false)
 	})
@@ -141,8 +167,8 @@ func TestServeLogin(t *testing.T) {
 		_, teardown := setupTestEnv(t)
 		defer teardown()
 
-		// No password configured — any password should work
 		model.SessionToken = ""
+		model.PasswordHash = nil
 
 		req := newRequest(t, http.MethodPost, "/login", map[string]string{
 			"password": "anything",
@@ -162,6 +188,73 @@ func TestServeLogin(t *testing.T) {
 
 		assert.Equal(t, http.StatusMethodNotAllowed, w.Code)
 	})
+}
+
+// --- ISS-003c: Login rate limiting tests ---
+
+func TestServeLogin_RateLimiting(t *testing.T) {
+	_, teardown := setupTestEnv(t)
+	defer teardown()
+
+	model.SessionToken = hashPassword("testpass")
+	bcryptHash, _ := bcrypt.GenerateFromPassword([]byte("testpass"), bcrypt.MinCost)
+	model.PasswordHash = bcryptHash
+
+	// Reset the global limiter for this test
+	globalLoginLimiter = &loginLimiter{records: make(map[string]*ipRecord)}
+	globalLoginLimiterOnce = sync.Once{} //nolint:staticcheck // reset for test
+
+	// Send maxLoginFails wrong password attempts
+	for i := 0; i < maxLoginFails; i++ {
+		req := newRequest(t, http.MethodPost, "/login", map[string]string{
+			"password": "wrongpass",
+		})
+		w := callHandler(ServeLogin, req)
+		assert.Equal(t, http.StatusUnauthorized, w.Code)
+	}
+
+	// Next attempt should be blocked
+	req := newRequest(t, http.MethodPost, "/login", map[string]string{
+		"password": "testpass",
+	})
+	w := callHandler(ServeLogin, req)
+	assert.Equal(t, http.StatusTooManyRequests, w.Code)
+}
+
+func TestServeLogin_RateLimiting_SuccessUnblocks(t *testing.T) {
+	_, teardown := setupTestEnv(t)
+	defer teardown()
+
+	model.SessionToken = hashPassword("testpass")
+	bcryptHash, _ := bcrypt.GenerateFromPassword([]byte("testpass"), bcrypt.MinCost)
+	model.PasswordHash = bcryptHash
+
+	// Reset the global limiter
+	globalLoginLimiter = &loginLimiter{records: make(map[string]*ipRecord)}
+	globalLoginLimiterOnce = sync.Once{}
+
+	// Send (maxLoginFails - 1) wrong password attempts (just under the limit)
+	for i := 0; i < maxLoginFails-1; i++ {
+		req := newRequest(t, http.MethodPost, "/login", map[string]string{
+			"password": "wrongpass",
+		})
+		w := callHandler(ServeLogin, req)
+		assert.Equal(t, http.StatusUnauthorized, w.Code)
+	}
+
+	// Correct password should still work and reset the counter
+	req := newRequest(t, http.MethodPost, "/login", map[string]string{
+		"password": "testpass",
+	})
+	w := callHandler(ServeLogin, req)
+	assert.Equal(t, http.StatusOK, w.Code)
+
+	// Should be able to fail more times now (counter was reset)
+	req = newRequest(t, http.MethodPost, "/login", map[string]string{
+		"password": "wrongpass",
+	})
+	w = callHandler(ServeLogin, req)
+	assert.Equal(t, http.StatusUnauthorized, w.Code) // not 429
 }
 
 func TestAuth_WatchDir_RequiresAuth(t *testing.T) {

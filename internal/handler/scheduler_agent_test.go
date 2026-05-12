@@ -55,6 +55,7 @@ func TestServeChatCount(t *testing.T) {
 	service.AddChatMessage(env.ProjectDir, "claude", sid, "assistant", "Hi", nil, false, "NewSession")
 
 	req := newRequest(t, http.MethodGet, "/api/ai/chat/count?session_id="+sid, nil)
+	req = withProjectCookie(req, env.ProjectDir)
 	w := callHandler(ServeChatCount, req)
 
 	assertOK(t, w)
@@ -64,13 +65,21 @@ func TestServeChatCount(t *testing.T) {
 }
 
 func TestServeChatCount_NoSessionID(t *testing.T) {
+	env, teardown := setupTestEnv(t)
+	defer teardown()
+
 	req := newRequest(t, http.MethodGet, "/api/ai/chat/count", nil)
+	req = withProjectCookie(req, env.ProjectDir)
 	w := callHandler(ServeChatCount, req)
 	assertStatus(t, w, http.StatusBadRequest)
 }
 
 func TestServeChatCount_PostNotAllowed(t *testing.T) {
+	env, teardown := setupTestEnv(t)
+	defer teardown()
+
 	req := newRequest(t, http.MethodPost, "/api/ai/chat/count", nil)
+	req = withProjectCookie(req, env.ProjectDir)
 	w := callHandler(ServeChatCount, req)
 	assertStatus(t, w, http.StatusMethodNotAllowed)
 }
@@ -89,6 +98,7 @@ func TestServeChatMessageUpdate(t *testing.T) {
 		"messageId": msgID,
 		"content":   "updated content",
 	})
+	req = withProjectCookie(req, env.ProjectDir)
 	w := callHandler(ServeChatMessageUpdate, req)
 
 	assertOK(t, w)
@@ -98,23 +108,34 @@ func TestServeChatMessageUpdate(t *testing.T) {
 }
 
 func TestServeChatMessageUpdate_NoMessageID(t *testing.T) {
+	env, teardown := setupTestEnv(t)
+	defer teardown()
+
 	req := newRequest(t, http.MethodPut, "/api/ai/chat/message", map[string]any{
 		"content": "no id",
 	})
+	req = withProjectCookie(req, env.ProjectDir)
 	w := callHandler(ServeChatMessageUpdate, req)
 	assertStatus(t, w, http.StatusBadRequest)
 }
 
 func TestServeChatMessageUpdate_InvalidBody(t *testing.T) {
+	_, teardown := setupTestEnv(t)
+	defer teardown()
+
 	req := httptest.NewRequest(http.MethodPut, "/api/ai/chat/message", nil)
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 	ServeChatMessageUpdate(w, req)
-	assertStatus(t, w, http.StatusBadRequest)
+	assertStatus(t, w, http.StatusForbidden) // now requires project cookie
 }
 
 func TestServeChatMessageUpdate_GetNotAllowed(t *testing.T) {
+	env, teardown := setupTestEnv(t)
+	defer teardown()
+
 	req := newRequest(t, http.MethodGet, "/api/ai/chat/message", nil)
+	req = withProjectCookie(req, env.ProjectDir)
 	w := callHandler(ServeChatMessageUpdate, req)
 	assertStatus(t, w, http.StatusMethodNotAllowed)
 }
@@ -274,6 +295,7 @@ func TestServeTaskByID_Get(t *testing.T) {
 	assert.NoError(t, err)
 
 	req := newRequest(t, http.MethodGet, "/api/tasks/"+task.ID, nil)
+	req = withProjectCookie(req, env.ProjectDir)
 	w := callHandler(ServeTaskByID, req)
 
 	assertOK(t, w)
@@ -304,6 +326,7 @@ func TestServeTaskByID_Delete(t *testing.T) {
 	s.AddTask(task)
 
 	req := newRequest(t, http.MethodDelete, "/api/tasks/"+task.ID, nil)
+	req = withProjectCookie(req, env.ProjectDir)
 	w := callHandler(ServeTaskByID, req)
 	assertOK(t, w)
 }
@@ -335,6 +358,7 @@ func TestServeTaskByID_Pause(t *testing.T) {
 	req := newRequest(t, http.MethodPut, "/api/tasks/"+task.ID, map[string]any{
 		"action": "pause",
 	})
+	req = withProjectCookie(req, env.ProjectDir)
 	w := callHandler(ServeTaskByID, req)
 	assertOK(t, w)
 }
@@ -367,12 +391,13 @@ func TestServeTaskByID_Resume(t *testing.T) {
 	req := newRequest(t, http.MethodPut, "/api/tasks/"+task.ID, map[string]any{
 		"action": "resume",
 	})
+	req = withProjectCookie(req, env.ProjectDir)
 	w := callHandler(ServeTaskByID, req)
 	assertOK(t, w)
 }
 
 func TestServeTaskByID_NotFound(t *testing.T) {
-	_, teardown := setupTestEnv(t)
+	env, teardown := setupTestEnv(t)
 	defer teardown()
 
 	s := service.NewScheduler()
@@ -381,15 +406,17 @@ func TestServeTaskByID_NotFound(t *testing.T) {
 	defer func() { service.GlobalScheduler = nil }()
 
 	req := newRequest(t, http.MethodGet, "/api/tasks/non-existent", nil)
+	req = withProjectCookie(req, env.ProjectDir)
 	w := callHandler(ServeTaskByID, req)
 	assertStatus(t, w, http.StatusNotFound)
 }
 
 func TestServeTaskByID_NoTaskID(t *testing.T) {
-	_, teardown := setupTestEnv(t)
+	env, teardown := setupTestEnv(t)
 	defer teardown()
 
 	req := newRequest(t, http.MethodGet, "/api/tasks/", nil)
+	req = withProjectCookie(req, env.ProjectDir)
 	w := callHandler(ServeTaskByID, req)
 	assertStatus(t, w, http.StatusBadRequest)
 }
@@ -447,6 +474,7 @@ func TestServeTaskByID_Executions(t *testing.T) {
 
 	// Get executions
 	req := newRequest(t, http.MethodGet, "/api/tasks/"+task.ID+"/executions", nil)
+	req = withProjectCookie(req, env.ProjectDir)
 	w := callHandler(ServeTaskByID, req)
 	assertOK(t, w)
 
@@ -462,7 +490,7 @@ func TestServeTaskByID_Executions(t *testing.T) {
 }
 
 func TestServeTaskByID_ExecutionsTaskNotFound(t *testing.T) {
-	_, teardown := setupTestEnv(t)
+	env, teardown := setupTestEnv(t)
 	defer teardown()
 
 	s := service.NewScheduler()
@@ -471,6 +499,7 @@ func TestServeTaskByID_ExecutionsTaskNotFound(t *testing.T) {
 	defer func() { service.GlobalScheduler = nil }()
 
 	req := newRequest(t, http.MethodGet, "/api/tasks/non-existent/executions", nil)
+	req = withProjectCookie(req, env.ProjectDir)
 	w := callHandler(ServeTaskByID, req)
 	assertStatus(t, w, http.StatusNotFound)
 }
@@ -507,6 +536,7 @@ func TestServeTaskByID_Update(t *testing.T) {
 		"cron_expr": "0 */2 * * *",
 		"prompt":   "Updated prompt",
 	})
+	req = withProjectCookie(req, env.ProjectDir)
 	w := callHandler(ServeTaskByID, req)
 	assertOK(t, w)
 }
@@ -540,12 +570,13 @@ func TestServeTaskByID_UpdateAssistantAgent(t *testing.T) {
 	req := newRequest(t, http.MethodPut, "/api/tasks/"+task.ID, map[string]any{
 		"agent_id": "assistant",
 	})
+	req = withProjectCookie(req, env.ProjectDir)
 	w := callHandler(ServeTaskByID, req)
 	assertOK(t, w)
 }
 
 func TestServeTaskByID_UpdateTaskNotFound(t *testing.T) {
-	_, teardown := setupTestEnv(t)
+	env, teardown := setupTestEnv(t)
 	defer teardown()
 
 	s := service.NewScheduler()
@@ -557,8 +588,220 @@ func TestServeTaskByID_UpdateTaskNotFound(t *testing.T) {
 		"action": "update",
 		"name":   "Updated",
 	})
+	req = withProjectCookie(req, env.ProjectDir)
 	w := callHandler(ServeTaskByID, req)
 	assertStatus(t, w, http.StatusNotFound)
+}
+
+// ---------- ISS-006: Cross-project ownership tests ----------
+
+func TestServeTaskByID_WrongProject_Get(t *testing.T) {
+	env, teardown := setupTestEnv(t)
+	defer teardown()
+
+	model.Agents = map[string]*model.Agent{
+		"coder": {ID: "coder", Name: "Coder", Backend: "claude"},
+	}
+	defer func() { model.Agents = nil }()
+
+	s := service.NewScheduler()
+	defer s.Stop()
+	service.GlobalScheduler = s
+	defer func() { service.GlobalScheduler = nil }()
+
+	// Create a task under the real project
+	task := &model.ScheduledTask{
+		ProjectPath: env.ProjectDir,
+		Name:        "My Task",
+		CronExpr:    "0 * * * *",
+		AgentID:     "coder",
+		Prompt:      "Test",
+		RepeatMode:  "unlimited",
+	}
+	s.AddTask(task)
+
+	// Try to access with a different project cookie
+	otherProject := t.TempDir()
+	req := newRequest(t, http.MethodGet, "/api/tasks/"+task.ID, nil)
+	req = withProjectCookie(req, otherProject)
+	w := callHandler(ServeTaskByID, req)
+	assertStatus(t, w, http.StatusForbidden)
+}
+
+func TestServeTaskByID_WrongProject_Delete(t *testing.T) {
+	env, teardown := setupTestEnv(t)
+	defer teardown()
+
+	model.Agents = map[string]*model.Agent{
+		"coder": {ID: "coder", Name: "Coder", Backend: "claude"},
+	}
+	defer func() { model.Agents = nil }()
+
+	s := service.NewScheduler()
+	defer s.Stop()
+	service.GlobalScheduler = s
+	defer func() { service.GlobalScheduler = nil }()
+
+	task := &model.ScheduledTask{
+		ProjectPath: env.ProjectDir,
+		Name:        "My Task",
+		CronExpr:    "0 * * * *",
+		AgentID:     "coder",
+		Prompt:      "Test",
+		RepeatMode:  "unlimited",
+	}
+	s.AddTask(task)
+
+	otherProject := t.TempDir()
+	req := newRequest(t, http.MethodDelete, "/api/tasks/"+task.ID, nil)
+	req = withProjectCookie(req, otherProject)
+	w := callHandler(ServeTaskByID, req)
+	assertStatus(t, w, http.StatusForbidden)
+}
+
+func TestServeTaskByID_WrongProject_Pause(t *testing.T) {
+	env, teardown := setupTestEnv(t)
+	defer teardown()
+
+	model.Agents = map[string]*model.Agent{
+		"coder": {ID: "coder", Name: "Coder", Backend: "claude"},
+	}
+	defer func() { model.Agents = nil }()
+
+	s := service.NewScheduler()
+	defer s.Stop()
+	service.GlobalScheduler = s
+	defer func() { service.GlobalScheduler = nil }()
+
+	task := &model.ScheduledTask{
+		ProjectPath: env.ProjectDir,
+		Name:        "My Task",
+		CronExpr:    "0 * * * *",
+		AgentID:     "coder",
+		Prompt:      "Test",
+		RepeatMode:  "unlimited",
+	}
+	s.AddTask(task)
+
+	otherProject := t.TempDir()
+	req := newRequest(t, http.MethodPut, "/api/tasks/"+task.ID, map[string]any{
+		"action": "pause",
+	})
+	req = withProjectCookie(req, otherProject)
+	w := callHandler(ServeTaskByID, req)
+	assertStatus(t, w, http.StatusForbidden)
+}
+
+func TestServeTaskByID_WrongProject_Executions(t *testing.T) {
+	env, teardown := setupTestEnv(t)
+	defer teardown()
+
+	model.Agents = map[string]*model.Agent{
+		"coder": {ID: "coder", Name: "Coder", Backend: "claude"},
+	}
+	defer func() { model.Agents = nil }()
+
+	s := service.NewScheduler()
+	defer s.Stop()
+	service.GlobalScheduler = s
+	defer func() { service.GlobalScheduler = nil }()
+
+	task := &model.ScheduledTask{
+		ProjectPath: env.ProjectDir,
+		Name:        "My Task",
+		CronExpr:    "0 * * * *",
+		AgentID:     "coder",
+		Prompt:      "Test",
+		RepeatMode:  "unlimited",
+	}
+	s.AddTask(task)
+	service.AddTaskExecution(task.ID, `{"blocks":[{"type":"text","text":"result"}]}`, "manual")
+
+	otherProject := t.TempDir()
+	req := newRequest(t, http.MethodGet, "/api/tasks/"+task.ID+"/executions", nil)
+	req = withProjectCookie(req, otherProject)
+	w := callHandler(ServeTaskByID, req)
+	assertStatus(t, w, http.StatusForbidden)
+}
+
+func TestServeTaskByID_NoProject(t *testing.T) {
+	env, teardown := setupTestEnv(t)
+	defer teardown()
+
+	model.Agents = map[string]*model.Agent{
+		"coder": {ID: "coder", Name: "Coder", Backend: "claude"},
+	}
+	defer func() { model.Agents = nil }()
+
+	s := service.NewScheduler()
+	defer s.Stop()
+	service.GlobalScheduler = s
+	defer func() { service.GlobalScheduler = nil }()
+
+	task := &model.ScheduledTask{
+		ProjectPath: env.ProjectDir,
+		Name:        "My Task",
+		CronExpr:    "0 * * * *",
+		AgentID:     "coder",
+		Prompt:      "Test",
+		RepeatMode:  "unlimited",
+	}
+	s.AddTask(task)
+
+	// No project cookie at all → 403
+	req := newRequest(t, http.MethodGet, "/api/tasks/"+task.ID, nil)
+	w := callHandler(ServeTaskByID, req)
+	assertStatus(t, w, http.StatusForbidden)
+}
+
+// ---------- ISS-002: Cross-project chat ownership tests ----------
+
+func TestServeChatCount_WrongProject(t *testing.T) {
+	env, teardown := setupTestEnv(t)
+	defer teardown()
+
+	sid := createTestSession(t, env.ProjectDir)
+	service.AddChatMessage(env.ProjectDir, "claude", sid, "user", "Hello", nil, false, "NewSession")
+
+	// Try to count messages from another project's session
+	otherProject := t.TempDir()
+	req := newRequest(t, http.MethodGet, "/api/ai/chat/count?session_id="+sid, nil)
+	req = withProjectCookie(req, otherProject)
+	w := callHandler(ServeChatCount, req)
+	assertStatus(t, w, http.StatusForbidden)
+}
+
+func TestServeChatMessageUpdate_WrongProject(t *testing.T) {
+	env, teardown := setupTestEnv(t)
+	defer teardown()
+
+	sid := createTestSession(t, env.ProjectDir)
+	msgID, err := service.AddChatMessage(env.ProjectDir, "claude", sid, "user", "original", nil, false, "NewSession")
+	assert.NoError(t, err)
+
+	// Try to update message from another project
+	otherProject := t.TempDir()
+	req := newRequest(t, http.MethodPut, "/api/ai/chat/message", map[string]any{
+		"messageId": msgID,
+		"content":   "hacked content",
+	})
+	req = withProjectCookie(req, otherProject)
+	w := callHandler(ServeChatMessageUpdate, req)
+	assertStatus(t, w, http.StatusForbidden)
+}
+
+func TestCancelChat_WrongProject(t *testing.T) {
+	env, teardown := setupTestEnv(t)
+	defer teardown()
+
+	sid := createTestSession(t, env.ProjectDir)
+
+	// Try to cancel session from another project
+	otherProject := t.TempDir()
+	req := newRequest(t, http.MethodPost, "/api/ai/chat/cancel?session_id="+sid, nil)
+	req = withProjectCookie(req, otherProject)
+	w := callHandler(CancelChat, req)
+	assertStatus(t, w, http.StatusForbidden)
 }
 
 // ---------- helper ----------

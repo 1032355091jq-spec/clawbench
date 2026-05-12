@@ -841,12 +841,23 @@ func CancelChat(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	projectPath, ok := requireProject(w, r)
+	if !ok {
+		return
+	}
+
 	sessionID := r.URL.Query().Get("session_id")
 	if sessionID == "" {
 		sessionID = getSessionID(r)
 	}
 	if sessionID == "" {
 		writeLocalizedErrorf(w, r, http.StatusBadRequest, "SessionIdRequired")
+		return
+	}
+
+	// Verify the session belongs to the requesting project
+	if sessionProject := service.GetSessionProjectPath(sessionID); sessionProject != projectPath {
+		writeLocalizedError(w, r, model.Forbidden(nil, "AccessDenied"))
 		return
 	}
 

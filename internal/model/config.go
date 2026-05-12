@@ -112,6 +112,7 @@ var (
 	BinDir         string // Directory of the running binary
 	WatchDir       string
 	SessionToken   string
+	PasswordHash   []byte // bcrypt hash for password verification (ISS-003a)
 	SessionCookie  = "clawbench_session"
 	DevMode        bool   // True when running in debug/development mode
 	DefaultAgentID string // Default agent for new sessions, set from config or first agent

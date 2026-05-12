@@ -1,6 +1,7 @@
 package model_test
 
 import (
+	"os"
 	"path/filepath"
 	"testing"
 
@@ -9,8 +10,16 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+// ensureDir is a test helper that creates the directory if it doesn't exist.
+// ValidatePath now requires the base directory to exist on disk (for EvalSymlinks).
+func ensureDir(t *testing.T, dir string) {
+	t.Helper()
+	assert.NoError(t, os.MkdirAll(dir, 0755))
+}
+
 func TestValidatePath_ValidPath(t *testing.T) {
 	base := filepath.Join(t.TempDir(), "base")
+	ensureDir(t, base)
 	path, valid := model.ValidatePath(base, "subdir/file.txt")
 	assert.True(t, valid)
 	assert.Contains(t, path, "subdir")
@@ -18,6 +27,7 @@ func TestValidatePath_ValidPath(t *testing.T) {
 
 func TestValidatePath_BasePath(t *testing.T) {
 	base := filepath.Join(t.TempDir(), "base")
+	ensureDir(t, base)
 	path, valid := model.ValidatePath(base, "")
 	assert.True(t, valid)
 	assert.Contains(t, path, "base")
@@ -25,6 +35,7 @@ func TestValidatePath_BasePath(t *testing.T) {
 
 func TestValidatePath_PathTraversal(t *testing.T) {
 	base := filepath.Join(t.TempDir(), "base", "dir")
+	ensureDir(t, base)
 	path, valid := model.ValidatePath(base, "../../etc/passwd")
 	assert.False(t, valid)
 	_ = path // path is returned but not valid
@@ -32,12 +43,14 @@ func TestValidatePath_PathTraversal(t *testing.T) {
 
 func TestValidatePath_SimpleTraversal(t *testing.T) {
 	base := filepath.Join(t.TempDir(), "base")
+	ensureDir(t, base)
 	_, valid := model.ValidatePath(base, "../outside")
 	assert.False(t, valid)
 }
 
 func TestValidatePath_ValidSubdirectory(t *testing.T) {
 	base := filepath.Join(t.TempDir(), "base")
+	ensureDir(t, base)
 	path, valid := model.ValidatePath(base, "sub/deep/file.go")
 	assert.True(t, valid)
 	assert.Contains(t, path, "sub")
@@ -54,12 +67,14 @@ func TestValidatePath_EmptyBaseAndRel(t *testing.T) {
 
 func TestValidatePath_MultipleTraversalAttempts(t *testing.T) {
 	base := filepath.Join(t.TempDir(), "base")
+	ensureDir(t, base)
 	_, valid := model.ValidatePath(base, "../../../etc/shadow")
 	assert.False(t, valid)
 }
 
 func TestValidatePath_DotPath(t *testing.T) {
 	base := filepath.Join(t.TempDir(), "base")
+	ensureDir(t, base)
 	path, valid := model.ValidatePath(base, ".")
 	assert.True(t, valid)
 	assert.Contains(t, path, "base")
@@ -67,6 +82,7 @@ func TestValidatePath_DotPath(t *testing.T) {
 
 func TestValidatePath_DotSlashPath(t *testing.T) {
 	base := filepath.Join(t.TempDir(), "base")
+	ensureDir(t, base)
 	path, valid := model.ValidatePath(base, "./file.txt")
 	assert.True(t, valid)
 	assert.Contains(t, path, "file.txt")
@@ -74,6 +90,7 @@ func TestValidatePath_DotSlashPath(t *testing.T) {
 
 func TestValidatePath_MixedTraversalAndValid(t *testing.T) {
 	base := filepath.Join(t.TempDir(), "base")
+	ensureDir(t, base)
 	// "sub/../sub/file.txt" should normalize to "sub/file.txt" which is valid
 	path, valid := model.ValidatePath(base, "sub/../sub/file.txt")
 	assert.True(t, valid)
@@ -82,6 +99,7 @@ func TestValidatePath_MixedTraversalAndValid(t *testing.T) {
 
 func TestValidatePath_TraversalWithValidPrefix(t *testing.T) {
 	base := filepath.Join(t.TempDir(), "base")
+	ensureDir(t, base)
 	// "sub/../../outside" - the normalized path escapes the base
 	_, valid := model.ValidatePath(base, "sub/../../outside")
 	assert.False(t, valid)
@@ -89,6 +107,7 @@ func TestValidatePath_TraversalWithValidPrefix(t *testing.T) {
 
 func TestValidatePath_DeepNesting(t *testing.T) {
 	base := filepath.Join(t.TempDir(), "base")
+	ensureDir(t, base)
 	deepPath := "a/b/c/d/e/f/g/h/file.txt"
 	path, valid := model.ValidatePath(base, deepPath)
 	assert.True(t, valid)
@@ -97,6 +116,7 @@ func TestValidatePath_DeepNesting(t *testing.T) {
 
 func TestValidatePath_SpecialCharacters(t *testing.T) {
 	base := filepath.Join(t.TempDir(), "base")
+	ensureDir(t, base)
 	path, valid := model.ValidatePath(base, "file with spaces.txt")
 	assert.True(t, valid)
 	assert.Contains(t, path, "file with spaces.txt")
@@ -104,6 +124,7 @@ func TestValidatePath_SpecialCharacters(t *testing.T) {
 
 func TestValidatePath_EncodedTraversal(t *testing.T) {
 	base := filepath.Join(t.TempDir(), "base")
+	ensureDir(t, base)
 	// These should be treated as literal directory names, not traversal
 	// filepath.Join normalizes them, so ".." in a path segment is the traversal
 	_, valid := model.ValidatePath(base, "..")
@@ -112,6 +133,7 @@ func TestValidatePath_EncodedTraversal(t *testing.T) {
 
 func TestValidatePath_AbsoluteRelPath(t *testing.T) {
 	base := filepath.Join(t.TempDir(), "base")
+	ensureDir(t, base)
 	// Go's filepath.Join concatenates even absolute relPath to base,
 	// so "/tmp/other" + "/other" becomes "base/other" which is valid.
 	// This is Go-specific behavior; the function still validates the final path.
@@ -119,4 +141,74 @@ func TestValidatePath_AbsoluteRelPath(t *testing.T) {
 	// filepath.Join(base, "/some/absolute/path") = "base/some/absolute/path" which IS under base
 	assert.True(t, valid)
 	assert.Contains(t, path, "base")
+}
+
+// --- ISS-001: Symlink traversal tests ---
+
+func TestValidatePath_SymlinkTraversal(t *testing.T) {
+	// Create base dir and an outside dir
+	base := filepath.Join(t.TempDir(), "base")
+	outside := filepath.Join(t.TempDir(), "outside")
+	ensureDir(t, base)
+	ensureDir(t, outside)
+
+	// Create a file outside the base
+	assert.NoError(t, os.WriteFile(filepath.Join(outside, "secret.txt"), []byte("sensitive"), 0644))
+
+	// Create symlink inside base pointing to outside
+	assert.NoError(t, os.Symlink(outside, filepath.Join(base, "escape")))
+
+	// This should REJECT — symlink escapes the base directory
+	_, valid := model.ValidatePath(base, "escape/secret.txt")
+	assert.False(t, valid, "ValidatePath should reject symlink that escapes base directory")
+}
+
+func TestValidatePath_SymlinkInsideProject(t *testing.T) {
+	// Create base dir with a real subdirectory and a symlink to it
+	base := filepath.Join(t.TempDir(), "base")
+	ensureDir(t, filepath.Join(base, "real"))
+	assert.NoError(t, os.WriteFile(filepath.Join(base, "real", "file.txt"), []byte("ok"), 0644))
+
+	// Symlink inside project pointing to another location also inside project
+	assert.NoError(t, os.Symlink(filepath.Join(base, "real"), filepath.Join(base, "link")))
+
+	// This should ACCEPT — symlink target is still within base
+	path, valid := model.ValidatePath(base, "link/file.txt")
+	assert.True(t, valid, "ValidatePath should accept symlink whose target is within base")
+	assert.Contains(t, path, "link")
+}
+
+func TestValidatePath_NonExistentUnderSymlinkDir(t *testing.T) {
+	// Create base dir with a real subdirectory
+	base := filepath.Join(t.TempDir(), "base")
+	ensureDir(t, filepath.Join(base, "real"))
+
+	// Symlink inside project pointing to the real subdirectory
+	assert.NoError(t, os.Symlink(filepath.Join(base, "real"), filepath.Join(base, "link")))
+
+	// Creating a new file under the symlinked directory should be accepted
+	path, valid := model.ValidatePath(base, "link/newfile.txt")
+	assert.True(t, valid, "ValidatePath should accept new file under symlinked directory within base")
+	assert.Contains(t, path, "link")
+}
+
+func TestValidatePath_SymlinkEscapeViaParent(t *testing.T) {
+	// Create base dir and an outside dir
+	tmpDir := t.TempDir()
+	base := filepath.Join(tmpDir, "base")
+	outside := filepath.Join(tmpDir, "outside")
+	ensureDir(t, base)
+	ensureDir(t, outside)
+
+	// The base directory itself is a symlink to outside
+	linkBase := filepath.Join(tmpDir, "linkbase")
+	assert.NoError(t, os.Symlink(base, linkBase))
+
+	// Trying to access a file that resolves outside via the symlinked base
+	assert.NoError(t, os.WriteFile(filepath.Join(outside, "secret.txt"), []byte("sensitive"), 0644))
+	assert.NoError(t, os.Symlink(outside, filepath.Join(base, "escape")))
+
+	// Even through the symlinked base, escaping should be rejected
+	_, valid := model.ValidatePath(linkBase, "escape/secret.txt")
+	assert.False(t, valid, "ValidatePath should reject escape through symlinked parent")
 }

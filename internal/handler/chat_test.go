@@ -682,10 +682,13 @@ func TestDeleteSession_WrongMethod(t *testing.T) {
 // --- CancelChat ---
 
 func TestCancelChat_NoRunningSession(t *testing.T) {
-	_, teardown := setupTestEnv(t)
+	env, teardown := setupTestEnv(t)
 	defer teardown()
 
-	req := newRequest(t, http.MethodPost, "/api/ai/chat/cancel?session_id=nonexistent", nil)
+	sid := createTestSession(t, env.ProjectDir)
+
+	req := newRequest(t, http.MethodPost, "/api/ai/chat/cancel?session_id="+sid, nil)
+	req = withProjectCookie(req, env.ProjectDir)
 
 	w := callHandler(CancelChat, req)
 	// Idempotent: cancelling a non-running session succeeds
@@ -693,10 +696,11 @@ func TestCancelChat_NoRunningSession(t *testing.T) {
 }
 
 func TestCancelChat_MissingSessionID(t *testing.T) {
-	_, teardown := setupTestEnv(t)
+	env, teardown := setupTestEnv(t)
 	defer teardown()
 
 	req := newRequest(t, http.MethodPost, "/api/ai/chat/cancel", nil)
+	req = withProjectCookie(req, env.ProjectDir)
 	// No session_id in query and no cookie
 
 	w := callHandler(CancelChat, req)
@@ -704,10 +708,11 @@ func TestCancelChat_MissingSessionID(t *testing.T) {
 }
 
 func TestCancelChat_WrongMethod(t *testing.T) {
-	_, teardown := setupTestEnv(t)
+	env, teardown := setupTestEnv(t)
 	defer teardown()
 
 	req := newRequest(t, http.MethodGet, "/api/ai/chat/cancel?session_id=abc", nil)
+	req = withProjectCookie(req, env.ProjectDir)
 
 	w := callHandler(CancelChat, req)
 	assertStatus(t, w, http.StatusMethodNotAllowed)

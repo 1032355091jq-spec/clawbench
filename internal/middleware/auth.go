@@ -1,6 +1,7 @@
 package middleware
 
 import (
+	"crypto/subtle"
 	"net"
 	"net/http"
 	"net/url"
@@ -35,7 +36,7 @@ func Auth(next http.HandlerFunc) http.HandlerFunc {
 		}
 		// Remote — cookie-based auth
 		token, err := r.Cookie(model.SessionCookie)
-		if err == nil && token != nil && token.Value == model.SessionToken {
+		if err == nil && token != nil && subtle.ConstantTimeCompare([]byte(token.Value), []byte(model.SessionToken)) == 1 {
 			next.ServeHTTP(w, r)
 			return
 		}

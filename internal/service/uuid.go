@@ -4,14 +4,28 @@ import (
 	"crypto/rand"
 	"fmt"
 	"log/slog"
+	"regexp"
 )
+
+// validIdentifier validates SQL identifier (table/column name) to prevent injection.
+var validIdentifier = regexp.MustCompile(`^[a-zA-Z_][a-zA-Z0-9_]*$`)
 
 // generateUUID generates a standard UUID v4 format string with an optional prefix.
 // It checks for conflicts in the specified database table and column.
+// Returns empty string on exhaustion or error.
 func generateUUID(prefix, tableName, column string) string {
+	// Validate identifiers to prevent SQL injection (ISS-009)
+	if !validIdentifier.MatchString(tableName) || !validIdentifier.MatchString(column) {
+		slog.Error("generateUUID: invalid identifier", slog.String("table", tableName), slog.String("column", column))
+		return ""
+	}
+
 	for i := 0; i < 10; i++ {
 		b := make([]byte, 16)
-		rand.Read(b)
+		if _, err := rand.Read(b); err != nil {
+			slog.Error("generateUUID: rand.Read failed", slog.String("err", err.Error()))
+			return ""
+		}
 		// Set version (4) and variant (2) bits according to UUID v4 spec
 		b[6] = (b[6] & 0x0f) | 0x40
 		b[8] = (b[8] & 0x3f) | 0x80

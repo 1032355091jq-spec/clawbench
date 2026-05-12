@@ -111,7 +111,7 @@ func ServeProjectSet(w http.ResponseWriter, r *http.Request) {
 		} else if filepath.IsAbs(rawPath) {
 			// Looks absolute but might be under watchDir — check bounds first
 			absPath = rawPath
-			if !strings.HasPrefix(absPath, basePath+string(filepath.Separator)) && absPath != basePath {
+			if !isPathUnderBase(absPath, basePath) {
 				// Not under watchDir — treat leading "/" as part of a relative path
 				relPath := strings.TrimPrefix(rawPath, "/")
 				absPath, _ = filepath.Abs(filepath.Join(basePath, relPath))
@@ -121,7 +121,7 @@ func ServeProjectSet(w http.ResponseWriter, r *http.Request) {
 			relPath := strings.TrimPrefix(rawPath, "/")
 			absPath, _ = filepath.Abs(filepath.Join(basePath, relPath))
 		}
-		if !strings.HasPrefix(absPath, basePath+string(filepath.Separator)) && absPath != basePath {
+		if !isPathUnderBase(absPath, basePath) {
 			writeLocalizedError(w, r, model.Forbidden(nil, "AccessDenied"))
 			return
 		}

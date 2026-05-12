@@ -96,11 +96,19 @@ func ServeChatCount(w http.ResponseWriter, r *http.Request) {
 	if !requireMethod(w, r, http.MethodGet) {
 		return
 	}
+	projectPath, ok := requireProject(w, r)
+	if !ok {
+		return
+	}
 	sessionID, ok := requireSessionID(w, r)
 	if !ok {
 		return
 	}
-	_ = sessionID
+	// Verify the session belongs to the requesting project
+	if sessionProject := service.GetSessionProjectPath(sessionID); sessionProject != projectPath {
+		writeLocalizedError(w, r, model.Forbidden(nil, "AccessDenied"))
+		return
+	}
 	count := service.GetChatMessageCount(sessionID)
 	writeJSON(w, http.StatusOK, map[string]any{"count": count})
 }
@@ -108,6 +116,10 @@ func ServeChatCount(w http.ResponseWriter, r *http.Request) {
 // ServeChatMessageUpdate handles PUT to update a specific message's content.
 func ServeChatMessageUpdate(w http.ResponseWriter, r *http.Request) {
 	if !requireMethod(w, r, http.MethodPut) {
+		return
+	}
+	projectPath, ok := requireProject(w, r)
+	if !ok {
 		return
 	}
 	var req struct {
@@ -119,6 +131,17 @@ func ServeChatMessageUpdate(w http.ResponseWriter, r *http.Request) {
 	}
 	if req.MessageID == 0 {
 		writeLocalizedErrorf(w, r, http.StatusBadRequest, "MessageIdRequired")
+		return
+	}
+	// Verify the message belongs to the requesting project
+	msg, err := service.GetMessageByID(req.MessageID)
+	if err != nil {
+		writeLocalizedError(w, r, model.NotFound(nil, "MessageNotFound"))
+		return
+	}
+	// Check session ownership
+	if sessionProject := service.GetSessionProjectPath(msg.SessionID); sessionProject != projectPath {
+		writeLocalizedError(w, r, model.Forbidden(nil, "AccessDenied"))
 		return
 	}
 	if err := service.UpdateMessageContent(int(req.MessageID), req.Content); err != nil {

@@ -4,6 +4,7 @@ import (
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
+	"crypto/subtle"
 	"crypto/x509"
 	"encoding/pem"
 	"fmt"
@@ -169,7 +170,7 @@ func (s *Server) ListenAndServe() error {
 				return nil, fmt.Errorf("ssh: too many authentication failures")
 			}
 
-			if c.User() == "clawbench" && string(pass) == s.password {
+			if c.User() == "clawbench" && subtle.ConstantTimeCompare(pass, []byte(s.password)) == 1 {
 				s.authTracker.reset(remoteIP)
 				return nil, nil
 			}

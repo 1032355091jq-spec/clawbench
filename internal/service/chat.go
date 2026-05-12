@@ -297,6 +297,16 @@ func GetSessionBackend(sessionID string) string {
 	return backend
 }
 
+// GetSessionProjectPath returns the project path of a session, or empty string if not found.
+func GetSessionProjectPath(sessionID string) string {
+	var projectPath string
+	err := DB.QueryRow("SELECT project_path FROM chat_sessions WHERE id = ?", sessionID).Scan(&projectPath)
+	if err != nil {
+		return ""
+	}
+	return projectPath
+}
+
 // GetSessionModel returns the model ID of a session, or empty string if not found or deleted.
 func GetSessionModel(sessionID string) string {
 	var modelID string
